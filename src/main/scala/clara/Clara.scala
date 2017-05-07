@@ -9,21 +9,22 @@ object ParserImpl {
   }
   import White._
 
-  sealed trait ValueExpr
+  sealed trait BlockContent
+  sealed trait ValueExpr extends BlockContent
   sealed trait TypeExpr
   sealed trait Pattern
+  case class ValueDef(target: Pattern, e: ValueExpr) extends BlockContent
   case class UnitLiteral() extends ValueExpr
   case class UnitType() extends TypeExpr
   case class UnitPattern() extends Pattern
   case class IntegerLiteral(value: String) extends ValueExpr
   case class StringLiteral(value: String) extends ValueExpr
-  case class Block(es: Seq[ValueExpr]) extends ValueExpr
+  case class Block(es: Seq[BlockContent]) extends ValueExpr
   case class NamedValue(name: String) extends ValueExpr
   case class NamedType(name: String) extends TypeExpr
   case class NamePattern(name: String) extends Pattern
   case class ValueAs(e: ValueExpr, t: TypeExpr) extends ValueExpr
   case class PatternAs(p: Pattern, t: TypeExpr) extends Pattern
-  case class Assignment(target: Pattern, e: ValueExpr) extends ValueExpr
   case class Tuple(es: Seq[ValueExpr]) extends ValueExpr
   case class TupleType(ts: Seq[TypeExpr]) extends TypeExpr
   case class TuplePattern(ps: Seq[Pattern]) extends Pattern
@@ -35,7 +36,7 @@ object ParserImpl {
   //////
   // Basics
 
-  val nl = P(CharsWhile(_ == '\n')
+  val nl = P(CharsWhile(_ == '\n'))
 
   val digit = P(CharIn('0' to '9'))
 
@@ -77,11 +78,11 @@ object ParserImpl {
 
   val patternParens: Parser[Pattern] = P("(" ~ pattern ~ ")")
 
-  val semi = P(CharsWhile(_ == ';')
+  val semi = P(CharsWhile(_ == ';'))
 
-  val exprSep = P(nl | semi))
+  val exprSep = P(nl | semi)
 
-  val blockContent: Parser[Seq[ValueExpr]] = P(exprSep.rep ~ (assignment | valueExpr).rep(1, sep=exprSep) ~ exprSep.rep)
+  val blockContent: Parser[Seq[BlockContent]] = P(exprSep.rep ~ (valueDef | valueExpr).rep(1, sep=exprSep) ~ exprSep.rep)
 
   val block: Parser[Block] = P("{" ~ blockContent ~ "}").map(Block)
 
@@ -111,11 +112,6 @@ object ParserImpl {
   val valueAs: Parser[ValueAs] = P(simple ~ typed).map(ValueAs.tupled)
 
   //////
-  // Assignment
-
-  val assignment: Parser[Assignment] = P("let" ~/ pattern ~ "=" ~/ valueExpr).map(Assignment.tupled)
-
-  //////
   // Lambda, Member, Call
 
   val lambda: Parser[Lambda] = P(pattern ~ "=>" ~ valueExpr).map(Lambda.tupled)
@@ -143,6 +139,11 @@ object ParserImpl {
   val pattern: Parser[Pattern] = P(((unitPattern | tuplePattern | patternParens | namePattern) ~ typed.?).map { case (p, t) =>
     t map (PatternAs(p, _)) getOrElse p
   })
+
+  val valueDef: Parser[ValueDef] = P("let" ~/ pattern ~ "=" ~/ valueExpr).map(ValueDef.tupled)
+
+  //////
+  // Start here
 
   val program = P(blockContent ~ End).map(Block)
 }
