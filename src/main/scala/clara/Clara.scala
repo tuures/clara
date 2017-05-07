@@ -1,124 +1,135 @@
 package clara
 
-object Parser {
+object ParserImpl {
+  import fastparse.noApi._
+
   val White = fastparse.WhitespaceApi.Wrapper {
     import fastparse.all._
     NoTrace(" ".rep)
   }
-  import fastparse.noApi._
   import White._
 
-  sealed trait Expression
-  case class Identifier(name: String) extends Expression
-  case class Unit() extends Expression
-  trait Literal extends Expression
-  case class IntegerLiteral(value: String) extends Literal
-  case class StringLiteral(value: String) extends Literal
-  case class Tuple(values: Seq[Expression]) extends Expression
-  case class Lambda(parameters: Seq[Identifier], body: Expression) extends Expression
-  case class Member(expression: Expression, member: Identifier) extends Expression
-  case class Call(callee: Expression, arguments: Seq[Expression]) extends Expression
-  case class Block(expressions: Seq[Expression]) extends Expression
-  case class Assignment(identifier: Identifier, expression: Expression) extends Expression
+  sealed trait ValueExpr
+  sealed trait TypeExpr
+  sealed trait Pattern
+  case class UnitLiteral() extends ValueExpr
+  case class IntegerLiteral(value: String) extends ValueExpr
+  case class StringLiteral(value: String) extends ValueExpr
+  case class Block(es: Seq[ValueExpr]) extends ValueExpr
+  case class NamedValue(name: String) extends ValueExpr
+  case class NamedType(name: String) extends TypeExpr
+  case class NamePattern(name: String) extends Pattern
+  case class ValueAs(e: ValueExpr, t: TypeExpr) extends ValueExpr
+  case class PatternAs(p: Pattern, t: TypeExpr) extends Pattern
+  case class Assignment(target: Pattern, e: ValueExpr) extends ValueExpr
+  case class Tuple(es: Seq[ValueExpr]) extends ValueExpr
+  case class TupleType(ts: Seq[TypeExpr]) extends TypeExpr
+  case class TuplePattern(ps: Seq[Pattern]) extends Pattern
+  case class Lambda(parameter: Pattern, body: ValueExpr) extends ValueExpr
+  case class Member(e: ValueExpr, member: String) extends ValueExpr
+  case class Call(callee: ValueExpr, argument: ValueExpr) extends ValueExpr
 
   //////
   // Basics
-
-  val sp = P(CharsWhile(_ == ' '))
 
   val nl = P(CharsWhile(_ == '\n'))
 
   val digit = P(CharIn('0' to '9'))
 
-  val identifier = P(!digit ~ CharPred(c => Character.isLetter(c)).rep(1).!.map(Identifier))
-
   //////
   // Literals
 
-  val integerLiteral= P(digit.rep(1).!.map(IntegerLiteral))
+  val unit: Parser[UnitLiteral] = P(P("()").map(_ => UnitLiteral()))
+
+  val integerLiteral = P(digit.rep(1).!.map(IntegerLiteral))
 
   val stringLiteral = {
     val q = '\''
     val boundary = CharPred(_ == q)
     val value = CharsWhile(_ != q)
-    P((boundary ~ value.! ~ boundary).map(StringLiteral))
+    P((boundary ~/ value.! ~ boundary).map(StringLiteral))
   }
 
   //////
-  // Simple expressions
+  // Parens, Block
 
-  val literal: Parser[Literal] = P(integerLiteral | stringLiteral)
+  val parens: Parser[ValueExpr] = P("(" ~ valueExpr ~ ")")
 
-  val unit: Parser[Unit] = P(P("()").map(_ => Unit()))
+  val blockContent: Parser[Seq[ValueExpr]] = P(valueExpr.rep(sep=nl))
 
-  val parens: Parser[Expression] = P("(" ~ expression ~ ")")
+  val block: Parser[Block] = P("{" ~/ blockContent ~ "}").map(Block)
 
-  val simple: Parser[Expression] = P(identifier | unit | parens | block | literal)
+  //////
+  // NamedValue, NamedType
+
+  val name = P(!digit ~ CharPred(c => Character.isLetter(c)).rep(1).!)
+
+  val namedValue: Parser[NamedValue] = P(name.map(NamedValue))
+
+  val namedType: Parser[NamedType] = P(name.map(NamedType))
+
+  val namePattern: Parser[NamePattern] = P(name.map(NamePattern))
+
+  //////
+  // Simple
+
+  val simple: Parser[ValueExpr] = P(unit | integerLiteral | stringLiteral | parens | block | namedValue)
+
+  //////
+  // ValueAs
+
+  val typed: Parser[TypeExpr] = P(":" ~ typeExpr)
+
+  val valueAs: Parser[ValueAs] = P(simple ~ typed).map(ValueAs.tupled)
+
+  //////
+  // Assignment
+
+  val assignment: Parser[Assignment] = P("let" ~/ pattern ~ "=" ~/ valueExpr).map(Assignment.tupled)
 
   //////
   // Tuples
 
-  val tupleLike: Parser[Seq[Expression]] = {
-    val es: Parser[Seq[Expression]] = P(expression ~ ("," ~ expression).rep(1)).map { case (first, rest) => first +: rest }
-    P("(" ~ es ~ ")")
-  }
+  val tuple: Parser[Tuple] = P("(" ~ valueExpr.rep(1, sep=",") ~ ")").map(Tuple)
 
-  val tuple = tupleLike.map(Tuple)
+  val tupleType: Parser[TupleType] = P("(" ~ typeExpr.rep(1, sep=",") ~ ")").map(TupleType)
+
+  val tuplePattern: Parser[TuplePattern] = P("(" ~ pattern.rep(1, sep=",") ~ ")").map(TuplePattern)
 
   //////
   // Lambda, Member, Call
 
-  val parameters = {
-    val ids: Parser[Seq[Identifier]] = P(identifier ~ ("," ~ identifier).rep).map { case (first, rest) => first +: rest }
-    P("(" ~ ids.? ~ ")")
-  }
+  val lambda: Parser[Lambda] = P(pattern ~ "=>" ~/ simple).map(Lambda.tupled)
 
-  val lambda: Parser[Lambda] = P(parameters ~ "=>" ~ simple).map(e => (e._1.getOrElse(Nil), e._2)).map(Lambda.tupled)
-
-  val arguments: Parser[Seq[Expression]] = P(unit | parens | tupleLike).map {
-    case Unit() => Nil
-    case e: Expression => Seq(e)
-    case e: Seq[Expression] => e
-  }
-
-  val memberOrCall: Parser[Expression] = {
-    def makeNode(e: Expression, m: Either[Identifier, Seq[Expression]]) = m match {
-      case Left(identifier) => Member(e, identifier)
-      case Right(arguments) => Call(e, arguments)
+  val memberOrCall: Parser[ValueExpr] = {
+    def makeNode(e: ValueExpr, m: Either[String, ValueExpr]) = m match {
+      case Left(name) => Member(e, name)
+      case Right(argument) => Call(e, argument)
     }
 
-    P(simple ~ (("." ~ identifier).map(Left(_)) | arguments.map(Right(_))).rep(1)).map { case (base, parts) =>
+    P(simple ~ (("." ~ name).map(Left(_)) | simple.map(Right(_))).rep(1)).map { case (base, parts) =>
       parts.tail.foldLeft(makeNode(base, parts.head))(makeNode)
     }
   }
-
-  val infixUnaryCall = {
-    def makeNode(e: Expression, part: (Identifier, Expression)) = {
-      val (member, argument) = part
-
-      Call(Member(e, member), Seq(argument))
-    }
-
-    P(simple ~ (sp ~ identifier ~ sp ~ simple).rep(1)).map { case (base, parts) =>
-      parts.tail.foldLeft(makeNode(base, parts.head))(makeNode)
-    }
-  }
-
-  //////
-  // Block, Assignment
-
-  val blockContent = P(expression.rep(sep=nl))
-
-  val block: Parser[Block] = P("{" ~ blockContent ~ "}").map(Block)
-
-  val assignment: Parser[Assignment] = P(identifier ~ "=" ~ expression).map(Assignment.tupled)
 
   //////
   // Top level rules
 
-  val expression: Parser[Expression] = P(assignment | lambda | infixUnaryCall | memberOrCall | simple | tuple)
+  val valueExpr: Parser[ValueExpr] = P(memberOrCall | assignment | lambda | valueAs | tuple | simple)
+
+  val typeExpr: Parser[TypeExpr] = P(namedType | tupleType)
+
+  val patternAs: Parser[PatternAs] = P(pattern ~ typed).map(PatternAs.tupled)
+
+  val pattern: Parser[Pattern] = P(((namePattern | tuplePattern) ~ typed.?).map { case (p, t) =>
+    t map (PatternAs(p, _)) getOrElse p
+  })
 
   val program = P(blockContent ~ End).map(Block)
+}
+
+object Parser {
+  def parse(input: String) = ParserImpl.program.parse(input)
 }
 
 object Clara {
@@ -128,6 +139,14 @@ object Clara {
 
     import sext._
 
-    println(Parser.program.parse(input).treeString)
+    val res = Parser.parse(input)
+
+    import fastparse.core.Parsed
+    res match {
+      case Parsed.Success(v, index) =>
+        println(v.treeString)
+      case Parsed.Failure(p, index, extra) =>
+        println(extra.traced.trace)
+    }
   }
 }
