@@ -13,6 +13,8 @@ object ParserImpl {
   sealed trait TypeExpr
   sealed trait Pattern
   case class UnitLiteral() extends ValueExpr
+  case class UnitType() extends TypeExpr
+  case class UnitPattern() extends Pattern
   case class IntegerLiteral(value: String) extends ValueExpr
   case class StringLiteral(value: String) extends ValueExpr
   case class Block(es: Seq[ValueExpr]) extends ValueExpr
@@ -26,20 +28,27 @@ object ParserImpl {
   case class TupleType(ts: Seq[TypeExpr]) extends TypeExpr
   case class TuplePattern(ps: Seq[Pattern]) extends Pattern
   case class Lambda(parameter: Pattern, body: ValueExpr) extends ValueExpr
+  case class FuncType(parameter: TypeExpr, result: TypeExpr) extends TypeExpr
   case class Member(e: ValueExpr, member: String) extends ValueExpr
   case class Call(callee: ValueExpr, argument: ValueExpr) extends ValueExpr
 
   //////
   // Basics
 
-  val nl = P(CharsWhile(_ == '\n'))
+  val nl = P(CharsWhile(_ == '\n')
 
   val digit = P(CharIn('0' to '9'))
 
   //////
   // Literals
 
-  val unit: Parser[UnitLiteral] = P(P("()").map(_ => UnitLiteral()))
+  val unit = P("()")
+
+  val unitLiteral: Parser[UnitLiteral] = P(unit.map(_ => UnitLiteral()))
+
+  val unitType: Parser[UnitType] = P(unit.map(_ => UnitType()))
+
+  val unitPattern: Parser[UnitPattern] = P(unit.map(_ => UnitPattern()))
 
   val integerLiteral = P(digit.rep(1).!.map(IntegerLiteral))
 
@@ -47,20 +56,37 @@ object ParserImpl {
     val q = '\''
     val boundary = CharPred(_ == q)
     val value = CharsWhile(_ != q)
-    P((boundary ~/ value.! ~ boundary).map(StringLiteral))
+    P((boundary ~ value.! ~ boundary).map(StringLiteral))
   }
+
+  //////
+  // Tuples
+
+  val tuple: Parser[Tuple] = P("(" ~ valueExpr.rep(2, sep=",") ~ ")").map(Tuple)
+
+  val tupleType: Parser[TupleType] = P("(" ~ typeExpr.rep(2, sep=",") ~ ")").map(TupleType)
+
+  val tuplePattern: Parser[TuplePattern] = P("(" ~ pattern.rep(2, sep=",") ~ ")").map(TuplePattern)
 
   //////
   // Parens, Block
 
   val parens: Parser[ValueExpr] = P("(" ~ valueExpr ~ ")")
 
-  val blockContent: Parser[Seq[ValueExpr]] = P(valueExpr.rep(sep=nl))
+  val typeParens: Parser[TypeExpr] = P("(" ~ typeExpr ~ ")")
 
-  val block: Parser[Block] = P("{" ~/ blockContent ~ "}").map(Block)
+  val patternParens: Parser[Pattern] = P("(" ~ pattern ~ ")")
+
+  val semi = P(CharsWhile(_ == ';')
+
+  val exprSep = P(nl | semi))
+
+  val blockContent: Parser[Seq[ValueExpr]] = P(exprSep.rep ~ (assignment | valueExpr).rep(1, sep=exprSep) ~ exprSep.rep)
+
+  val block: Parser[Block] = P("{" ~ blockContent ~ "}").map(Block)
 
   //////
-  // NamedValue, NamedType
+  // NamedValue, NamedType, NamePattern
 
   val name = P(!digit ~ CharPred(c => Character.isLetter(c)).rep(1).!)
 
@@ -73,7 +99,9 @@ object ParserImpl {
   //////
   // Simple
 
-  val simple: Parser[ValueExpr] = P(unit | integerLiteral | stringLiteral | parens | block | namedValue)
+  val simple: Parser[ValueExpr] = P(unitLiteral | integerLiteral | stringLiteral | tuple | parens | block | namedValue)
+
+  val simpleType: Parser[TypeExpr] = P(unitType | tupleType | typeParens | namedType)
 
   //////
   // ValueAs
@@ -88,18 +116,11 @@ object ParserImpl {
   val assignment: Parser[Assignment] = P("let" ~/ pattern ~ "=" ~/ valueExpr).map(Assignment.tupled)
 
   //////
-  // Tuples
-
-  val tuple: Parser[Tuple] = P("(" ~ valueExpr.rep(1, sep=",") ~ ")").map(Tuple)
-
-  val tupleType: Parser[TupleType] = P("(" ~ typeExpr.rep(1, sep=",") ~ ")").map(TupleType)
-
-  val tuplePattern: Parser[TuplePattern] = P("(" ~ pattern.rep(1, sep=",") ~ ")").map(TuplePattern)
-
-  //////
   // Lambda, Member, Call
 
-  val lambda: Parser[Lambda] = P(pattern ~ "=>" ~/ simple).map(Lambda.tupled)
+  val lambda: Parser[Lambda] = P(pattern ~ "=>" ~ valueExpr).map(Lambda.tupled)
+
+  val funcType: Parser[FuncType] = P(simpleType ~ "=>" ~ typeExpr).map(FuncType.tupled)
 
   val memberOrCall: Parser[ValueExpr] = {
     def makeNode(e: ValueExpr, m: Either[String, ValueExpr]) = m match {
@@ -115,13 +136,11 @@ object ParserImpl {
   //////
   // Top level rules
 
-  val valueExpr: Parser[ValueExpr] = P(memberOrCall | assignment | lambda | valueAs | tuple | simple)
+  val valueExpr: Parser[ValueExpr] = P(memberOrCall | lambda | valueAs | simple)
 
-  val typeExpr: Parser[TypeExpr] = P(namedType | tupleType)
+  val typeExpr: Parser[TypeExpr] = P(funcType | simpleType)
 
-  val patternAs: Parser[PatternAs] = P(pattern ~ typed).map(PatternAs.tupled)
-
-  val pattern: Parser[Pattern] = P(((namePattern | tuplePattern) ~ typed.?).map { case (p, t) =>
+  val pattern: Parser[Pattern] = P(((unitPattern | tuplePattern | patternParens | namePattern) ~ typed.?).map { case (p, t) =>
     t map (PatternAs(p, _)) getOrElse p
   })
 
