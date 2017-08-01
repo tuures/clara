@@ -1,5 +1,6 @@
 ## influences
 
+
 Scala: syntax, FP/OOP unification
-OCaml, ML: syntax, language constructs
-Smalltalk: no operator precedence, everyhting is an object
+OCaml: all functions are unary, call without parens
+Smalltalk: no operator precedence, operators are methods, all values are objects

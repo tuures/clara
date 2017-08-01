@@ -16,7 +16,7 @@ object Parser {
   case class Tuple(es: Seq[ValueExpr]) extends ValueExpr
   case class TupleType(ts: Seq[TypeExpr]) extends TypeExpr
   case class TuplePattern(ps: Seq[Pattern]) extends Pattern
-  case class Block(es: Seq[BlockContent]) extends ValueExpr
+  case class Block(bcs: Seq[BlockContent]) extends ValueExpr
   case class NamedValue(name: String) extends ValueExpr
   case class NamedType(name: String) extends TypeExpr
   case class NamePattern(name: String) extends Pattern
@@ -27,7 +27,7 @@ object Parser {
   case class Member(e: ValueExpr, member: String) extends ValueExpr
   case class Call(callee: ValueExpr, argument: ValueExpr) extends ValueExpr
 
-  def parse(input: String) = Impl.program.parse(input)
+  def parse(input: String)/*:fastparse.core.Parsed*/ = Impl.program.parse(input)
 
   object Impl {
     import fastparse.noApi._
