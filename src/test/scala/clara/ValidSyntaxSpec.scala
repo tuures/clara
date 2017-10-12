@@ -6,18 +6,21 @@ import fastparse.all._
 
 class ValidSyntaxSpec extends FunSuite {
 
-  def check(input: String) = {
+  import Parser._
+
+  def check(input: String, expected: Option[Parser.Node]) = {
     Parser.parse(input) match {
       case f: Parsed.Failure =>
         throw new Exception(input + "\n" + f.extra.traced.fullStack)
       case s: Parsed.Success[_] =>
         assert(s.index == input.length)
+        expected.foreach(n => assert(s.value == n))
     }
   }
 
-  def t(input: String): Unit = t(input, input)
+  def t(input: String, expected: Option[Parser.Node] = None): Unit = nt(input)(input, expected)
 
-  def t(name: String, input: String): Unit = test(name) { check(input) }
+  def nt(name: String)(input: String, expected: Option[Parser.Node] = None): Unit = test(name) { check(input, expected) }
 
   t("foo")
   t("()")
@@ -46,60 +49,73 @@ class ValidSyntaxSpec extends FunSuite {
   t("foo ()")
   t("foo 1")
 
-  t("simple block",
-    """|{
+  nt("simple block")(
+    """|(
        |  foo
-       |}""".stripMargin
+       |  bar
+       |)""".stripMargin,
+    Some(Block(Seq(Block(Seq(NamedValue("foo"), NamedValue("bar"))))))
   )
 
-  t("one block program",
-    """|let bl = {
+  nt("semicolon block")(
+    """|(
+       |  foo; bar;
+       |  baz;;
+       |  xyzzy
+       |)""".stripMargin
+  )
+
+  nt("one block program")(
+    """|let bl = (
        |  let x = 5; let y = 6
        |  let a = (1, 2)
        |  log(a, x)
        |  let b = (a, Int, b: Int) => (a, b, c)
+       |
        |  b
-       |}: (Int, Int, Int)
+       |): (Int, Int, Int)
        |let (bla, blb, blc) = bl
        |bla.squared
        |""".stripMargin
   )
 
-  t("block as argument",
-    """|foo {
+  nt("block as argument")(
+    """|foo (
        |  bar
-       |}""".stripMargin
+       |  baz
+       |)""".stripMargin
   )
 
-  t("multi-line tuple",
+  nt("multi-line tuple")(
     """|(
        |  1,
        |  2
        |)""".stripMargin
   )
 
-  t("multi-line tuple, trailing comma",
+  nt("multi-line tuple, trailing comma")(
     """|(
        |  1,
        |  2,
-       |)""".stripMargin
+       |)""".stripMargin,
+    Some(Block(Seq(Tuple(Seq(IntegerLiteral("1"), IntegerLiteral("2"))))))
   )
 
-  t("multi-line lambda",
+  nt("multi-line lambda")(
     """|let a = () =>
        |  1.squared
        |2
        |""".stripMargin
   )
 
-  t("multi-line parens",
+  nt("multi-line parens")(
     """|(
        |  1
        |)
        |""".stripMargin
   )
 
-  t("multi-line member",
+  nt("multi-line member")(
     """|123.
        |  squared.
        |  doubled.
@@ -107,7 +123,7 @@ class ValidSyntaxSpec extends FunSuite {
        |""".stripMargin
   )
 
-  t("multi-line assignment",
+  nt("multi-line assignment")(
     """|let a =
        |  foo
        |""".stripMargin

@@ -2,36 +2,46 @@ package clara
 
 import collection.immutable.HashMap
 
+import ai.x.safe._
+
 object Analyzer {
 
   type Errors = Seq[String]
 
-  type EnvMap = HashMap[String, Type]
-  case class Env(types: EnvMap, values: EnvMap) {
+  case class Env(types: HashMap[String, TypeCon], values: HashMap[String, TypeInst]) {
     def getValue(name: String) = values.get(name).toRight(Impl.error(s"Not found: value `$name`"))
-    def getType(name: String) = types.get(name).toRight(Impl.error(s"Not found: type `$name`"))
-    def getTypeName(t: Type) = types.map(_.swap).get(t).get // type instances should not exist outside envs
-    def setValue(name: String, t: Type, allowShadow: Env = Env.empty) = values.get(name).flatMap { n =>
+    def getTypeCon(name: String) = types.get(name).toRight(Impl.error(s"Not found: type `$name`"))
+    def getNullaryTypeInst(name: String) = getTypeCon(name).flatMap(c => c.inst())
+    def getTypeName(t: TypeCon): String = types.map(_.swap).get(t).get // TypeCon should not exist outside envs
+    def setValue(name: String, t: TypeInst, allowShadow: Env = Env.empty) = values.get(name).flatMap { n =>
       if (allowShadow.values.get(name).isDefined) None else Some(n)
     }.toLeft(Env(types, values + (name -> t))).left.map(_ => Impl.error(s"Already defined: value `$name`"))
-    def setType(name: String, t: Type) = types.get(name).toLeft(Env(types + (name -> t), values)).left.map(_ => Impl.error(s"Already defined: type `$name`"))
+    def setType(name: String, t: TypeCon) = types.get(name).toLeft(Env(types + (name -> t), values)).left.map(_ => Impl.error(s"Already defined: type `$name`"))
   }
 
   object Env {
-    def empty = Env(HashMap.empty[String, Type], HashMap.empty[String, Type])
+    def empty = Env(HashMap.empty[String, TypeCon], HashMap.empty[String, TypeInst])
   }
 
-  sealed trait Type {
-    def toSource(env: Env): String
-    def isSubTypeOf(other: Type): Boolean
-  }
-  class Type0(params: Seq[Type] = Nil) extends Type {
+  class TypeCon(val members: Map[String, TypeInst], params: Seq[String] = Nil) {
     def toSource(env: Env) = s"${env.getTypeName(this)}${(if (params.length > 0) params.mkString("[", ", ", "]") else "")}"
-    def isSubTypeOf(other: Type) = this == other
+    def inst(args: Seq[TypeInst] = Nil): Either[Errors, TypeInst] = {
+      if (args.length == params.length)
+        Right(TypeInst(this, args))
+      else
+        Left(Impl.error("invalid number of type arguments"))
+    }
   }
+
+  case class TypeInst(con: TypeCon, args: Seq[TypeInst]) {
+    def members = con.members // FIXME
+    def toSource(env: Env) = s"${env.getTypeName(con)}${(if (args.length > 0) args.mkString("[", ", ", "]") else "")}"
+    def isSubTypeOf(other: TypeInst) = this == other
+  }
+
   // def leastUpperBound(a: TypeExpr, b: TypeExpr) = ???
 
-  def analyze(env: Env)(valueExpr: Parser.ValueExpr): Either[Errors, Type] = Impl.walkValueExpr(env)(valueExpr)
+  def analyze(env: Env)(valueExpr: Parser.ValueExpr): Either[Errors, TypeInst] = Impl.walkValueExpr(env)(valueExpr)
 
   object Impl {
     import Parser._
@@ -44,10 +54,10 @@ object Analyzer {
 
     def error(e: String) = Seq(e)
 
-    def walkValueExpr(env: Env)(valueExpr: ValueExpr): Either[Errors, Type] = valueExpr match {
-      case UnitLiteral() => env.getType("()")
-      case IntegerLiteral(_) => env.getType("Int")
-      case StringLiteral(_) => env.getType("String")
+    def walkValueExpr(env: Env)(valueExpr: ValueExpr): Either[Errors, TypeInst] = valueExpr match {
+      case UnitLiteral() => env.getNullaryTypeInst("()")
+      case IntegerLiteral(_) => env.getNullaryTypeInst("Int")
+      case StringLiteral(_) => env.getNullaryTypeInst("String")
       // case Tuple(es) => {
       //   val results = es.map(walkValueExpr(env))
       //
@@ -71,44 +81,50 @@ object Analyzer {
       //     }
       //   }
       // }
-      case Member(e, member) => ???
+      case Member(e, member) => walkValueExpr(env)(e) flatMap { target =>
+        target.members.get(member).toRight(error(s"type ${target.toSource(env)} does not have member $member"))
+      }
       case Call(callee, argument) => ???
       case _ => ???
     }
 
-    def walkBlockContents(env: Env)(bcs: Seq[BlockContent]): Either[Errors, Type] =
-      bcs.foldLeft((env, Option.empty[Type], Nil: Errors)) { case ((currentEnv, currentNonUnitType, currentErrors), bc) =>
+    def walkBlockContents(env: Env)(bcs: Seq[BlockContent]): Either[Errors, TypeInst] =
+      bcs.foldLeft((env, Option.empty[TypeInst], Nil: Errors)) { case ((currentEnv, currentNonUnitType, currentErrors), bc) =>
         val currentErrorsAndDiscard = currentErrors ++ (if (currentNonUnitType.isDefined) error(s"Warning: non unit value discarded in block") else Nil)
 
+        def okNext(env: Env, nonUnitType: Option[TypeInst]) = (env, nonUnitType, currentErrorsAndDiscard)
+        def addError(errors: Errors) = (currentEnv, None, currentErrorsAndDiscard ++ errors)
+
         bc match {
-          case ValueDef(target, e) => {
-            walkValueExpr(currentEnv)(e) match {
-              case Right(t) => walkValueDef(env)(currentEnv, target, t) match {
-                case Right(newEnv) => (newEnv, None, currentErrorsAndDiscard)
-                case Left(errors) => (currentEnv, None, currentErrorsAndDiscard ++ errors)
-              }
-              case Left(errors) => (currentEnv, None, currentErrorsAndDiscard ++ errors)
+          case ValueDef(target, e) => walkValueExpr(currentEnv)(e) match {
+            case Right(t) => walkValueDef(env)(currentEnv, target, t) match {
+              case Right(newEnv) => okNext(newEnv, None)
+              case Left(errors) => addError(errors)
             }
+            case Left(errors) => addError(errors)
           }
-          case e: ValueExpr => walkValueExpr(currentEnv)(e) match {
-            case Right(t) if t != currentEnv.getType("()") => (currentEnv, Some(t), currentErrorsAndDiscard)
-            case Right(t) => (currentEnv, None, currentErrorsAndDiscard)
-            case Left(errors) => (currentEnv, None, currentErrorsAndDiscard ++ errors)
+          case e: ValueExpr => currentEnv.getNullaryTypeInst("()") match {
+            case Right(unit) => walkValueExpr(currentEnv)(e) match {
+              case Right(t) if t !== unit => okNext(currentEnv, Some(t))
+              case Right(t) => okNext(currentEnv, None)
+              case Left(errors) => addError(errors)
+            }
+            case Left(errors) => addError(errors)
           }
         }
       } match {
         case (_, Some(t), Nil) => Right(t)
-        case (_, None, Nil) => env.getType("()")
+        case (_, None, Nil) => env.getNullaryTypeInst("()")
         case (_, _, errors) => Left(errors)
       }
 
-    def walkValueDef(parentEnv: Env)(currentEnv: Env, target: Pattern, t: Type): Either[Errors, Env] = target match {
+    def walkValueDef(parentEnv: Env)(currentEnv: Env, target: Pattern, t: TypeInst): Either[Errors, Env] = target match {
       case NamePattern(name) => currentEnv.setValue(name, t, allowShadow=parentEnv)
       case _ => ???
     }
 
-    def walkTypeExpr(env: Env)(typeExpr: Node): Either[Errors, Type] = typeExpr match {
-      case NamedType(name) => env.getType(name)
+    def walkTypeExpr(env: Env)(typeExpr: Node): Either[Errors, TypeInst] = typeExpr match {
+      case NamedType(name) => env.getNullaryTypeInst(name)
       case _ => ???
     }
 

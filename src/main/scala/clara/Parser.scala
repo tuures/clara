@@ -8,6 +8,7 @@ object Parser {
   sealed trait TypeExpr extends Node
   sealed trait Pattern extends Node
   case class ValueDef(target: Pattern, e: ValueExpr) extends BlockContent
+  case class ClassDef(name: String, members: Map[String, TypeExpr]) extends BlockContent
   case class UnitLiteral() extends ValueExpr
   case class UnitType() extends TypeExpr
   case class UnitPattern() extends Pattern
@@ -97,7 +98,7 @@ object Parser {
       P(sep.rep ~ (valueDef | valueExpr).rep(1, sep=sep.rep) ~ sep.rep)
     }
 
-    val block: Parser[Block] = P("{" ~ blockContent ~ "}").map(Block)
+    val block: Parser[Block] = P("(" ~ blockContent ~ ")").map(Block)
 
     //////
     // Names
@@ -113,7 +114,7 @@ object Parser {
     //////
     // Simple
 
-    val simple: Parser[ValueExpr] = P(unitLiteral | integerLiteral | stringLiteral | tuple | parens | block | namedValue)
+    val simple: Parser[ValueExpr] = P(unitLiteral | integerLiteral | stringLiteral | tuple | block | parens | namedValue)
 
     val simpleType: Parser[TypeExpr] = P(unitType | tupleType | typeParens | namedType)
 

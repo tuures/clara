@@ -6,12 +6,13 @@ object Clara {
     import collection.immutable.HashMap
     import Analyzer._
 
+    val intType = new TypeCon(HashMap.empty[String, TypeInst])
     Env.empty.copy(types = HashMap(
-      "()" -> new Type0(),
-      "Int" -> new Type0(),
-      "String" -> new Type0()//,
-      // "Tuple2" -> Type(),
-      // "Function" -> Type()
+      "()" -> new TypeCon(HashMap.empty[String, TypeInst]),
+      "Int" -> intType,
+      "String" -> new TypeCon(HashMap("length" -> intType.inst().getOrElse(???)))
+      // "Tuple" -> new TypeCon(),
+      // "Function" -> new TypeCon()
     ))
   }
 

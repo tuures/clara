@@ -10,8 +10,8 @@ lazy val root = (project in file(".")).
     name := "Clara",
     libraryDependencies ++= Seq(
       fastParse,
-      asm,
       sext,
+      safe,
       scalaTest % Test
     ),
     scalacOptions ++= Seq(
