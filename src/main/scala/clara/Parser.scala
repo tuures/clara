@@ -4,11 +4,13 @@ object Parser {
 
   sealed trait Node
   sealed trait BlockContent extends Node
+  sealed trait ClassContent extends Node
   sealed trait ValueExpr extends BlockContent
   sealed trait TypeExpr extends Node
   sealed trait Pattern extends Node
   case class ValueDef(target: Pattern, e: ValueExpr) extends BlockContent
-  case class ClassDef(name: String, members: Map[String, TypeExpr]) extends BlockContent
+  case class ClassDef(name: String, contents: Seq[ClassContent]) extends BlockContent
+  case class ClassMember(name: String, t: TypeExpr) extends ClassContent
   case class UnitLiteral() extends ValueExpr
   case class UnitType() extends TypeExpr
   case class UnitPattern() extends Pattern
@@ -42,7 +44,7 @@ object Parser {
     //////
     // Basics
 
-    val nl = P(CharsWhile(_ == '\n')).opaque("newline")
+    val nl = P(CharPred(_ == '\n')).opaque("newline")
 
     val digit = P(CharIn('0' to '9')).opaque("digit")
 
@@ -61,7 +63,7 @@ object Parser {
 
     val stringLiteral = {
       val q = '\''
-      val boundary = CharPred(_ == q)
+      val boundary = CharPred(_ == q).opaque("quote")
       val value = CharsWhile(_ != q)
       P((boundary ~ value.! ~ boundary).map(StringLiteral))
     }
@@ -91,19 +93,21 @@ object Parser {
     //////
     // Blocks
 
-    val semi = P(CharsWhile(_ == ';')).opaque("semicolon")
+    val semi = P(CharPred(_ == ';')).opaque("semicolon")
 
-    val blockContent: Parser[Seq[BlockContent]] = {
-      val sep = (nl | semi)
-      P(sep.rep ~ (valueDef | valueExpr).rep(1, sep=sep.rep) ~ sep.rep)
+    val blockContents: Parser[Seq[BlockContent]] = {
+      val sep = (nl | semi).rep
+      P(sep ~ (valueDef | classDef | valueExpr).rep(1, sep=sep) ~ sep)
     }
 
-    val block: Parser[Block] = P("(" ~ blockContent ~ ")").map(Block)
+    val block: Parser[Block] = P("(" ~ blockContents ~ ")").map(Block)
 
     //////
     // Names
 
-    val name = P(!digit ~ CharPred(c => Character.isLetter(c)).rep(1).!)
+    val letter = P(CharPred(c => Character.isLetter(c))).opaque("letter")
+
+    val name = P(!digit ~ letter.rep(1).!)
 
     val namedValue: Parser[NamedValue] = P(name.map(NamedValue))
 
@@ -156,11 +160,28 @@ object Parser {
       t map (PatternAs(p, _)) getOrElse p
     })
 
+    //////
+    // Value definition
+
     val valueDef: Parser[ValueDef] = P("let" ~/ pattern ~ "=" ~/ nl.rep ~ valueExpr).map(ValueDef.tupled)
+
+    //////
+    // Class definition
+
+    val classMember: Parser[ClassMember] = P(name ~ typed).map(ClassMember.tupled)
+
+    val comma = P(CharPred(_ == ',')).opaque("comma")
+
+    val classContents: Parser[Seq[ClassContent]] = {
+      val sep = (nl | comma).rep
+      P(sep ~ classMember.rep(1, sep=sep) ~ sep)
+    }
+
+    val classDef: Parser[ClassDef] = P("::class" ~/ name ~ "{" ~ classContents ~ "}").map(ClassDef.tupled)
 
     //////
     // Start here
 
-    val program = P(blockContent ~ End).map(Block)
+    val program = P(blockContents ~ End).map(Block)
   }
 }

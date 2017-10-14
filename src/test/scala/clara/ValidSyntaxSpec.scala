@@ -123,8 +123,9 @@ class ValidSyntaxSpec extends FunSuite {
        |""".stripMargin
   )
 
-  nt("multi-line assignment")(
-    """|let a =
+  nt("multi-line assignment with extra spaces")(
+    """|let a =\u0020\u0020
+       |\u0020\u0020
        |  foo
        |""".stripMargin
   )

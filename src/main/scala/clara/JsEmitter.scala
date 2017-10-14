@@ -1,5 +1,7 @@
 package clara
 
+import ai.x.safe._
+
 object JsEmitter {
 
   class Indent(val chars: String = "  ", val level: Int = 0) {
@@ -26,10 +28,16 @@ object JsEmitter {
 
         val items = bcs.map {
           case ValueDef(target, e) => walkValueDef(indentItems)(target, e)
+          case ClassDef(name, contents) => walkClassDef(indentItems)(name, contents)
           case e: ValueExpr => walkValueExpr(indentItems)(e)
         }
 
-        val body = (items.init :+ s"return ${items.last}").map(i => s"${indentItems}$i;\n")
+        val (initValues, lastValue) = bcs.last match {
+          case e: ValueExpr => (items.init, items.last)
+          case _ => (items, "undefined")
+        }
+
+        val body = (initValues :+ s"return $lastValue").map(i => s"${indentItems}$i;\n")
 
         s"(() => {\n${body.init.mkString}\n${body.last}$indent})()"
       }
@@ -47,6 +55,15 @@ object JsEmitter {
 
     def walkValueDef(indent: Indent)(target: Pattern, e: ValueExpr): String = target match {
       case NamePattern(name) => s"const $name = ${walkValueExpr(indent)(e)}"
+    }
+
+    def walkClassDef(indent: Indent)(name: String, contents: Seq[ClassContent]): String = {
+      val names: Seq[String] = contents map {
+        case ClassMember(name, _) => name
+      }
+      val paramList = names.mkString(", ")
+      val body = names.map(name => s"this.$name = $name").map(i => s"${indent.add.add}$i;\n").mkString
+      s"class $name {\n${indent.add}constructor($paramList) {\n$body${indent.add}}\n$indent}"
     }
 
   }

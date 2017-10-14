@@ -89,34 +89,47 @@ object Analyzer {
     }
 
     def walkBlockContents(env: Env)(bcs: Seq[BlockContent]): Either[Errors, TypeInst] =
-      bcs.foldLeft((env, Option.empty[TypeInst], Nil: Errors)) { case ((currentEnv, currentNonUnitType, currentErrors), bc) =>
+      bcs.foldLeft((Nil: Errors, Option.empty[TypeInst], env)) { case ((currentErrors, currentNonUnitType, currentEnv), bc) =>
         val currentErrorsAndDiscard = currentErrors ++ (if (currentNonUnitType.isDefined) error(s"Warning: non unit value discarded in block") else Nil)
 
-        def okNext(env: Env, nonUnitType: Option[TypeInst]) = (env, nonUnitType, currentErrorsAndDiscard)
-        def addError(errors: Errors) = (currentEnv, None, currentErrorsAndDiscard ++ errors)
-
-        bc match {
-          case ValueDef(target, e) => walkValueExpr(currentEnv)(e) match {
-            case Right(t) => walkValueDef(env)(currentEnv, target, t) match {
-              case Right(newEnv) => okNext(newEnv, None)
-              case Left(errors) => addError(errors)
-            }
-            case Left(errors) => addError(errors)
-          }
-          case e: ValueExpr => currentEnv.getNullaryTypeInst("()") match {
-            case Right(unit) => walkValueExpr(currentEnv)(e) match {
-              case Right(t) if t !== unit => okNext(currentEnv, Some(t))
-              case Right(t) => okNext(currentEnv, None)
-              case Left(errors) => addError(errors)
-            }
-            case Left(errors) => addError(errors)
-          }
+        walkBlockContent(env, currentEnv, bc) match {
+          case Right((nextEnv, nonUnitType)) => (currentErrorsAndDiscard, nonUnitType, nextEnv)
+          case Left(errors) => (currentErrorsAndDiscard ++ errors, None, currentEnv)
         }
       } match {
-        case (_, Some(t), Nil) => Right(t)
-        case (_, None, Nil) => env.getNullaryTypeInst("()")
-        case (_, _, errors) => Left(errors)
+        case (Nil, nonUnitType, _) => nonUnitType.map(Right(_)).getOrElse(env.getNullaryTypeInst("()"))
+        case (errors, _, _) => Left(errors)
       }
+
+    def walkBlockContent(parentEnv: Env, currentEnv: Env, bc: BlockContent): Either[Errors, (Env, Option[TypeInst])] = bc match {
+      case ValueDef(target, e) =>
+        walkValueExpr(currentEnv)(e) flatMap { t =>
+          walkValueDef(parentEnv)(currentEnv, target, t)
+        } map (newEnv => (newEnv, None))
+      case ClassDef(name, contents) =>
+        (contents.foldLeft((Nil: Errors, Map.empty[String, TypeInst])) { case ((currentErrors, members), cc) =>
+          cc match {
+            case ClassMember(name, t) =>
+              walkTypeExpr(currentEnv)(t) match {
+                case Right(ti) => (currentErrors, members + (name -> ti))
+                case Left(errors) => (currentErrors ++ errors, members)
+              }
+          }
+        }) match {
+          case (Nil, members) => {
+            currentEnv.setType(name, new TypeCon(members)) map (newEnv => (newEnv, None))
+          }
+          case (errors, _) => {
+            Left(errors)
+          }
+        }
+      case e: ValueExpr =>
+        currentEnv.getNullaryTypeInst("()") flatMap { unit =>
+          walkValueExpr(currentEnv)(e) map { t =>
+            (currentEnv, Some(t).filter(_ !== unit))
+          }
+        }
+    }
 
     def walkValueDef(parentEnv: Env)(currentEnv: Env, target: Pattern, t: TypeInst): Either[Errors, Env] = target match {
       case NamePattern(name) => currentEnv.setValue(name, t, allowShadow=parentEnv)
