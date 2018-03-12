@@ -2,20 +2,6 @@ package clara
 
 object Clara {
 
-  val baseEnv = {
-    import collection.immutable.HashMap
-    import Analyzer._
-
-    val intType = new TypeCon(HashMap.empty[String, TypeInst])
-    Env.empty.copy(types = HashMap(
-      "()" -> new TypeCon(HashMap.empty[String, TypeInst]),
-      "Int" -> intType,
-      "String" -> new TypeCon(HashMap("length" -> intType.inst().getOrElse(???)))
-      // "Tuple" -> new TypeCon(),
-      // "Function" -> new TypeCon()
-    ))
-  }
-
   def main(args:Array[String]): Unit = {
     val input = args.head
     println(input)
@@ -27,8 +13,9 @@ object Clara {
         println(v.treeString)
         println()
 
-        Analyzer.analyze(baseEnv)(v) match {
-          case Right(t) => println(t.toSource(baseEnv))
+        val env = Stdlib.baseEnv
+        Analyzer.analyze(env)(v) match {
+          case Right(t) => println(t.toSource(env))
           case Left(errors) => println(errors.map(e => s"Semantic error: $e").mkString("\n"))
         }
         println()

@@ -2,34 +2,6 @@ package clara
 
 object Parser {
 
-  sealed trait Node
-  sealed trait BlockContent extends Node
-  sealed trait ClassContent extends Node
-  sealed trait ValueExpr extends BlockContent
-  sealed trait TypeExpr extends Node
-  sealed trait Pattern extends Node
-  case class ValueDef(target: Pattern, e: ValueExpr) extends BlockContent
-  case class ClassDef(name: String, contents: Seq[ClassContent]) extends BlockContent
-  case class ClassMember(name: String, t: TypeExpr) extends ClassContent
-  case class UnitLiteral() extends ValueExpr
-  case class UnitType() extends TypeExpr
-  case class UnitPattern() extends Pattern
-  case class IntegerLiteral(value: String) extends ValueExpr
-  case class StringLiteral(value: String) extends ValueExpr
-  case class Tuple(es: Seq[ValueExpr]) extends ValueExpr
-  case class TupleType(ts: Seq[TypeExpr]) extends TypeExpr
-  case class TuplePattern(ps: Seq[Pattern]) extends Pattern
-  case class Block(bcs: Seq[BlockContent]) extends ValueExpr
-  case class NamedValue(name: String) extends ValueExpr
-  case class NamedType(name: String) extends TypeExpr
-  case class NamePattern(name: String) extends Pattern
-  case class ValueAs(e: ValueExpr, t: TypeExpr) extends ValueExpr
-  case class PatternAs(p: Pattern, t: TypeExpr) extends Pattern
-  case class Lambda(parameter: Pattern, body: ValueExpr) extends ValueExpr
-  case class FuncType(parameter: TypeExpr, result: TypeExpr) extends TypeExpr
-  case class Member(e: ValueExpr, member: String) extends ValueExpr
-  case class Call(callee: ValueExpr, argument: ValueExpr) extends ValueExpr
-
   def parse(input: String)/*:fastparse.core.Parsed*/ = Impl.program.parse(input)
 
   object Impl {
@@ -41,10 +13,17 @@ object Parser {
     }
     import White._
 
+    import Ast._
+
     //////
     // Basics
 
-    val nl = P(CharPred(_ == '\n')).opaque("newline")
+    val nlPred = (_: Char) == '\n'
+    val nl = P(CharPred(nlPred)).opaque("newline")
+
+    val comma = P(CharPred(_ == ',')).opaque("comma")
+
+    def commaSeparatedRep[T](min: Int, p: => Parser[T]) = nl.rep ~ p.rep(min, sep=(comma ~ nl.rep)) ~ comma.? ~ nl.rep
 
     val digit = P(CharIn('0' to '9')).opaque("digit")
 
@@ -71,7 +50,7 @@ object Parser {
     //////
     // Tuples
 
-    def tupleSyntax[T](p: => Parser[T]) = P("(" ~ nl.rep ~ p.rep(2, sep=("," ~ nl.rep)) ~ ",".? ~ nl.rep ~ ")")
+    def tupleSyntax[T](p: => Parser[T]) = P("(" ~ commaSeparatedRep(2, p) ~ ")")
 
     val tuple: Parser[Tuple] = tupleSyntax(valueExpr).map(Tuple)
 
@@ -96,8 +75,8 @@ object Parser {
     val semi = P(CharPred(_ == ';')).opaque("semicolon")
 
     val blockContents: Parser[Seq[BlockContent]] = {
-      val sep = (nl | semi).rep
-      P(sep ~ (valueDef | classDef | valueExpr).rep(1, sep=sep) ~ sep)
+      val sep = (nl | semi)
+      P(sep.rep ~ (comment | freeDecl | valueExpr).rep(1, sep=sep.rep(1)) ~ sep.rep)
     }
 
     val block: Parser[Block] = P("(" ~ blockContents ~ ")").map(Block)
@@ -105,9 +84,7 @@ object Parser {
     //////
     // Names
 
-    val letter = P(CharPred(c => Character.isLetter(c))).opaque("letter")
-
-    val name = P(!digit ~ letter.rep(1).!)
+    val name = P(CharsWhile(c => Character.isLetter(c)).!).opaque("name") // NOTE: Character.isLetter works only with BMP characters
 
     val namedValue: Parser[NamedValue] = P(name.map(NamedValue))
 
@@ -130,7 +107,7 @@ object Parser {
     val valueAs: Parser[ValueAs] = P(simple ~ typed).map(ValueAs.tupled)
 
     //////
-    // Lambda, Member, Call
+    // Function syntax
 
     def funcSyntax[T1, T2](p1: => Parser[T1], p2: => Parser[T2]) = P(p1 ~ "=>" ~ nl.rep ~ p2)
 
@@ -138,9 +115,12 @@ object Parser {
 
     val funcType: Parser[FuncType] = funcSyntax(simpleType, typeExpr).map(FuncType.tupled)
 
+    //////
+    // Member selection / call
+
     val memberOrCall: Parser[ValueExpr] = {
       def makeNode(e: ValueExpr, m: Either[String, ValueExpr]) = m match {
-        case Left(name) => Member(e, name)
+        case Left(name) => MemberSelection(e, name)
         case Right(argument) => Call(e, argument)
       }
 
@@ -150,34 +130,44 @@ object Parser {
     }
 
     //////
+    // Declarations
+
+    val valueDef: Parser[ValueDef] = P(pattern ~ !"=>" ~ "=" ~/ nl.rep ~ valueExpr).map(ValueDef.tupled)
+
+    val methodDef: Parser[MethodDef] = P(name ~ typed.? ~ pattern.? ~ "=" ~ valueExpr).map(MethodDef.tupled)
+
+    val abstractMember: Parser[AbstractMember] = P(name ~ typed).map(AbstractMember.tupled)
+
+    val memberDecl: Parser[MemberDecl] = P(valueDef | methodDef | abstractMember)
+
+    val classBody: Parser[Seq[MemberDecl]] = {
+      val sep = (nl | comma)
+      P("{" ~ sep.rep ~ memberDecl.rep(0, sep=sep.rep(1)) ~ sep.rep ~ "}")
+    }
+
+    val typeParams: Parser[Seq[String]] = P("[" ~ commaSeparatedRep(1, name) ~ "]")
+
+    val classDef: Parser[ClassDef] = P("::class" ~/ name ~ (typeParams.?.map(_.getOrElse(List()))) ~ (":" ~ name).? ~ classBody).map(ClassDef.tupled)
+
+    val freeDecl: Parser[FreeDecl] = P(classDef | valueDef)
+
+    val classNew: Parser[ClassNew] = P("::new" ~/ name ~ classBody).map(ClassNew.tupled)
+
+    //////
+    // Comments
+    // TODO: allow start anywhere not just after newline
+    val comment: Parser[Comment] = P("//" ~ CharsWhile(!nlPred(_)).!).map(Comment)
+
+    //////
     // Top level rules
 
-    val valueExpr: Parser[ValueExpr] = P(memberOrCall | lambda | valueAs | simple)
+    val valueExpr: Parser[ValueExpr] = P(classNew | memberOrCall | lambda | valueAs | simple)
 
     val typeExpr: Parser[TypeExpr] = P(funcType | simpleType)
 
     val pattern: Parser[Pattern] = P(((unitPattern | tuplePattern | patternParens | namePattern) ~ typed.?).map { case (p, t) =>
       t map (PatternAs(p, _)) getOrElse p
     })
-
-    //////
-    // Value definition
-
-    val valueDef: Parser[ValueDef] = P("let" ~/ pattern ~ "=" ~/ nl.rep ~ valueExpr).map(ValueDef.tupled)
-
-    //////
-    // Class definition
-
-    val classMember: Parser[ClassMember] = P(name ~ typed).map(ClassMember.tupled)
-
-    val comma = P(CharPred(_ == ',')).opaque("comma")
-
-    val classContents: Parser[Seq[ClassContent]] = {
-      val sep = (nl | comma).rep
-      P(sep ~ classMember.rep(1, sep=sep) ~ sep)
-    }
-
-    val classDef: Parser[ClassDef] = P("::class" ~/ name ~ "{" ~ classContents ~ "}").map(ClassDef.tupled)
 
     //////
     // Start here

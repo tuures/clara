@@ -4,15 +4,15 @@ import ai.x.safe._
 
 object JsEmitter {
 
-  class Indent(val chars: String = "  ", val level: Int = 0) {
-    def add = new Indent(chars, level + 1)
-    override val toString = chars * level
-  }
-
-  def emitString(valueExpr: Parser.ValueExpr): String = Impl.walkValueExpr(new Indent())(valueExpr)
+  def emitString(valueExpr: Ast.ValueExpr): String = Impl.walkValueExpr(new Impl.Indent())(valueExpr)
 
   object Impl {
-    import Parser._
+    import Ast._
+
+    class Indent(val chars: String = "  ", val level: Int = 0) {
+      def add = new Indent(chars, level + 1)
+      override val toString = chars * level
+    }
 
     def walkValueExpr(indent: Indent)(valueExpr: ValueExpr): String = valueExpr match {
       // optimizations
@@ -28,7 +28,8 @@ object JsEmitter {
 
         val items = bcs.map {
           case ValueDef(target, e) => walkValueDef(indentItems)(target, e)
-          case ClassDef(name, contents) => walkClassDef(indentItems)(name, contents)
+          // case ClassDef(name, contents) => walkClassDef(indentItems)(name, contents)
+          case Comment(text) => s"//${text}"
           case e: ValueExpr => walkValueExpr(indentItems)(e)
         }
 
@@ -49,7 +50,7 @@ object JsEmitter {
 
         s"($p) => $b"
       }
-      case Member(e, member) => s"${walkValueExpr(indent)(e)}.$member"
+      case MemberSelection(e, member) => s"${walkValueExpr(indent)(e)}.$member"
       case Call(callee, argument) => s"${walkValueExpr(indent)(callee)}(${walkValueExpr(indent)(argument)})"
     }
 
@@ -57,14 +58,14 @@ object JsEmitter {
       case NamePattern(name) => s"const $name = ${walkValueExpr(indent)(e)}"
     }
 
-    def walkClassDef(indent: Indent)(name: String, contents: Seq[ClassContent]): String = {
-      val names: Seq[String] = contents map {
-        case ClassMember(name, _) => name
-      }
-      val paramList = names.mkString(", ")
-      val body = names.map(name => s"this.$name = $name").map(i => s"${indent.add.add}$i;\n").mkString
-      s"class $name {\n${indent.add}constructor($paramList) {\n$body${indent.add}}\n$indent}"
-    }
+    // def walkClassDef(indent: Indent)(name: String, contents: Seq[ClassContent]): String = {
+    //   val names: Seq[String] = contents map {
+    //     case ClassField(name, _) => name
+    //   }
+    //   val paramList = names.mkString(", ")
+    //   val body = names.map(name => s"this.$name = $name").map(i => s"${indent.add.add}$i;\n").mkString
+    //   s"class $name {\n${indent.add}constructor($paramList) {\n$body${indent.add}}\n$indent}"
+    // }
 
   }
 }
