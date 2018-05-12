@@ -7,20 +7,23 @@ object Clara {
     println(input)
 
     import fastparse.core.Parsed
-    Parser.parse(input) match {
-      case Parsed.Success(v, index) =>
+    Parser.parseProgramBlock(input) match {
+      case Parsed.Success(block, index) =>
         import sext._
-        println(v.treeString)
+        println(block.treeString)
         println()
 
-        val env = Stdlib.baseEnv
-        Analyzer.analyze(env)(v) match {
-          case Right(t) => println(t.toSource(env))
+        val blockWithPrelude = {
+          import Ast._
+          Block(Prelude.Prelude ++ Seq(block))
+        }
+        Analyzer.analyze(blockWithPrelude) match {
+          case Right(t) => println(t.sourceName)
           case Left(errors) => println(errors.map(e => s"Semantic error: $e").mkString("\n"))
         }
         println()
 
-        println(JsEmitter.emitString(v))
+        println(JsEmitter.emitString(blockWithPrelude))
         println()
 
       case Parsed.Failure(p, index, extra) =>

@@ -50,7 +50,7 @@ object JsEmitter {
 
         s"($p) => $b"
       }
-      case MemberSelection(e, member) => s"${walkValueExpr(indent)(e)}.$member"
+      case MemberSelection(e, member, _) => s"${walkValueExpr(indent)(e)}.$member"
       case Call(callee, argument) => s"${walkValueExpr(indent)(callee)}(${walkValueExpr(indent)(argument)})"
     }
 

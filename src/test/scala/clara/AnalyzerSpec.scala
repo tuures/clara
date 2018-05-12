@@ -7,40 +7,15 @@ class AnalyzerSpec extends FunSuite {
 
   val env = Stdlib.baseEnv
 
-  def check(v: ValueExpr, expectedToSource: String) = {
-    Analyzer.analyze(env)(v) match {
-      case Left(errors) =>
-        throw new Exception(errors.mkString("\n"))
-      case Right(t) =>
-        assert(t.toSource(env) == expectedToSource)
-    }
-  }
-
-  def t(v: ValueExpr, expectedToSource: String): Unit = nt(expectedToSource)(v, expectedToSource)
-
-  def nt(name: String)(v: ValueExpr, expectedToSource: String): Unit = test(name) { check(v, expectedToSource) }
-
-  t(
-    UnitLiteral(),
-    "()"
-  )
-
-  nt("Block returning String")(
-    Block(Seq(Block(Seq(
-      ValueDef(NamePattern("foo"), StringLiteral("bar")),
-      UnitLiteral(),
-      NamedValue("foo")
-    )))),
-    "String"
-  )
-
-  test("Class2") {
+  test("Class definition and instantiation") {
     val bcs = Seq(
-      ClassDef("Foo", Nil, None, Seq(
-        AbstractMember("bar", NamedType("String"))
+      ClassDef("Foo", Seq(TypeParam(Invariant, "A", 0)), None, Seq(
+        ValueDecl("bar", NamedType("String")),
+        ValueDecl("zot", NamedType("A"))
       )),
-      ValueDef(NamePattern("foo"), ClassNew("Foo", Seq(
-        ValueDef(NamePattern("bar"), StringLiteral("foobar"))
+      ValueDef(NamePattern("foo"), ClassNew("Foo", Seq(NamedType("String")), Seq(
+        ValueDef(NamePattern("bar"), StringLiteral("foobar")),
+        ValueDef(NamePattern("zot"), StringLiteral("foobar"))
       ))),
       NamedValue("foo")
     )

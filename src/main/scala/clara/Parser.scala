@@ -2,7 +2,7 @@ package clara
 
 object Parser {
 
-  def parse(input: String)/*:fastparse.core.Parsed*/ = Impl.program.parse(input)
+  def parseProgramBlock(input: String)/*: fastparse.core.Parsed[clara.Ast.Block,Char,String]*/ = Impl.program.parse(input)
 
   object Impl {
     import fastparse.noApi._
@@ -88,7 +88,7 @@ object Parser {
 
     val namedValue: Parser[NamedValue] = P(name.map(NamedValue))
 
-    val namedType: Parser[NamedType] = P(name.map(NamedType))
+    val namedType: Parser[NamedType] = P((name ~ maybeTypeArgs).map(NamedType.tupled))
 
     val namePattern: Parser[NamePattern] = P(name.map(NamePattern))
 
@@ -119,39 +119,57 @@ object Parser {
     // Member selection / call
 
     val memberOrCall: Parser[ValueExpr] = {
-      def makeNode(e: ValueExpr, m: Either[String, ValueExpr]) = m match {
-        case Left(name) => MemberSelection(e, name)
+      def makeNode(e: ValueExpr, m: Either[(String, Seq[TypeExpr]), ValueExpr]) = m match {
+        case Left((name, typeArgs)) => MemberSelection(e, name, typeArgs)
         case Right(argument) => Call(e, argument)
       }
 
-      P(simple ~ (("." ~ nl.rep ~ name).map(Left(_)) | simple.map(Right(_))).rep(1)).map { case (base, parts) =>
+      P(simple ~ (("." ~ nl.rep ~ name ~ maybeTypeArgs).map(Left(_)) | simple.map(Right(_))).rep(1)).map { case (base, parts) =>
         parts.tail.foldLeft(makeNode(base, parts.head))(makeNode)
       }
     }
 
     //////
+    // Type parameters
+
+    val typeParam: Parser[TypeParam] = {
+      val plusOrMinusVariance: Parser[Variance] = P(P("+").map(_ => Covariant) | P("-").map(_ => Contravariant))
+      val variance = P(plusOrMinusVariance.?.map(_.getOrElse(Invariant)))
+
+      val arity: Parser[Int] = typeListSyntax("_").?.map(_.map(_.length).getOrElse(0))
+
+      P(variance ~ name ~ arity).map(TypeParam.tupled)
+    }
+
+    def typeListSyntax[T](p: => Parser[T]): Parser[Seq[T]] = P("[" ~ commaSeparatedRep(1, p) ~ "]")
+
+    val maybeTypeParams: Parser[Seq[TypeParam]] = typeListSyntax(typeParam).?.map(_.getOrElse(Nil))
+
+    val maybeTypeArgs: Parser[Seq[TypeExpr]] = typeListSyntax(typeExpr).?.map(_.getOrElse(Nil))
+
+    //////
     // Declarations
+
+    val valueDecl: Parser[ValueDecl] = P(name ~ typed).map(ValueDecl.tupled)
 
     val valueDef: Parser[ValueDef] = P(pattern ~ !"=>" ~ "=" ~/ nl.rep ~ valueExpr).map(ValueDef.tupled)
 
-    val methodDef: Parser[MethodDef] = P(name ~ typed.? ~ pattern.? ~ "=" ~ valueExpr).map(MethodDef.tupled)
+    val methodDecl: Parser[MethodDecl] = P("::method" ~ name ~ maybeTypeParams ~ typed).map(MethodDecl.tupled)
 
-    val abstractMember: Parser[AbstractMember] = P(name ~ typed).map(AbstractMember.tupled)
+    val methodDef: Parser[MethodDef] = P("::method" ~ name ~ maybeTypeParams ~ "=" ~/ valueExpr).map(MethodDef.tupled)
 
-    val memberDecl: Parser[MemberDecl] = P(valueDef | methodDef | abstractMember)
+    val memberDecl: Parser[MemberDecl] = P(valueDef | methodDef | valueDecl | methodDecl)
 
     val classBody: Parser[Seq[MemberDecl]] = {
       val sep = (nl | comma)
       P("{" ~ sep.rep ~ memberDecl.rep(0, sep=sep.rep(1)) ~ sep.rep ~ "}")
     }
 
-    val typeParams: Parser[Seq[String]] = P("[" ~ commaSeparatedRep(1, name) ~ "]")
-
-    val classDef: Parser[ClassDef] = P("::class" ~/ name ~ (typeParams.?.map(_.getOrElse(List()))) ~ (":" ~ name).? ~ classBody).map(ClassDef.tupled)
+    val classDef: Parser[ClassDef] = P("::class" ~/ name ~ maybeTypeParams ~ ("<:" ~ namedType).? ~ classBody).map(ClassDef.tupled)
 
     val freeDecl: Parser[FreeDecl] = P(classDef | valueDef)
 
-    val classNew: Parser[ClassNew] = P("::new" ~/ name ~ classBody).map(ClassNew.tupled)
+    val classNew: Parser[ClassNew] = P("::new" ~/ namedType ~ classBody).map(ClassNew.tupled)
 
     //////
     // Comments

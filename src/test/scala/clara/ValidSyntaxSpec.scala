@@ -178,8 +178,12 @@ class ValidSyntaxSpec extends FunSuite {
 
   t("::new Foo {}")
 
-  nt("class with type params")(
+  nt("class with simple type params and value declarations")(
     "::class Book[A] {isbn: String, author: String, title: String}"
+  )
+
+  nt("complex type params and method declarations")(
+    "::class Functor[A, M[_]] { ::method map[B]: (A => B) => M[B] }"
   )
 
   nt("comment")(
