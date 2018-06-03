@@ -10,7 +10,7 @@ object Prelude {
       ValueDecl("length", NamedType("Int", Nil))
     )),
     ClassDef("Function", Seq(TypeParam(Contravariant, "P", 0), TypeParam(Covariant, "R", 0)), None, Seq(
-      MethodDecl("apply", Nil, FuncType(NamedType("P", Nil), NamedType("R", Nil)))
+      ValueDecl("apply", FuncType(NamedType("P", Nil), NamedType("R", Nil)))
     ))
   )
 }

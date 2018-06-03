@@ -18,7 +18,7 @@ object Clara {
           Block(Prelude.Prelude ++ Seq(block))
         }
         Analyzer.analyze(blockWithPrelude) match {
-          case Right(t) => println(t.sourceName)
+          case Right(t) => println(t.signature(Analyzer.Env.empty))
           case Left(errors) => println(errors.map(e => s"Semantic error: $e").mkString("\n"))
         }
         println()

@@ -71,27 +71,178 @@ object Analyzer {
   sealed trait TypeConOrTypeInst {
     def sourceName: String
     def envName(env: Env): String
+    def arity: Int
     def signature(env: Env): String
   }
 
   sealed abstract class TypeCon extends TypeConOrTypeInst {
     def envName(env: Env) = env.types.getName(this).getOrElse(sourceName)
-    def arity: Int
     def valueMember(name: String, typeArgs: TypeArgs): Option[ValueMember]
+    def validateArgs(typeArgs: TypeArgs): Boolean
     // def valueMembers(typeArgs: TypeArgs): Namespace[ValueMember]
+
+    def inst(env: Env, typeArgs: TypeArgs): An[TypeInst] = {
+      if (!validateArgs(typeArgs)) {
+        An.error(s"Type arguments ${TypeArgs.signature(typeArgs, env)} do not match parameters of type ${this.signature(env)}")
+      } else {
+        val ti = env.getType("Function").filter(_ === this).flatMap { _ =>
+          typeArgs match {
+            case Seq(paramType: TypeInst, resultType: TypeInst) =>
+              Some(FuncTypeInst(this, paramType, resultType))
+            case _ => None
+          }
+        }.getOrElse(NormalTypeInst(this, typeArgs))
+
+        An(ti)
+      }
+    }
+
   }
 
-  type Variance = Ast.Variance
+  class Uniq()
 
   type TypeParams = Namespace[VarTypeCon]
 
   object TypeParams {
     def empty = Namespace.empty[VarTypeCon]
+    def signature(typeParams: TypeParams, env: Env) =
+      if (typeParams.length > 0) typeParams.names.safeMkString("[", ", ", "]")
+      else ""
+  }
+
+  case class ClassHeaderTypeCon(
+    sourceName: String,
+    typeParams: TypeParams,
+    explicitParent: Option[TypeInst],
+    uniq: Uniq = new Uniq()
+  ) extends TypeCon {
+    def signature(env: Env) = s"${envName(env)}${TypeParams.signature(typeParams, env)}"
+    def arity = typeParams.length
+    def valueMember(name: String, typeArgs: TypeArgs) = throw new IllegalStateException("ClassHeaderTypeCon.valueMember") // TODO or just None?
+    def validateArgs(typeArgs: TypeArgs) = typeParams.items.map(_.arity) === typeArgs.map(_.arity)
+    // def valueMembers(typeArgs: TypeArgs): Namespace[ValueMember]
+  }
+
+  case class ClassTypeCon(
+    header: ClassHeaderTypeCon,
+    directMembers: Members
+  ) extends TypeCon {
+    def sourceName = header.sourceName
+    def signature(env: Env) = header.signature(env)
+    def arity = header.arity
+    def valueMember(name: String, typeArgs: TypeArgs) = {
+      directMembers.values.get(name).
+        orElse(header.explicitParent.flatMap(_.valueMember(name)))
+        //TODO subst in parent
+    }
+    def validateArgs(typeArgs: TypeArgs) = header.validateArgs(typeArgs)
+    // def valueMembers(typeArgs: TypeArgs): Namespace[ValueMember]
+  }
+  //   def inst(typeArgs: Seq[TypeCon], env: Env): An[TypeInst] = {
+  //     if (typeArgs.length == typeParams.length)
+  //       Right(NormalTypeInst(this, typeArgs))
+  //     else
+  //       Left(Impl.error("invalid number of type arguments for type ${this.signature(env)}"))
+  //   }
+  // }
+  //
+
+  case class VarTypeCon(sourceName: String, arity: Int) extends TypeCon {
+    def signature(env: Env) = s"${envName(env)}${(if (arity > 0) List.fill(arity)("_").safeMkString("[", ", ", "]") else "")}"
+    def valueMember(name: String, typeArgs: TypeArgs) = None
+    def validateArgs(typeArgs: TypeArgs) = typeArgs.length === arity
+  }
+  //   def inst(typeArgs: Seq[TypeCon], env: Env) =
+  //     if (typeArgs.length == typeParam.arity)
+  //       Right(NormalTypeInst(this, typeArgs))
+  //     else
+  //       Left(Impl.error("invalid number of type arguments for type ${this.signature(env)}"))
+  // }
+
+  type TypeArgs = Seq[TypeConOrTypeInst]
+
+  object TypeArgs {
+    def signature(typeArgs: TypeArgs, env: Env) =
+      if (typeArgs.length > 0) typeArgs.map(_.signature(env)).safeMkString("[", ", ", "]")
+      else ""
+  }
+
+  sealed abstract class TypeInst extends TypeConOrTypeInst {
+    def isSubTypeOf(other: TypeInst): Boolean
+    def arity = 0
+    def valueMember(name: String): Option[ValueMember]
+    // def valueMembers: Namespace[ValueMember]
+  }
+
+//   def inst(typeArgs: Seq[TypeCon], env: Env): An[TypeInst] = {
+//     if (typeArgs.length == typeParams.length)
+//       Right(NormalTypeInst(this, typeArgs))
+//     else
+//       Left(Impl.error("invalid number of type arguments for type ${this.signature(env)}"))
+//   }
+// }
+//
+
+  case class NormalTypeInst(con: TypeCon, typeArgs: TypeArgs) extends TypeInst {
+    def sourceName = con.sourceName
+    def envName(env: Env) = con.envName(env)
+    def signature(env: Env) = s"${envName(env)}${TypeArgs.signature(typeArgs, env)}"
+    def isSubTypeOf(other: TypeInst) = this == other //FIXME
+    def valueMember(name: String) = con.valueMember(name, typeArgs)
+    // def valueMembers = con.valueMembers(typeArgs)
+  }
+
+  case class FuncTypeInst(con: TypeCon, paramType: TypeInst, resultType: TypeInst) extends TypeInst {
+    def sourceName = con.sourceName
+    def envName(env: Env) = con.envName(env)
+    def signature(env: Env) = s"${paramType.signature(env)} => ${resultType.signature(env)}"
+    def isSubTypeOf(other: TypeInst) = this == other //FIXME
+    def valueMember(name: String) = con.valueMember(name, Seq(paramType, resultType))
+  }
+
+  case object TopType extends TypeInst {
+    val sourceName = "⊤"
+    def envName(env: Env) = sourceName
+    def signature(env: Env) = envName(env)
+    def isSubTypeOf(other: TypeInst) = false
+    def valueMember(name: String) = None
+    // def valueMembers = Namespace.empty[ValueMember]
+  }
+
+  case object BottomType extends TypeInst {
+    val sourceName = "⊥"
+    def envName(env: Env) = sourceName
+    def signature(env: Env) = envName(env)
+    def isSubTypeOf(other: TypeInst) = true
+    def valueMember(name: String) = None
+    // def valueMembers = Namespace.empty[ValueMember]
+  }
+
+  case class Env(types: Namespace[TypeCon], values: Namespace[TypeInst]) {
+    def getValue(name: String) = values.get(name)
+    def useValue(name: String): An[TypeInst] = getValue(name).toRight(Impl.error(s"Not found: value `$name`"))
+    def getType(name: String) = types.get(name)
+    def useType(name: String): An[TypeCon] = getType(name).toRight(Impl.error(s"Not found: type `$name`"))
+    def useNullaryTypeInst(name: String): An[TypeInst] = useType(name).flatMap(_.inst(this, Nil))
+    def useUnit: An[TypeInst] = useNullaryTypeInst("()")
+    def addValue(binding: (String, TypeInst)) = addOrShadowValue(binding, Env.empty)
+    def addOrShadowValue(binding: (String, TypeInst), allowShadow: Env): An[Env] =
+      values.addOrShadow(binding, allowShadow.values).toRight(Impl.error(s"Already defined: value `${binding._1}`")).
+      map(n => this.copy(values = n))
+    def addType(binding: (String, TypeCon)) = addOrShadowType(binding, Env.empty)
+    def addOrShadowType(binding: (String, TypeCon), allowShadow: Env): An[Env] =
+      types.addOrShadow(binding, allowShadow.types).toRight(Impl.error(s"Already defined: type `${binding._1}`")).
+      map(t => this.copy(types = t))
+  }
+
+  object Env {
+    def empty = Env(Namespace.empty[TypeCon], Namespace.empty[TypeInst])
   }
 
   sealed trait ValueMember {
     def typeInst: TypeInst
   }
+
   sealed trait AbstractValueMember extends ValueMember
   sealed trait ConcreteValueMember extends ValueMember
   case class PlainValueMemberDecl(typeInst: TypeInst) extends AbstractValueMember
@@ -114,98 +265,6 @@ object Analyzer {
     def empty = Members(Namespace.empty[TypeCon], Namespace.empty[ValueMember])
   }
 
-  case class ClassTypeCon(
-    sourceName: String,
-    typeParams: TypeParams,
-    explicitParent: Option[TypeInst],
-    directMembers: Members
-  ) extends TypeCon {
-    def signature(env: Env) = s"${envName(env)}${(if (typeParams.length > 0) typeParams.names.mkString("[", ", ", "]") else "")}"
-    def arity = typeParams.length
-    def valueMember(name: String, typeArgs: TypeArgs) = directMembers.values.get(name).orElse(explicitParent.flatMap(_.valueMember(name))) // TODO subst typeArgs
-    // def valueMembers(typeArgs: TypeArgs): Namespace[ValueMember]
-    // def validateArgs(typeArgs: TypeArgs) = typeParams.items.zip(typeArgs).foreach { case (p, a) => assert(a.arity == p.arity) }
-  }
-  //   def inst(typeArgs: Seq[TypeCon], env: Env): An[TypeInst] = {
-  //     if (typeArgs.length == typeParams.length)
-  //       Right(NormalTypeInst(this, typeArgs))
-  //     else
-  //       Left(Impl.error("invalid number of type arguments for type ${this.envName(env)}"))
-  //   }
-  // }
-  //
-
-
-  case class VarTypeCon(sourceName: String, arity: Int) extends TypeCon {
-    def signature(env: Env) = s"${envName(env)}${(if (arity > 0) List.fill(arity)("_").mkString("[", ", ", "]") else "")}"
-    def valueMember(name: String, typeArgs: TypeArgs) = None
-    // def validateArgs(typeArgs: TypeArgs) = assert(typeArgs.length == arity)
-  }
-  //   def inst(typeArgs: Seq[TypeCon], env: Env) =
-  //     if (typeArgs.length == typeParam.arity)
-  //       Right(NormalTypeInst(this, typeArgs))
-  //     else
-  //       Left(Impl.error("invalid number of type arguments for type ${this.envName(env)}"))
-  // }
-
-  type TypeArgs = Seq[TypeConOrTypeInst]
-
-  sealed trait TypeInst extends TypeConOrTypeInst {
-    def isSubTypeOf(other: TypeInst): Boolean
-    def valueMember(name: String): Option[ValueMember]
-    // def valueMembers: Namespace[ValueMember]
-  }
-
-  object TypeInst {
-    def apply(con: TypeCon, typeArgs: TypeArgs) = NormalTypeInst(con, typeArgs)
-  }
-
-  case class NormalTypeInst(con: TypeCon, typeArgs: TypeArgs) extends TypeInst {
-    def sourceName = con.sourceName
-    def envName(env: Env) = con.envName(env)
-    def signature(env: Env) = s"${envName(env)}${(if (typeArgs.length > 0) typeArgs.mkString("[", ", ", "]") else "")}"
-    def isSubTypeOf(other: TypeInst) = this == other
-    def valueMember(name: String) = con.valueMember(name, typeArgs)
-    // def valueMembers = con.valueMembers(typeArgs)
-  }
-
-  case object TopType extends TypeInst {
-    val sourceName = "⊤"
-    def envName(env: Env) = sourceName
-    def signature(env: Env) = envName(env)
-    def isSubTypeOf(other: TypeInst) = false
-    def valueMember(name: String) = None
-    // def valueMembers = Namespace.empty[ValueMember]
-  }
-
-  case object BottomType extends TypeInst {
-    val sourceName = "⊥"
-    def envName(env: Env) = sourceName
-    def signature(env: Env) = envName(env)
-    def isSubTypeOf(other: TypeInst) = true
-    def valueMember(name: String) = None
-    // def valueMembers = Namespace.empty[ValueMember]
-  }
-
-  case class Env(types: Namespace[TypeCon], values: Namespace[TypeInst]) {
-    def useValue(name: String): An[TypeInst] = values.get(name).toRight(Impl.error(s"Not found: value `$name`"))
-    def useType(name: String): An[TypeCon] = types.get(name).toRight(Impl.error(s"Not found: type `$name`"))
-    def useNullaryInst(name: String): An[TypeInst] = useType(name).map(TypeInst(_, Nil))
-    def useUnit: An[TypeInst] = useNullaryInst("()")
-    def addValue(binding: (String, TypeInst)) = addOrShadowValue(binding, Env.empty)
-    def addOrShadowValue(binding: (String, TypeInst), allowShadow: Env): An[Env] =
-      values.addOrShadow(binding, allowShadow.values).toRight(Impl.error(s"Already defined: value `${binding._1}`")).
-      map(n => this.copy(values = n))
-    def addType(binding: (String, TypeCon)) = addOrShadowType(binding, Env.empty)
-    def addOrShadowType(binding: (String, TypeCon), allowShadow: Env): An[Env] =
-      types.addOrShadow(binding, allowShadow.types).toRight(Impl.error(s"Already defined: type `${binding._1}`")).
-      map(t => this.copy(types = t))
-  }
-
-  object Env {
-    def empty = Env(Namespace.empty[TypeCon], Namespace.empty[TypeInst])
-  }
-
   def analyze(valueExpr: Ast.ValueExpr): An[TypeInst] = Impl.walkValueExpr(Env.empty)(valueExpr)
 
   object Impl {
@@ -221,8 +280,8 @@ object Analyzer {
 
     def walkValueExpr(env: Env)(valueExpr: ValueExpr): An[TypeInst] = valueExpr match {
       case UnitLiteral() => env.useUnit
-      case IntegerLiteral(_) => env.useNullaryInst("Int")
-      case StringLiteral(_) => env.useNullaryInst("String")
+      case IntegerLiteral(_) => env.useNullaryTypeInst("Int")
+      case StringLiteral(_) => env.useNullaryTypeInst("String")
       case Tuple(es) => {
         An.seq(es.map(walkValueExpr(env))).flatMap(walkTuple(env))
       }
@@ -230,28 +289,61 @@ object Analyzer {
       case NamedValue(name) => env.useValue(name)
       case ValueAs(e, asType) =>
         An.join(walkValueExpr(env)(e), walkTypeInstExpr(env)(asType)).flatMap(expectSubTypeOf(env))
-      case Lambda(parameter, body) => ???
-        // An.join(walkPattern(env)(parameter), walkValueExpr(env)(body)).
-        //   flatMap { case (PatternResult(t, names), bodyType) =>
-        //     walkFunction(env.sub(names))(t, bodyType)
-        //   }
+      case Lambda(parameter, body) =>
+        walkPattern(env)(parameter, None).flatMap { case PatternResult(t, names) =>
+          walkValueExpr(env/*.sub(names)*/)(body).flatMap { bodyType =>
+            t match {
+              case Some(paramType) => walkFunction(env)((paramType, bodyType))
+              case None => An.error(s"Must specify paramter type in lambda")
+            }
+          }
+        }
       case MemberSelection(e, memberName, typeArgs) => walkValueExpr(env)(e) flatMap { target =>
-        target.valueMember(memberName).map(_.typeInst).toRight(error(s"type ${target.envName(env)} does not have member $memberName"))
+        target.valueMember(memberName).map(_.typeInst).toRight(error(s"type ${target.signature(env)} does not have member $memberName"))
       }
-      case Call(callee, argument) => {
+      case Call(callee, Lambda(parameter, body)) => {
         // walkValueExpr(env)
         // callee must have apply member
         ???
+      }
+      case Call(originalCallee, argument) => {
+        env.useType("Function").flatMap { functionCon =>
+          walkValueExpr(env)(originalCallee) flatMap { originalCalleeType =>
+            walkValueExpr(env)(argument) flatMap { argumentType =>
+
+              def recursiveDelegateCall(functionCon: TypeCon, argumentType: TypeInst)(calleeType: TypeInst): An[TypeInst] = {
+                calleeType.valueMember("apply").map(_.typeInst) match {
+                  case Some(NormalTypeInst(applyCon, applyArgs)) if applyCon === functionCon =>
+                    assert(applyArgs.size === 2)
+
+                    val parameterType = applyArgs(1)
+                    val returnType = applyArgs(2)
+
+                    if (parameterType === argumentType) {
+                      An(returnType.asInstanceOf[TypeInst])
+                    } else {
+                      An.error(s"Type mismatch in call: argument was found to be ${argumentType.signature(env)}, expected parameter type is ${parameterType.signature(env)}")
+                    }
+                  case Some(nonFunctionInst) => recursiveDelegateCall(functionCon, argumentType)(nonFunctionInst)
+                  case None => An.error(s"type `${calleeType.signature(env)}` cannot be called (does not have member `apply`)")
+                }
+              }
+
+              recursiveDelegateCall(functionCon, argumentType)(originalCalleeType)
+            }
+          }
+        }
       }
       case ClassNew(namedType, astMembers) =>
         walkTypeInstExpr(env)(namedType) flatMap { ti =>
           if (astMembers.length == 0)
             An(ti)
           else
-            walkMemberDecls(env)(Some(ti), astMembers) map { members =>
+            walkMemberDecls(env)(Some(ti), astMembers) flatMap { members =>
               val name = "$AnonymousClass"
-              val anonClass = new ClassTypeCon(name, TypeParams.empty, Some(ti), members)
-              TypeInst(anonClass, Nil)
+              val anonClass = ClassTypeCon(ClassHeaderTypeCon(name, TypeParams.empty, Some(ti)), members)
+
+              anonClass.inst(env, Nil)
             }
         }
 
@@ -275,7 +367,7 @@ object Analyzer {
         }
       }
       def end: An[TypeInst] = currentErrors match {
-        case Nil => currentNonUnitType.map(Right(_)).getOrElse(parentEnv.useUnit)
+        case Nil => currentNonUnitType.map(Right(_)).getOrElse(currentEnv.useUnit)
         case currentErrors => Left(currentErrors)
       }
     }
@@ -303,8 +395,12 @@ object Analyzer {
 
       walkTypeParams(env)(astTypeParams) flatMap { case (insideEnv, typeParams) =>
         walkClassParent(insideEnv)(parent) flatMap { parentInst =>
-          walkMemberDecls(insideEnv)(parentInst, astMembers) flatMap { members =>
-            env.addType((name, new ClassTypeCon(name, typeParams, parentInst, members)))
+          val selfHead = ClassHeaderTypeCon(name, typeParams, parentInst)
+
+          insideEnv.addType((name, selfHead)) flatMap { bodyEnv =>
+            walkMemberDecls(bodyEnv)(parentInst, astMembers) flatMap { members =>
+              env.addType((name, ClassTypeCon(selfHead, members)))
+            }
           }
         }
       }
@@ -314,7 +410,7 @@ object Analyzer {
       typeParams.foldLeft(Nil: Errors, (env, TypeParams.empty)) { case ((currentErrors, (currentEnv, currentTypeParams)), typeParam) => {
         val Ast.TypeParam(variance, name, arity) = typeParam
 
-        val varTypeCon = new VarTypeCon(name, arity)
+        val varTypeCon = VarTypeCon(name, arity)
         currentEnv.addType((name, varTypeCon)) flatMap { updatedEnv =>
           currentTypeParams.add((name, varTypeCon)).
             toRight(error(s"Duplicate type parameter name $name")).
@@ -440,7 +536,7 @@ object Analyzer {
     }
 
     def expectTypeInst(env: Env)(conOrInst: TypeConOrTypeInst): An[TypeInst] = conOrInst match {
-      case con: TypeCon => An.error(s"Expected instantiated type but got type constructor ${con.envName(env)}")
+      case con: TypeCon => An.error(s"Expected instantiated type but got type constructor ${con.signature(env)}")
       case inst: TypeInst => An(inst)
     }
 
@@ -452,24 +548,24 @@ object Analyzer {
         if (con.arity > 0 && typeArgs.length == 0) {
           An(con)
         } else {
-          An.seq(typeArgs.map(walkTypeExpr(env))) map { args =>
-            TypeInst(con, args)
+          An.seq(typeArgs.map(walkTypeExpr(env))) flatMap { args =>
+            con.inst(env, args)
           }
         }
       }
 
     def walkTuple(env: Env)(types: Seq[TypeInst]): An[TypeInst] =
       if (types.length == 2) {
-        env.useType("Tuple").map { con =>
-          TypeInst(con, types)
+        env.useType("Tuple").flatMap { con =>
+          con.inst(env, types)
         }
       } else {
         An.error(s"Only 2-tuples are supported")
       }
 
     def walkFunction(env: Env)(tt: (TypeInst, TypeInst)): An[TypeInst] =
-      env.useType("Function").map { con =>
-        TypeInst(con, Seq(tt._1, tt._2))
+      env.useType("Function").flatMap { con =>
+        con.inst(env, Seq(tt._1, tt._2))
       }
 
     def expectSubTypeOf(env: Env)(tt: (TypeInst, TypeInst)): An[TypeInst] = {
@@ -478,7 +574,7 @@ object Analyzer {
       if (sub.isSubTypeOf(sup))
         An(sub)
       else
-        An.error(s"Type mismatch: found ${sub.envName(env)}, expected ${sup.envName(env)}")
+        An.error(s"Type mismatch: found ${sub.signature(env)}, expected ${sup.signature(env)}")
     }
 
     case class PatternResult(t: Option[TypeInst], names: Namespace[TypeInst])
