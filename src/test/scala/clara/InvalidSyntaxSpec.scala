@@ -9,7 +9,7 @@ class InvalidSyntaxSpec extends FunSuite {
   import Ast._
 
   def check(input: String, expected: Option[Node]) = {
-    Parser.parse(input) match {
+    Parser.parseProgramBlock(input) match {
       case Parsed.Success(v, _) =>
         fail("parsed: \n" + v.toString())
       case _ =>

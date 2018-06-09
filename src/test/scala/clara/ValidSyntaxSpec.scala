@@ -9,7 +9,7 @@ class ValidSyntaxSpec extends FunSuite {
   import Ast._
 
   def check(input: String, expected: Option[Node]) = {
-    Parser.parse(input) match {
+    Parser.parseProgramBlock(input) match {
       case f: Parsed.Failure =>
         fail(input + "\n" + f.toString + "\n" + f.extra.traced.toString)
       case s: Parsed.Success[_] =>
@@ -27,7 +27,7 @@ class ValidSyntaxSpec extends FunSuite {
   t("(): ()")
   t("'str'")
   t("(b, a, 1, 'foobar')")
-  t("() => 1")
+  t("() => 1", Some(Lambda(UnitPattern(), IntegerLiteral("1"))))
   t("a => ()", Some(
     Block(Seq(
       Lambda(NamePattern("a"), UnitLiteral()))
@@ -42,10 +42,10 @@ class ValidSyntaxSpec extends FunSuite {
   t("add = (a: Int) => (b: Int) => Math.add(a, b)", Some(
     Block(Seq(
       ValueDef(NamePattern("add"),
-        Lambda(PatternAs(NamePattern("a"), NamedType("Int")),
-          Lambda(PatternAs(NamePattern("b"), NamedType("Int")),
+        Lambda(PatternAs(NamePattern("a"), NamedType("Int", Nil)),
+          Lambda(PatternAs(NamePattern("b"), NamedType("Int", Nil)),
             Call(
-              MemberSelection(NamedValue("Math"), "add"),
+              MemberSelection(NamedValue("Math"), "add", Nil),
               Tuple(Seq(NamedValue("a"), NamedValue("b")))
             )
           )

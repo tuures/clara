@@ -106,6 +106,7 @@ object Analyzer {
     def validateArgs(typeArgs: TypeArgs): Boolean
     // def valueMembers(typeArgs: TypeArgs): Namespace[ValueMember]
     def inst(env: Env, typeArgs: TypeArgs): An[TypeInst] = {
+      //FIXME check that all members are concrete
       if (!validateArgs(typeArgs)) {
         An.error(s"Type arguments ${TypeArgs.signature(typeArgs, env)} do not match parameters of type ${this.signature(env)}")
       } else {
