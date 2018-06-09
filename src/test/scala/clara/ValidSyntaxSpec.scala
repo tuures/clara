@@ -27,12 +27,15 @@ class ValidSyntaxSpec extends FunSuite {
   t("(): ()")
   t("'str'")
   t("(b, a, 1, 'foobar')")
-  t("() => 1", Some(Lambda(UnitPattern(), IntegerLiteral("1"))))
-  t("a => ()", Some(
-    Block(Seq(
-      Lambda(NamePattern("a"), UnitLiteral()))
-    ))
-  )
+  t("() => 1", Some(Block(Seq(
+    Lambda(UnitPattern(), IntegerLiteral("1"))
+  ))))
+  t("a => ()", Some(Block(Seq(
+    Lambda(NamePattern("a"), UnitLiteral())
+  ))))
+  t("(() => 1)()", Some(Block(Seq(
+    Call(Lambda(UnitPattern(), IntegerLiteral("1")), UnitLiteral())
+  ))))
   t("(a, b) => a")
   t("(a: Int, b: String) => (b, a, 1, 'foobar')")
   t("(a, b): (Int, Int) => 1")

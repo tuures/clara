@@ -74,12 +74,12 @@ object Parser {
 
     val semi = P(CharPred(_ == ';')).opaque("semicolon")
 
-    val blockContents: Parser[Seq[BlockContent]] = {
+    def blockContents(acceptSingle: Boolean): Parser[Seq[BlockContent]] = {
       val sep = (nl | semi)
-      P(sep.rep ~ (comment | freeDecl | valueExpr).rep(1, sep=sep.rep(1)) ~ sep.rep)
+      P(sep.rep ~ (comment | freeDecl | valueExpr).rep(if (acceptSingle) 1 else 2, sep=sep.rep(1)) ~ sep.rep)
     }
 
-    val block: Parser[Block] = P("(" ~ blockContents ~ ")").map(Block)
+    val block: Parser[Block] = P("(" ~ blockContents(false) ~ ")").map(Block)
 
     //////
     // Names
@@ -190,6 +190,6 @@ object Parser {
     //////
     // Start here
 
-    val program = P(blockContents ~ End).map(Block)
+    val program = P(blockContents(true) ~ End).map(Block)
   }
 }
