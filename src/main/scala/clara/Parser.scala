@@ -9,6 +9,7 @@ object Parser {
 
     val White = fastparse.WhitespaceApi.Wrapper {
       import fastparse.all._
+      // TODO have comments here
       NoTrace(" ".rep)
     }
     import White._
@@ -30,13 +31,13 @@ object Parser {
     //////
     // Literals
 
-    val unit = P("()")
+    val unitSyntax = P("()")
 
-    val unitLiteral: Parser[UnitLiteral] = P(unit.map(_ => UnitLiteral()))
+    val unitLiteral: Parser[UnitLiteral] = P(unitSyntax.map(_ => UnitLiteral()))
 
-    val unitType: Parser[UnitType] = P(unit.map(_ => UnitType()))
+    val unitType: Parser[UnitType] = P(unitSyntax.map(_ => UnitType()))
 
-    val unitPattern: Parser[UnitPattern] = P(unit.map(_ => UnitPattern()))
+    val unitPattern: Parser[UnitPattern] = P(unitSyntax.map(_ => UnitPattern()))
 
     val integerLiteral = P(digit.rep(1).!.map(IntegerLiteral))
 
@@ -63,11 +64,11 @@ object Parser {
 
     def parensSyntax[T](p: => Parser[T]) = P("(" ~ nl.rep ~ p ~ nl.rep ~ ")")
 
-    val parens: Parser[ValueExpr] = parensSyntax(valueExpr)
+    val parens: Parser[ValueExpr] = P(parensSyntax(valueExpr))
 
-    val typeParens: Parser[TypeExpr] = parensSyntax(typeExpr)
+    val typeParens: Parser[TypeExpr] = P(parensSyntax(typeExpr))
 
-    val patternParens: Parser[Pattern] = parensSyntax(pattern)
+    val patternParens: Parser[Pattern] = P(parensSyntax(pattern))
 
     //////
     // Blocks
@@ -111,9 +112,9 @@ object Parser {
 
     def funcSyntax[T1, T2](p1: => Parser[T1], p2: => Parser[T2]) = P(p1 ~ "=>" ~ nl.rep ~ p2)
 
-    val lambda: Parser[Lambda] = funcSyntax(pattern, valueExpr).map(Lambda.tupled)
+    val lambda: Parser[Lambda] = P(funcSyntax(pattern, valueExpr)).map(Lambda.tupled)
 
-    val funcType: Parser[FuncType] = funcSyntax(simpleType, typeExpr).map(FuncType.tupled)
+    val funcType: Parser[FuncType] = P(funcSyntax(simpleType, typeExpr)).map(FuncType.tupled)
 
     //////
     // Member selection / call
@@ -165,11 +166,11 @@ object Parser {
       P("{" ~ sep.rep ~ memberDecl.rep(0, sep=sep.rep(1)) ~ sep.rep ~ "}")
     }
 
-    val classDef: Parser[ClassDef] = P("::class" ~/ name ~ maybeTypeParams ~ ("<:" ~ namedType).? ~ classBody).map(ClassDef.tupled)
+    val classDef: Parser[ClassDef] = P("::class" ~ name ~ maybeTypeParams ~ ("<<" ~ namedType).? ~ classBody).map(ClassDef.tupled)
 
     val freeDecl: Parser[FreeDecl] = P(classDef | valueDef)
 
-    val classNew: Parser[ClassNew] = P("::new" ~/ namedType ~ classBody).map(ClassNew.tupled)
+    val classNew: Parser[ClassNew] = P("::new" ~ namedType ~ classBody).map(ClassNew.tupled)
 
     //////
     // Comments
