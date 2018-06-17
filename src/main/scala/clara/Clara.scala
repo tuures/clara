@@ -6,9 +6,8 @@ object Clara {
     val input = args.head
     println(input)
 
-    import fastparse.core.Parsed
-    Parser.parseProgramBlock(input) match {
-      case Parsed.Success(block, index) =>
+    Parser("stdin", input).parseAsProgramBlock match {
+      case Right(block) =>
         import sext._
         println(block.treeString)
         println()
@@ -26,8 +25,8 @@ object Clara {
         println(JsEmitter.emitString(blockWithPrelude))
         println()
 
-      case Parsed.Failure(p, index, extra) =>
-        println("Parse error: " + extra.traced.trace)
+      case Left(errors) =>
+        errors.foreach(println)
     }
   }
 }

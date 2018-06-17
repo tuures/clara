@@ -1,7 +1,14 @@
 package clara
 
 object Ast {
-  sealed trait Node
+  case class SourceInfo(name: String, lineIndices: Seq[Int])
+  sealed trait Pos
+  case class RangePos(source: SourceInfo, from: Int, until: Int) extends Pos
+  case object NoPos extends Pos
+
+  sealed trait Node {
+    // val pos: Pos
+  }
   sealed trait BlockContent extends Node
   sealed trait TypeExpr extends Node
   sealed trait Pattern extends Node
@@ -20,7 +27,7 @@ object Ast {
   case class TuplePattern(ps: Seq[Pattern]) extends Pattern
   case class Block(bcs: Seq[BlockContent]) extends ValueExpr
   case class NamedValue(name: String) extends ValueExpr
-  case class NamedType(name: String, typeArgs: Seq[TypeExpr]) extends TypeExpr
+  case class NamedType(name: String, typeArgs: Seq[TypeExpr], pos: Pos = NoPos) extends TypeExpr
   case class NamePattern(name: String) extends Pattern
   case class ValueAs(e: ValueExpr, t: TypeExpr) extends ValueExpr
   case class PatternAs(p: Pattern, t: TypeExpr) extends Pattern

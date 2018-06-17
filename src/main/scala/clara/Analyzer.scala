@@ -578,7 +578,7 @@ object Analyzer {
 
     def walkTypeExpr(env: Env)(typeExpr: TypeExpr): An[TypeConOrTypeInst] = typeExpr match {
       case UnitType() => instUnit(env)
-      case NamedType(name, typeArgs) => walkNamedTypeExpr(env)(name, typeArgs)
+      case NamedType(name, typeArgs, pos) => walkNamedTypeExpr(env)(name, typeArgs)
       case FuncType(parameterExpr, resultExpr) =>
         An.tuple(mapPair(walkTypeInstExpr(env))((parameterExpr, resultExpr))).
           flatMap(instFunction(env))
