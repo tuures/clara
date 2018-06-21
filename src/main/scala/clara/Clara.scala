@@ -1,5 +1,7 @@
 package clara
 
+import ai.x.safe._
+
 object Clara {
 
   def main(args:Array[String]): Unit = {
@@ -18,15 +20,15 @@ object Clara {
         }
         Analyzer.analyze(blockWithPrelude) match {
           case Right(t) => println(t.signature(Analyzer.Env.empty))
-          case Left(errors) => println(errors.map(e => s"Semantic error: $e").mkString("\n"))
+          case Left(errors) => println(errors.map(_.format).safeMkString("\n"))
         }
         println()
 
-        println(JsEmitter.emitString(blockWithPrelude))
-        println()
+        // println(JsEmitter.emitString(blockWithPrelude))
+        // println()
 
       case Left(errors) =>
-        errors.foreach(println)
+        println(errors.map(_.format).safeMkString("\n"))
     }
   }
 }

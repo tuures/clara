@@ -1,18 +1,21 @@
 package clara
 
 case class Parser(sourceName: String, input: String) {
+  val sourceInfo = SourceInfo.fromString(sourceName, input)
 
-  def parseAsProgramBlock: Either[Seq[String], Ast.Block] = {
+  def parseAsProgramBlock: Either[Seq[Error], Ast.Block] = {
     import fastparse.core.Parsed
 
-    Impl.program.parse(input) match {
+    Parser.Impl(Some(sourceInfo)).program.parse(input) match {
       case Parsed.Success(block, index) => Right(block)
       case Parsed.Failure(p, index, extra) =>
-        Left(Seq("Parse error: " + extra.traced.trace))
+        Left(Seq(Error(SourcePos(sourceInfo, index, None), "Parse error: " + extra.traced.trace)))
     }
   }
+}
 
-  object Impl {
+object Parser {
+  case class Impl(sourceInfo: Option[SourceInfo]) {
     import fastparse.noApi._
 
     val White = fastparse.WhitespaceApi.Wrapper {
@@ -24,12 +27,10 @@ case class Parser(sourceName: String, input: String) {
 
     import Ast._
 
-    val source = SourceInfo(sourceName, "\n".r.findAllMatchIn(input).map(_.start).toList)
-
-    def pos[T](p: => P[T]): P[(T, Pos)] = (Index ~ p ~ Index).map { case (from, t, until) => {
-        (t, RangePos(source, from, until))
+    def pos[T](p: => P[T]): P[(T, Pos)] = (Index ~ p ~ Index).
+      map { case (from, t, until) =>
+        (t, sourceInfo.map(SourcePos(_, from, Some(until))).getOrElse(NoPos))
       }
-    }
 
     // pp is GENERATED CODE:
     // List.range(1, 5).map { pArity =>
@@ -41,16 +42,16 @@ case class Parser(sourceName: String, input: String) {
     //   val tupleArgs = cs.init.mkString(", ")
     //   val pArg =
     //     if (pArity == 1) cs.head
-    //     else s"($tupleArgs)"
-    //   val valueParams = s"(p: P[$pArg])(f: ($tupleArgs, Pos) => ${cs.last})"
+    //     else safe"($tupleArgs)"
+    //   val valueParams = safe"(p: P[$pArg])(f: ($tupleArgs, Pos) => ${cs.last})"
     //
     //   val tupleValues = (
     //     if (pArity == 1) Seq("t._1")
-    //     else List.range(1, pArity + 1).map(i => s"t._1._$i")
+    //     else List.range(1, pArity + 1).map(i => safe"t._1._$i")
     //   ).mkString(", ")
-    //   val impl = s"pos(p).map(t => f($tupleValues, t._2))"
+    //   val impl = safe"pos(p).map(t => f($tupleValues, t._2))"
     //
-    //   s"def pp$typeParams$valueParams = $impl"
+    //   safe"def pp$typeParams$valueParams = $impl"
     // }.foreach(println)
     def pp[A, B](p: P[A])(f: (A, Pos) => B) = pos(p).map(t => f(t._1, t._2))
     def pp[A, B, C](p: P[(A, B)])(f: (A, B, Pos) => C) = pos(p).map(t => f(t._1._1, t._1._2, t._2))
@@ -80,25 +81,25 @@ case class Parser(sourceName: String, input: String) {
 
     val unitPattern: P[UnitPattern] = P(unitSyntax.map(_ => UnitPattern()))
 
-    val integerLiteral = P(digit.rep(1).!.map(IntegerLiteral))
+    val integerLiteral = P(pp(digit.rep(1).!)(IntegerLiteral.apply _))
 
     val stringLiteral = {
       val q = '\''
       val boundary = CharPred(_ == q).opaque("quote")
       val value = CharsWhile(_ != q)
-      P((boundary ~ value.! ~ boundary).map(StringLiteral))
+      P(pp(boundary ~ value.! ~ boundary)(StringLiteral.apply _))
     }
 
     //////
     // Tuples
 
-    def tupleSyntax[T](p: => P[T]) = P("(" ~ commaSeparatedRep(2, p) ~ ")")
+    def tupleSyntax[T](p: => P[T]) = ("(" ~ commaSeparatedRep(2, p) ~ ")")
 
-    val tuple: P[Tuple] = tupleSyntax(valueExpr).map(Tuple)
+    val tuple: P[Tuple] = P(pp(tupleSyntax(valueExpr))(Tuple.apply _))
 
-    val tupleType: P[TupleType] = tupleSyntax(typeExpr).map(TupleType)
+    val tupleType: P[TupleType] = P(pp(tupleSyntax(typeExpr))(TupleType.apply _))
 
-    val tuplePattern: P[TuplePattern] = tupleSyntax(pattern).map(TuplePattern)
+    val tuplePattern: P[TuplePattern] = P(pp(tupleSyntax(pattern))(TuplePattern.apply _))
 
     //////
     // Parens
@@ -121,26 +122,18 @@ case class Parser(sourceName: String, input: String) {
       P(sep.rep ~ (comment | freeDecl | valueExpr).rep(if (acceptSingle) 1 else 2, sep=sep.rep(1)) ~ sep.rep)
     }
 
-    val block: P[Block] = P("(" ~ blockContents(false) ~ ")").map(Block)
+    val block: P[Block] = P(pp("(" ~ blockContents(false) ~ ")")(Block.apply _))
 
     //////
     // Names
 
     val name = P(CharsWhile(c => Character.isLetter(c)).!).opaque("name") // NOTE: Character.isLetter works only with BMP characters
 
-    val namedValue: P[NamedValue] = P(name.map(NamedValue))
+    val namedValue: P[NamedValue] = P(pp(name)(NamedValue.apply _))
 
-    // def tac[A, B, C, D](f: (A, B, C) => D)(t: ((A, B), C)) = f(t._1._1, t._1._2, t._2)
-    // def tac[A, B, C, D, E](f: (A, B, C, D) => E)(t: ((A, B, C), D)) = f(t._1._1, t._1._2, t._1._3, t._2)
-    //
-    // def pp[A, B, C](p: P[(A, B)])(f: (A, B, Pos) => C) = pos(p).map(t => f(t._1._1, t._1._2, t._2))
-    // def pp[A, B, C, D](p: P[(A, B, C)])(f: (A, B, C, Pos) => D) = pos(p).map(t => f(t._1._1, t._1._2, t._1._3, t._2))
+    val namedType: P[NamedType] = P(pp(name ~ maybeTypeArgs)(NamedType.apply _))
 
-    val namedType: P[NamedType] = P(pp(name ~ maybeTypeArgs)(NamedType))
-
-    // val namedType: P[NamedType] = P(pos(name ~ maybeTypeArgs).map(tac(NamedType)))
-
-    val namePattern: P[NamePattern] = P(name.map(NamePattern))
+    val namePattern: P[NamePattern] = P(pp(name)(NamePattern.apply _))
 
     //////
     // Simple
@@ -154,16 +147,16 @@ case class Parser(sourceName: String, input: String) {
 
     val typed: P[TypeExpr] = P(":" ~ typeExpr)
 
-    val valueAs: P[ValueAs] = P(simple ~ typed).map(ValueAs.tupled)
+    val valueAs: P[ValueAs] = P(pp(simple ~ typed)(ValueAs.apply _))
 
     //////
     // Function syntax
 
     def funcSyntax[T1, T2](p1: => P[T1], p2: => P[T2]) = P(p1 ~ "=>" ~ nl.rep ~ p2)
 
-    val lambda: P[Lambda] = P(funcSyntax(pattern, valueExpr)).map(Lambda.tupled)
+    val lambda: P[Lambda] = P(pp(funcSyntax(pattern, valueExpr))(Lambda.apply _))
 
-    val funcType: P[FuncType] = P(funcSyntax(simpleType, typeExpr)).map(FuncType.tupled)
+    val funcType: P[FuncType] = P(pp(funcSyntax(simpleType, typeExpr))(FuncType.apply _))
 
     //////
     // Member selection / call
@@ -174,6 +167,7 @@ case class Parser(sourceName: String, input: String) {
         case Right(argument) => Call(e, argument)
       }
 
+      // FIXME position
       P(simple ~ (("." ~ nl.rep ~ name ~ maybeTypeArgs).map(Left(_)) | simple.map(Right(_))).rep(1)).map { case (base, parts) =>
         parts.tail.foldLeft(makeNode(base, parts.head))(makeNode)
       }
@@ -188,7 +182,7 @@ case class Parser(sourceName: String, input: String) {
 
       val arity: P[Int] = typeListSyntax("_").?.map(_.map(_.length).getOrElse(0))
 
-      P(variance ~ name ~ arity).map(TypeParam.tupled)
+      P(pp(variance ~ name ~ arity)(TypeParam.apply _))
     }
 
     def typeListSyntax[T](p: => P[T]): P[Seq[T]] = P("[" ~ commaSeparatedRep(1, p) ~ "]")
@@ -200,13 +194,13 @@ case class Parser(sourceName: String, input: String) {
     //////
     // Declarations
 
-    val valueDecl: P[ValueDecl] = P(name ~ typed).map(ValueDecl.tupled)
+    val valueDecl: P[ValueDecl] = P(pp(name ~ typed)(ValueDecl.apply _))
 
-    val valueDef: P[ValueDef] = P(pattern ~ !"=>" ~ "=" ~/ nl.rep ~ valueExpr).map(ValueDef.tupled)
+    val valueDef: P[ValueDef] = P(pp(pattern ~ !"=>" ~ "=" ~/ nl.rep ~ valueExpr)(ValueDef.apply _))
 
-    val methodDecl: P[MethodDecl] = P("::method" ~ name ~ maybeTypeParams ~ typed).map(MethodDecl.tupled)
+    val methodDecl: P[MethodDecl] = P(pp("::method" ~ name ~ maybeTypeParams ~ typed)(MethodDecl.apply _))
 
-    val methodDef: P[MethodDef] = P("::method" ~ name ~ maybeTypeParams ~ "=" ~/ valueExpr).map(MethodDef.tupled)
+    val methodDef: P[MethodDef] = P(pp("::method" ~ name ~ maybeTypeParams ~ "=" ~/ valueExpr)(MethodDef.apply _))
 
     val memberDecl: P[MemberDecl] = P(valueDef | methodDef | valueDecl | methodDecl)
 
@@ -215,16 +209,16 @@ case class Parser(sourceName: String, input: String) {
       P("{" ~ sep.rep ~ memberDecl.rep(0, sep=sep.rep(1)) ~ sep.rep ~ "}")
     }
 
-    val classDef: P[ClassDef] = P("::class" ~ name ~ maybeTypeParams ~ ("<<" ~ namedType).? ~ classBody).map(ClassDef.tupled)
+    val classDef: P[ClassDef] = P(pp("::classafe" ~ name ~ maybeTypeParams ~ ("<<" ~ namedType).? ~ classBody)(ClassDef.apply _))
 
     val freeDecl: P[FreeDecl] = P(classDef | valueDef)
 
-    val classNew: P[ClassNew] = P("::new" ~ namedType ~ classBody).map(ClassNew.tupled)
+    val classNew: P[ClassNew] = P(pp("::new" ~ namedType ~ classBody)(ClassNew.apply _))
 
     //////
     // Comments
     // TODO: allow start anywhere not just after newline
-    val comment: P[Comment] = P("//" ~ CharsWhile(!nlPred(_)).!).map(Comment)
+    val comment: P[Comment] = P(pp("//" ~ CharsWhile(!nlPred(_)).!)(Comment.apply _))
 
     //////
     // Top level rules
@@ -240,6 +234,6 @@ case class Parser(sourceName: String, input: String) {
     //////
     // Start here
 
-    val program = P(blockContents(true) ~ End).map(Block)
+    val program = P(pp(blockContents(true) ~ End)(Block.apply _))
   }
 }

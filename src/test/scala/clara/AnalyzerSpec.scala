@@ -2,6 +2,8 @@ package clara
 
 import org.scalatest._
 
+import ai.x.safe._
+
 class AnalyzerSpec extends FunSuite {
   import Ast._
 
@@ -13,7 +15,7 @@ class AnalyzerSpec extends FunSuite {
 
     Analyzer.analyze(blockWithPrelude) match {
       case Right(t) => assert(t.signature(Analyzer.Env.empty) == expectedSignature)
-      case Left(errors) => throw new Exception(errors.mkString("\n"))
+      case Left(errors) => fail(errors.map(_.format).safeMkString("\n"))
     }
   }
 

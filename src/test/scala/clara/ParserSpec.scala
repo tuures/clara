@@ -1,14 +1,14 @@
 package clara
 
 import org.scalatest._
-
+import ai.x.safe._
 import fastparse.all._
 
 class ParserSpec extends FunSuite {
 
   import Ast._
 
-  def parse[R](parser: Parser[R], input: String)(expected: Node) = test(s"valid: ${parser.toString} ${input.replace("\n", "\\n")}") {
+  def parse[R](parser: P[R], input: String)(expected: Node) = test(safe"valid: ${parser.toString} ${input.replace("\n", "\\n")}") {
     parser.parse(input) match {
       case f: Parsed.Failure =>
         fail(input + "\n" + f.toString + "\n" + f.extra.traced.toString)
@@ -18,86 +18,88 @@ class ParserSpec extends FunSuite {
     }
   }
 
-  def err[R](parser: Parser[R], input: String) = test(s"invalid: ${parser.toString} $input") {
+  def err[R](parser: P[R], input: String) = test(safe"invalid: ${parser.toString} $input") {
     parser.parse(input) match {
       case Parsed.Success(_, index: Int) if index == input.length => fail("was parsed compeletely")
       case _ =>
     }
   }
 
-  parse(Parser.Impl.unitLiteral, "()")(UnitLiteral())
-  parse(Parser.Impl.unitType,    "()")(UnitType())
-  parse(Parser.Impl.unitPattern, "()")(UnitPattern())
+  val p = Parser.Impl(None)
 
-  parse(Parser.Impl.integerLiteral, "123")(IntegerLiteral("123"))
+  parse(p.unitLiteral, "()")(UnitLiteral())
+  parse(p.unitType,    "()")(UnitType())
+  parse(p.unitPattern, "()")(UnitPattern())
 
-  parse(Parser.Impl.stringLiteral, "'str'")(StringLiteral("str"))
+  parse(p.integerLiteral, "123")(IntegerLiteral("123"))
 
-  parse(Parser.Impl.tuple,        "((),())")(
+  parse(p.stringLiteral, "'str'")(StringLiteral("str"))
+
+  parse(p.tuple,        "((),())")(
     Tuple(Seq(UnitLiteral(), UnitLiteral()))
   )
-  err(Parser.Impl.tuple, "()")
+  err(p.tuple, "()")
 
-  parse(Parser.Impl.tupleType,    "(() , ())")(
+  parse(p.tupleType,    "(() , ())")(
     TupleType(Seq(UnitType(), UnitType()))
   )
-  parse(Parser.Impl.tuplePattern, "(\n(),\n(),\n)")(
+  parse(p.tuplePattern, "(\n(),\n(),\n)")(
     TuplePattern(Seq(UnitPattern(), UnitPattern()))
   )
 
-  parse(Parser.Impl.parens, "((()))")(UnitLiteral())
-  parse(Parser.Impl.typeParens, "((()))")(UnitType())
-  parse(Parser.Impl.patternParens, "((()))")(UnitPattern())
+  parse(p.parens, "((()))")(UnitLiteral())
+  parse(p.typeParens, "((()))")(UnitType())
+  parse(p.patternParens, "((()))")(UnitPattern())
 
-  parse(Parser.Impl.block, "(\n\n()\n;\n()\n())")(
+  parse(p.block, "(\n\n()\n;\n()\n())")(
     Block(Seq.fill(3)(UnitLiteral()))
   )
-  err(Parser.Impl.block, "()")
+  err(p.block, "()")
 
-  parse(Parser.Impl.namedValue, "foo")(NamedValue("foo"))
+  parse(p.namedValue, "foo")(NamedValue("foo"))
 
-  parse(Parser.Impl.namedType, "Foo")(NamedType("Foo", Nil))
-  parse(Parser.Impl.namedType, "Foo[Bar]")(
+  parse(p.namedType, "Foo")(NamedType("Foo", Nil))
+  parse(p.namedType, "Foo[Bar]")(
     NamedType("Foo", Seq(NamedType("Bar", Nil)))
   )
-  parse(Parser.Impl.namedType, "Foo[Bar, Baz[Zot]]")(
+  parse(p.namedType, "Foo[Bar, Baz[Zot]]")(
     NamedType("Foo", Seq(
       NamedType("Bar", Nil),
       NamedType("Baz", Seq(NamedType("Zot", Nil))))
     )
   )
 
-  parse(Parser.Impl.namePattern, "foo")(NamePattern("foo"))
+  parse(p.namePattern, "foo")(NamePattern("foo"))
 
-  parse(Parser.Impl.valueAs, "foo: String")(
+  parse(p.valueAs, "foo: String")(
     ValueAs(NamedValue("foo"), NamedType("String", Nil))
   )
 
-  parse(Parser.Impl.lambda, "() => ()")(
+  parse(p.lambda, "() => ()")(
     Lambda(UnitPattern(), UnitLiteral())
   )
 
-  parse(Parser.Impl.funcType, "() => ()")(
+  parse(p.funcType, "() => ()")(
     FuncType(UnitType(), UnitType())
   )
 
-  parse(Parser.Impl.memberOrCall, "foo.length")(
+  parse(p.memberOrCall, "foo.length")(
     MemberSelection(NamedValue("foo"), "length", Nil)
   )
-  parse(Parser.Impl.memberOrCall, "foo.bar[Zot]")(
+  parse(p.memberOrCall, "foo.bar[Zot]")(
     MemberSelection(NamedValue("foo"), "bar", Seq(NamedType("Zot", Nil)))
   )
-  parse(Parser.Impl.memberOrCall, "foo()")(
+  parse(p.memberOrCall, "foo()")(
     Call(NamedValue("foo"), UnitLiteral())
   )
-  parse(Parser.Impl.memberOrCall, "foo ()")(
+  parse(p.memberOrCall, "foo ()")(
     Call(NamedValue("foo"), UnitLiteral())
   )
-  parse(Parser.Impl.memberOrCall, "foo bar")(
+  parse(p.memberOrCall, "foo bar")(
     Call(NamedValue("foo"), NamedValue("bar"))
   )
 
-  parse(Parser.Impl.program, "(foo)")(
+  parse(p.program, "(foo)")(
     Block(Seq(NamedValue("foo")))
   )
 
@@ -192,7 +194,7 @@ class ParserSpec extends FunSuite {
   //      |""".stripMargin
   // )
   //
-  // nt("multi-line parens")(
+  // nt("multi-line parensafe")(
   //   """|(
   //      |  1
   //      |)
@@ -207,18 +209,18 @@ class ParserSpec extends FunSuite {
   //      |""".stripMargin
   // )
   //
-  // nt("multi-line assignment with extra spaces")(
+  // nt("multi-line assignment with extra spacesafe")(
   //   """|a =\u0020\u0020
   //      |\u0020\u0020
   //      |  foo
   //      |""".stripMargin
   // )
   //
-  // nt("single-line class")(
+  // nt("single-line classafe")(
   //   "::class Book {isbn: String, author: String, title: String}"
   // )
   //
-  // nt("multi-line class")(
+  // nt("multi-line classafe")(
   //   """|::class Book {
   //      |  isbn: String
   //      |  author: String
@@ -228,7 +230,7 @@ class ParserSpec extends FunSuite {
   //      |""".stripMargin
   // )
   //
-  // nt("class fields and methods")(
+  // nt("class fields and methodsafe")(
   //   """|::class Foo << Bar {
   //      |  yyy: Int = 2
   //      |  yyy = 3
@@ -245,14 +247,14 @@ class ParserSpec extends FunSuite {
   //
   // t("::new Foo {}")
   //
-  // nt("class with simple type params and value declarations")(
+  // nt("class with simple type params and value declarationsafe")(
   //   "::class Book[A] {isbn: String, author: String, title: String}"
   // )
   //
-  // nt("complex type params and method declarations")(
+  // nt("complex type params and method declarationsafe")(
   //   "::class Functor[A, M[_]] { ::method map[B]: (A => B) => M[B] }"
   // )
 
-  err(Parser.Impl.valueExpr, "foo square = 1")
-  err(Parser.Impl.valueExpr, "1square = 1")
+  err(p.valueExpr, "foo square = 1")
+  err(p.valueExpr, "1square = 1")
 }
