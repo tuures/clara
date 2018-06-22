@@ -351,9 +351,9 @@ object Analyzer {
             }
           }
         }
-      case MemberSelection(e, memberName, typeArgs, pos) =>
+      case MemberSelection(e, memberName, typeArgs, memberPos, pos) =>
         An.join(walkValueExpr(env)(e), walkTypeInstExprs(env)(typeArgs)).flatMap { case (inst, args) =>
-          inst.valueMemberInst(env, pos, memberName, args)
+          inst.valueMemberInst(env, memberPos, memberName, args)
         }
       case Call(callee, Lambda(parameter, body, argPos), callPos) => {
         // walkValueExpr(env)

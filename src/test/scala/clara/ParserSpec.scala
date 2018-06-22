@@ -83,8 +83,8 @@ class ParserSpec extends FunSuite {
     FuncType(UnitType(), UnitType())
   )
 
-  parse(p.memberOrCall, "foo.length")(
-    MemberSelection(NamedValue("foo"), "length", Nil)
+  parse(p.memberOrCall, "foo.length.toString")(
+    MemberSelection(MemberSelection(NamedValue("foo"), "length", Nil), "toString", Nil)
   )
   parse(p.memberOrCall, "foo.bar[Zot]")(
     MemberSelection(NamedValue("foo"), "bar", Seq(NamedType("Zot", Nil)))

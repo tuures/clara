@@ -3,21 +3,21 @@ package clara
 import ai.x.safe._
 
 sealed trait Pos {
-  def format: String
+  def humanFormat: String
 }
 case class SourcePos(sourceInfo: SourceInfo, fromIndex: Int, untilIndex: Option[Int]) extends Pos {
-  def format = {
-    val (fromLine, fromCol) = sourceInfo.lineCol(fromIndex)
-    val from = safe"${fromLine.toString}:${fromCol.toString}"
+  def humanFormat = {
+    val fromLineCol = sourceInfo.lineCol(fromIndex)
+    val from = fromLineCol.humanFormat
     val until = untilIndex.map { untilIndex =>
-      val (untilLine, untilCol) = sourceInfo.lineCol(untilIndex)
-
-      safe"(-${untilLine.toString}:${untilCol.toString})"
+      val lineCol = sourceInfo.lineCol(untilIndex - 1)
+      // use inclusive range format for humans, thus - 1
+      safe"(-${if (lineCol.line === fromLineCol.line) lineCol.humanFormatCol else lineCol.humanFormat})"
     }.getOrElse("")
 
     safe"${sourceInfo.name}:$from$until"
   }
 }
 case object NoPos extends Pos {
-  val format = "unknown position"
+  val humanFormat = "unknown position"
 }

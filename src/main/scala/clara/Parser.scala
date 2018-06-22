@@ -27,10 +27,11 @@ object Parser {
 
     import Ast._
 
-    def pos[T](p: => P[T]): P[(T, Pos)] = (Index ~ p ~ Index).
-      map { case (from, t, until) =>
-        (t, sourceInfo.map(SourcePos(_, from, Some(until))).getOrElse(NoPos))
-      }
+    def makePos(from: Int, until: Option[Int]) =
+      sourceInfo.map(SourcePos(_, from, until)).getOrElse(NoPos)
+
+    def withPos[T](p: => P[T]): P[(T, Pos)] = (Index ~ p ~ Index).
+      map { case (from, t, until) => (t, makePos(from, Some(until))) }
 
     // pp is GENERATED CODE:
     // List.range(1, 5).map { pArity =>
@@ -49,14 +50,14 @@ object Parser {
     //     if (pArity == 1) Seq("t._1")
     //     else List.range(1, pArity + 1).map(i => safe"t._1._$i")
     //   ).mkString(", ")
-    //   val impl = safe"pos(p).map(t => f($tupleValues, t._2))"
+    //   val impl = safe"withPos(p).map(t => f($tupleValues, t._2))"
     //
     //   safe"def pp$typeParams$valueParams = $impl"
     // }.foreach(println)
-    def pp[A, B](p: P[A])(f: (A, Pos) => B) = pos(p).map(t => f(t._1, t._2))
-    def pp[A, B, C](p: P[(A, B)])(f: (A, B, Pos) => C) = pos(p).map(t => f(t._1._1, t._1._2, t._2))
-    def pp[A, B, C, D](p: P[(A, B, C)])(f: (A, B, C, Pos) => D) = pos(p).map(t => f(t._1._1, t._1._2, t._1._3, t._2))
-    def pp[A, B, C, D, E](p: P[(A, B, C, D)])(f: (A, B, C, D, Pos) => E) = pos(p).map(t => f(t._1._1, t._1._2, t._1._3, t._1._4, t._2))
+    def pp[A, B](p: P[A])(f: (A, Pos) => B) = withPos(p).map(t => f(t._1, t._2))
+    def pp[A, B, C](p: P[(A, B)])(f: (A, B, Pos) => C) = withPos(p).map(t => f(t._1._1, t._1._2, t._2))
+    def pp[A, B, C, D](p: P[(A, B, C)])(f: (A, B, C, Pos) => D) = withPos(p).map(t => f(t._1._1, t._1._2, t._1._3, t._2))
+    def pp[A, B, C, D, E](p: P[(A, B, C, D)])(f: (A, B, C, D, Pos) => E) = withPos(p).map(t => f(t._1._1, t._1._2, t._1._3, t._1._4, t._2))
 
     //////
     // Basics
@@ -162,14 +163,30 @@ object Parser {
     // Member selection / call
 
     val memberOrCall: P[ValueExpr] = {
-      def makeNode(e: ValueExpr, m: Either[(String, Seq[TypeExpr]), ValueExpr]) = m match {
-        case Left((name, typeArgs)) => MemberSelection(e, name, typeArgs)
-        case Right(argument) => Call(e, argument)
+      type MemberPart = (Int, String, Seq[TypeExpr])
+      type CallPart = ValueExpr
+      type Part = Either[MemberPart, CallPart]
+
+      def makeNode(startIndex: Int)(e: ValueExpr, partWithEndIndex: (Part, Int)): ValueExpr = {
+        val (part, endIndex) = partWithEndIndex
+        def posFrom(fromIndex: Int) = makePos(fromIndex, Some(endIndex))
+        val pos = posFrom(startIndex)
+
+        part match {
+          case Left((dotIndex, name, typeArgs)) =>
+            MemberSelection(e, name, typeArgs, posFrom(dotIndex), pos)
+          case Right(argument) =>
+            Call(e, argument, pos)
+        }
       }
 
       // FIXME position
-      P(simple ~ (("." ~ nl.rep ~ name ~ maybeTypeArgs).map(Left(_)) | simple.map(Right(_))).rep(1)).map { case (base, parts) =>
-        parts.tail.foldLeft(makeNode(base, parts.head))(makeNode)
+      val member = P(Index ~ "." ~ nl.rep ~ name ~ maybeTypeArgs).map(Left(_))
+      val call = simple.map(Right(_))
+
+      P(Index ~ simple ~ ((member | call) ~ Index).rep(1)).map { case (startIndex, base, parts) =>
+        val mk = makeNode(startIndex) _
+        parts.tail.foldLeft(mk(base, parts.head))(mk)
       }
     }
 
@@ -227,9 +244,7 @@ object Parser {
 
     val typeExpr: P[TypeExpr] = P(funcType | simpleType)
 
-    val pattern: P[Pattern] = P(((unitPattern | tuplePattern | patternParens | namePattern) ~ typed.?).map { case (p, t) =>
-      t map (PatternAs(p, _)) getOrElse p
-    })
+    val pattern: P[Pattern] = P(pp((unitPattern | tuplePattern | patternParens | namePattern) ~ typed.?)((p, t, pos) => t map (PatternAs(p, _, pos)) getOrElse p))
 
     //////
     // Start here

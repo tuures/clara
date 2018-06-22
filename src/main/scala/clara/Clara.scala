@@ -20,7 +20,7 @@ object Clara {
         }
         Analyzer.analyze(blockWithPrelude) match {
           case Right(t) => println(t.signature(Analyzer.Env.empty))
-          case Left(errors) => println(errors.map(_.format).safeMkString("\n"))
+          case Left(errors) => println(errors.map(_.humanFormat).safeMkString("\n"))
         }
         println()
 
@@ -28,7 +28,7 @@ object Clara {
         // println()
 
       case Left(errors) =>
-        println(errors.map(_.format).safeMkString("\n"))
+        println(errors.map(_.humanFormat).safeMkString("\n"))
     }
   }
 }

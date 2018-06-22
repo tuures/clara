@@ -15,7 +15,7 @@ class AnalyzerSpec extends FunSuite {
 
     Analyzer.analyze(blockWithPrelude) match {
       case Right(t) => assert(t.signature(Analyzer.Env.empty) == expectedSignature)
-      case Left(errors) => fail(errors.map(_.format).safeMkString("\n"))
+      case Left(errors) => fail(errors.map(_.humanFormat).safeMkString("\n"))
     }
   }
 
