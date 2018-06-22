@@ -283,7 +283,7 @@ object Analyzer {
   sealed trait PlainValueMember extends ValueMember {
     def inst(env: Env, pos: Pos, name: String, typeArgs: TypeArgs) = typeArgs match {
       case Nil => An(typeInst)
-      case _ => An.error(pos, safe"Member $name does not take type argumentsafe")
+      case _ => An.error(pos, safe"Member $name does not take type arguments")
     }
   }
   sealed trait MethodMember extends ValueMember {
@@ -360,8 +360,8 @@ object Analyzer {
         // callee must have apply member
         ???
       }
-      case Call(originalCallee, argument, pos) => {
-        walkValueExpr(env)(originalCallee) flatMap { originalCalleeType =>
+      case Call(callee, argument, pos) => {
+        walkValueExpr(env)(callee) flatMap { originalCalleeType =>
           walkValueExpr(env)(argument) flatMap { argType =>
 
             def recursiveDelegateCall(calleeType: TypeInst): An[TypeInst] = {
@@ -370,12 +370,12 @@ object Analyzer {
                   if (argType.isSubTypeOf(paramType)) {
                     An(resultType)
                   } else {
-                    An.error(pos, safe"Type mismatch in call: argument was found to be ${argType.signature(env)}, expected parameter type is ${paramType.signature(env)}")
+                    An.error(argument.pos, safe"Type mismatch in call: argument was found to be ${argType.signature(env)}, expected parameter type is ${paramType.signature(env)}")
                   }
                 case _ => calleeType.getValueMember("apply").map { applyMember =>
                   applyMember.inst(env, pos, "apply", Nil).flatMap(recursiveDelegateCall(_))
                 } getOrElse {
-                  An.error(pos, safe"type `${calleeType.signature(env)}` cannot be called (does not have member `apply`)")
+                  An.error(argument.pos, safe"type `${calleeType.signature(env)}` cannot be called (does not have member `apply`)")
                 }
               }
             }
@@ -390,7 +390,7 @@ object Analyzer {
             An(ti)
           else
             walkMemberDecls(env)(Some(ti), astMembers) flatMap { members =>
-              val name = "$AnonymousClassafe"
+              val name = "$AnonymousClass"
               val anonClass = ClassTypeCon(ClassHeaderTypeCon(name, TypeParams.empty, Some(ti)), members)
 
               anonClass.inst(env, pos, Nil)
