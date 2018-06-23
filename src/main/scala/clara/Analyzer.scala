@@ -342,48 +342,24 @@ object Analyzer {
       case NamedValue(name, pos) => env.useValue(name, pos)
       case ValueAs(e, asType, pos) =>
         An.join(walkValueExpr(env)(e), walkTypeInstExpr(env)(asType)).flatMap(expectSubTypeOf(env, pos))
-      case Lambda(parameter, body, pos) =>
-        walkPattern(env)(parameter, None).flatMap { case PatternResult(t, names) =>
-          walkValueExpr(env/*.sub(names)*/)(body).flatMap { bodyType =>
-            t match {
-              case Some(paramType) => instFunction(env, pos)((paramType, bodyType))
-              case None => An.error(pos, "Must specify parameter type in lambda")
-            }
-          }
-        }
+      case Lambda(parameter, body, pos) => walkLambda(env)(parameter, None, body, pos)
       case MemberSelection(e, memberName, typeArgs, memberPos, pos) =>
         An.join(walkValueExpr(env)(e), walkTypeInstExprs(env)(typeArgs)).flatMap { case (inst, args) =>
           inst.valueMemberInst(env, memberPos, memberName, args)
         }
-      case Call(callee, Lambda(parameter, body, argPos), callPos) => {
-        // walkValueExpr(env)
-        // callee must have apply member
-        ???
-      }
-      case Call(callee, argument, pos) => {
-        walkValueExpr(env)(callee) flatMap { originalCalleeType =>
-          walkValueExpr(env)(argument) flatMap { argType =>
-
-            def recursiveDelegateCall(calleeType: TypeInst): An[TypeInst] = {
-              calleeType match {
-                case FuncTypeInst(con, paramType, resultType) =>
-                  if (argType.isSubTypeOf(paramType)) {
-                    An(resultType)
-                  } else {
-                    An.error(argument.pos, safe"Type mismatch in call: argument was found to be ${argType.signature(env)}, expected parameter type is ${paramType.signature(env)}")
-                  }
-                case _ => calleeType.getValueMember("apply").map { applyMember =>
-                  applyMember.inst(env, pos, "apply", Nil).flatMap(recursiveDelegateCall(_))
-                } getOrElse {
-                  An.error(argument.pos, safe"type `${calleeType.signature(env)}` cannot be called (does not have member `apply`)")
-                }
-              }
+      case Call(callee, l: Lambda, callPos) => walkCall(env, l.pos, callPos)(
+        callee,
+        (env, argPos, callPos) => paramType => {
+          walkDelegateCallTarget(env, argPos, callPos)(paramType).
+            flatMap { case FuncTypeInst(_, paramParamType, _) =>
+              walkLambda(env)(l.parameter, Some(paramParamType), l.body, argPos)
             }
-
-            recursiveDelegateCall(originalCalleeType)
-          }
         }
-      }
+      )
+      case Call(callee, argument, pos) => walkCall(env, argument.pos, pos)(
+        callee,
+        (env, _, _) => _ => walkValueExpr(env)(argument)
+      )
       case ClassNew(namedType, astMembers, pos) =>
         walkTypeInstExpr(env)(namedType) flatMap { ti =>
           if (astMembers.length == 0)
@@ -434,6 +410,52 @@ object Analyzer {
       case classDef: ClassDef => walkClassDef(currentEnv)(classDef) map (newEnv => (newEnv, None))
       case Comment(_, pos) => Right((currentEnv, None))
       case e: ValueExpr => An.join(instUnit(currentEnv, e.pos), walkValueExpr(currentEnv)(e)).map { case (unit, t) => (currentEnv, Some(t).filter(_ !== unit))
+      }
+    }
+
+    //////
+    // Lambda
+
+    def walkLambda(env: Env)(parameter: Pattern, expectedParameterType: Option[TypeInst], body: ValueExpr, pos: Pos): An[TypeInst] =
+      walkPattern(env)(parameter, expectedParameterType).flatMap {
+        case Some(PatternResult(typeInst, names)) =>
+          names.entries.foldLeft(An(env): An[Env]) { case (currentEnv, binding) =>
+            currentEnv.flatMap(e => e.addOrShadowValue(binding, env, pos))
+          }.flatMap { bodyEnv =>
+            walkValueExpr(bodyEnv)(body).flatMap { bodyType =>
+              instFunction(env, pos)((typeInst, bodyType))
+            }
+          }
+        case None => An.error(pos, "Must specify parameter type in lambda")
+      }
+
+    //////
+    // Call
+
+    def walkCall(env: Env, argPos: Pos, callPos: Pos)(
+      callee: ValueExpr,
+      inferArgumentType: (Env, Pos, Pos) => (TypeInst) => An[TypeInst]
+    ): An[TypeInst] = {
+      walkValueExpr(env)(callee).flatMap { originalCalleeType =>
+        walkDelegateCallTarget(env, argPos, callPos)(originalCalleeType).
+          flatMap { case FuncTypeInst(con, paramType, resultType) =>
+            inferArgumentType(env, argPos, callPos)(paramType).flatMap { argType =>
+              if (argType.isSubTypeOf(paramType)) {
+                An(resultType)
+              } else {
+                An.error(argPos, safe"Type mismatch in call: argument was found to be ${argType.signature(env)}, expected parameter type is ${paramType.signature(env)}")
+              }
+            }
+          }
+      }
+    }
+
+    def walkDelegateCallTarget(env: Env, argPos: Pos, callPos: Pos)(calleeType: TypeInst): An[FuncTypeInst] = calleeType match {
+      case func: FuncTypeInst => An(func)
+      case _ => calleeType.getValueMember("apply").map { applyMember =>
+        applyMember.inst(env, callPos, "apply", Nil).flatMap(walkDelegateCallTarget(env, argPos, callPos)(_))
+      } getOrElse {
+        An.error(argPos, safe"type `${calleeType.signature(env)}` cannot be called (does not have member `apply`)")
       }
     }
 
@@ -568,7 +590,7 @@ object Analyzer {
     }
 
     //////
-    // ---
+    // --- TODO sort these:
 
     def walkValueDef(parentEnv: Env)(currentEnv: Env, target: Pattern, t: TypeInst): An[Env] = target match {
       case NamePattern(name, pos) => currentEnv.addOrShadowValue((name, t), parentEnv, pos)
@@ -634,10 +656,13 @@ object Analyzer {
         An.error(pos, safe"Type mismatch: found ${sub.signature(env)}, expected ${sup.signature(env)}")
     }
 
-    case class PatternResult(t: Option[TypeInst], names: Namespace[TypeInst])
+    //////
+    // Pattern
 
-    def walkPattern(env: Env)(pattern: Pattern, actual: Option[TypeInst]): An[PatternResult] = pattern match {
-      case UnitPattern(pos) => instUnit(env, pos).map(u => PatternResult(Some(u), Namespace.empty))
+    case class PatternResult(typeInst: TypeInst, names: Namespace[TypeInst])
+
+    def walkPattern(env: Env)(pattern: Pattern, expectedType: Option[TypeInst]): An[Option[PatternResult]] = pattern match {
+      case UnitPattern(pos) => instUnit(env, pos).map(u => Some(PatternResult(u, Namespace.empty)))
       // case TuplePattern(ps) => env.useType("Tuple").flatMap { tupleCon =>
       //   actual match {
       //     case Some(NormalTypeInst(con, args)) if con === tupleCon && ps.length == 2 && args.length == 2 =>
@@ -655,16 +680,18 @@ object Analyzer {
       //     case _ => An.error(safe"Expected (?, ?) but got $actual")
       //   }
       // }
-      // case NamePattern(name) => actual.map { at =>
-      //   An(PatternResult(None, Namespace.empty.add((name, at))))
-      // } getOrElse(An.error(safe"Type must be specified: value `$name`"))
-      // case PatternAs(p, asType) => walkTypeInstExpr(env)(asType) flatMap { asTypeInst =>
-      //   walkPattern(env)(p, asTypeInst) flatMap { result =>
-      //     (result.t.map { t =>
-      //       expectSubTypeOf(t, asTypeInst)
-      //     } getOrElse(An(asTypeInst))).map(PatternResult(_, result.names))
-      //   }
-      // }
+      case NamePattern(name, pos) => expectedType.map { t =>
+        Namespace.empty.add((name, t)).map { names =>
+          An(Some(PatternResult(t, names)))
+        }.getOrElse(An.error(pos, safe"Duplicate value name `$name` in pattern"))
+      }.getOrElse(An(None))
+      case PatternAs(p, asType, pos) => walkTypeInstExpr(env)(asType).flatMap { asTypeInst =>
+        walkPattern(env)(p, Some(asTypeInst)).flatMap {
+          case Some(PatternResult(typeInst, names)) =>
+            expectSubTypeOf(env, pos)((typeInst, asTypeInst)).map(t => Some(PatternResult(t, names)))
+          case None => An(Some(PatternResult(asTypeInst, Namespace.empty)))
+        }
+      }
     }
 
 

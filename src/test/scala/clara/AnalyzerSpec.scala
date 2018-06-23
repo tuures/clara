@@ -23,6 +23,21 @@ class AnalyzerSpec extends FunSuite {
     Call(Lambda(UnitPattern(), UnitLiteral()), UnitLiteral())
   }
 
+  ve("Calling a higher-order function should infer type of the lambda that has no type annotation in the parameter pattern", "Int") {
+    val strLength = Lambda(
+      NamePattern("str"), // no type annotation
+      MemberSelection(NamedValue("str"), "length", Nil)
+    )
+
+    val applyToHello = Lambda(
+      // f: String => Int
+      PatternAs(NamePattern("f"), FuncType(NamedType("String", Nil), NamedType("Int", Nil))),
+      Call(NamedValue("f"), StringLiteral("Hello"))
+    )
+
+    Call(applyToHello, strLength)
+  }
+
   ve("Block yields type of the last expression", "String") {
     Block(Seq(UnitLiteral(), StringLiteral("foo")))
   }

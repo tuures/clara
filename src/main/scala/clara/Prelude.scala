@@ -5,7 +5,10 @@ object Prelude {
 
   val Prelude: Seq[BlockContent] = Seq(
     ClassDef("()", Nil, None, Nil),
-    ClassDef("Int", Nil, None, Nil),
+    ClassDef("Int", Nil, None, Seq(
+      // FIXME need support for mutually recursive defs
+      // ValueDecl("toString", NamedType("String", Nil))
+    )),
     ClassDef("String", Nil, None, Seq(
       ValueDecl("length", NamedType("Int", Nil))
     )),
