@@ -46,7 +46,7 @@ class AnalyzerSpec extends FunSuite {
     MemberSelection(StringLiteral("foo"), "length", Nil)
   }
 
-  ve("Class definition and instantiation", "Foo") {
+  ve("Class definition and instantiation", "Foo[String]") {
     Block(Seq(
       ClassDef("Foo", Seq(TypeParam(Invariant, "A", 0)), None, Seq(
         ValueDecl("bar", NamedType("String", Nil)),

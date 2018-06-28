@@ -33,6 +33,7 @@ object Analyzer {
     }
 
     def join[A, B](a: An[A], b: An[B]): An[(A, B)] = {
+      //FIXME aggregate errors from both?
       a.flatMap(ar => b.map(br => (ar, br)))
     }
 
@@ -76,7 +77,8 @@ object Analyzer {
   }
 
   object SubstMap {
-    def from(typeParams: TypeParams, typeArgs: TypeArgs) =
+    def empty = SubstMap(ListMap(), ListMap())
+    def from(typeParams: TypeParams, typeArgs: TypeArgs): Option[SubstMap] =
       if (TypeParams.validateArgs(typeParams, typeArgs)) {
         val empty = (ListMap[VarTypeCon, TypeInst](), ListMap[VarTypeCon, TypeCon]())
         val (insts, cons) = typeParams.items.zip(typeArgs).foldLeft(empty) { case ((is, cs), (param, arg)) =>
@@ -101,14 +103,14 @@ object Analyzer {
 
   sealed trait TypeCon extends TypeConOrTypeInst {
     def envName(env: Env) = env.types.getName(this).getOrElse(sourceName)
-    def getValueMember(name: String): Option[ValueMember]
-    def validateArgs(typeArgs: TypeArgs): Boolean
+    def getValueMember(env: Env, pos: Pos, name: String): Option[An[ValueMember]]
+    // def validateArgs(typeArgs: TypeArgs): Boolean // TODO this is redundant to insideSubstMap
     // def valueMembers(typeArgs: TypeArgs): Namespace[ValueMember]
     def inst(env: Env, pos: Pos, typeArgs: TypeArgs): An[TypeInst] = {
       //FIXME check that all members are concrete
-      if (!validateArgs(typeArgs)) {
-        An.error(pos, safe"Type arguments ${TypeArgs.signature(typeArgs, env)} do not match parameters of type ${this.signature(env)}")
-      } else {
+
+      // eagerly give error if type args do not match params
+      insideSubstMap(env, pos, typeArgs).flatMap { _ =>
         val ti = env.getType("Function").filter(_ === this).flatMap { _ =>
           typeArgs match {
             case Seq(paramType: TypeInst, resultType: TypeInst) =>
@@ -121,6 +123,7 @@ object Analyzer {
       }
     }
     def subst(env: Env, pos: Pos, substMap: SubstMap): An[TypeCon]
+    def insideSubstMap(env: Env, pos: Pos, typeArgs: TypeArgs): An[SubstMap]
   }
 
   type TypeParams = Namespace[VarTypeCon]
@@ -143,9 +146,11 @@ object Analyzer {
   ) extends TypeCon {
     def signature(env: Env) = safe"${envName(env)}${TypeParams.signature(typeParams, env)}"
     def arity = typeParams.length
-    def getValueMember(name: String) = throw new IllegalStateException("ClassHeaderTypeCon.valueMember") // TODO or just None?
-    def validateArgs(typeArgs: TypeArgs) = TypeParams.validateArgs(typeParams, typeArgs)
-    def subst(env: Env, pos: Pos, substMap: SubstMap) = An(this) //TODO substMap.classHeader(this)
+    def getValueMember(env: Env, pos: Pos, name: String) =
+      throw new IllegalStateException("ClassHeaderTypeCon.getValueMember") // TODO or just None?
+    // def validateArgs(typeArgs: TypeArgs) = TypeParams.validateArgs(typeParams, typeArgs) //TODO is this used?
+    def subst(env: Env, pos: Pos, substMap: SubstMap) = An(this) //TODO substMap.classHeader(this) ?
+    def insideSubstMap(env: Env, pos: Pos, typeArgs: TypeArgs) = SubstMap.from(typeParams, typeArgs).toRight(Impl.error(pos, safe"Type arguments ${TypeArgs.signature(typeArgs, env)} do not match parameters of type ${signature(env)}"))
     // def valueMembers(typeArgs: TypeArgs): Namespace[ValueMember]
   }
 
@@ -155,14 +160,15 @@ object Analyzer {
   ) extends TypeCon {
     def sourceName = header.sourceName
     def signature(env: Env) = header.signature(env)
+    def typeParams = header.typeParams
     def arity = header.arity
-    def getValueMember(name: String) = {
-      directMembers.values.get(name).
-        orElse(header.explicitParent.flatMap(_.getValueMember(name)))
-        //TODO subst in parent
+    def getValueMember(env: Env, pos: Pos, name: String) = {
+      directMembers.values.get(name).map(An(_)).
+        orElse(header.explicitParent.flatMap(_.getValueMember(env, pos, name)))
     }
-    def validateArgs(typeArgs: TypeArgs) = header.validateArgs(typeArgs)
+    // def validateArgs(typeArgs: TypeArgs) = header.validateArgs(typeArgs)
     def subst(env: Env, pos: Pos, substMap: SubstMap) = An(this)
+    def insideSubstMap(env: Env, pos: Pos, typeArgs: TypeArgs) = header.insideSubstMap(env, pos, typeArgs)
     // def valueMembers(typeArgs: TypeArgs): Namespace[ValueMember]
   }
   //   def inst(typeArgs: Seq[TypeCon], env: Env): An[TypeInst] = {
@@ -176,9 +182,11 @@ object Analyzer {
 
   case class VarTypeCon(sourceName: String, arity: Int) extends TypeCon {
     def signature(env: Env) = safe"${envName(env)}${(if (arity > 0) List.fill(arity)("_").safeMkString("[", ", ", "]") else "")}"
-    def getValueMember(name: String) = None
-    def validateArgs(typeArgs: TypeArgs) = typeArgs.length === arity
+    def typeParams = ??? // hmm
+    def getValueMember(env: Env, pos: Pos, name: String) = None
+    // def validateArgs(typeArgs: TypeArgs) = typeArgs.length === arity
     def subst(env: Env, pos: Pos, substMap: SubstMap) = An(substMap.conArg(this).getOrElse(this))
+    def insideSubstMap(env: Env, pos: Pos, typeArgs: TypeArgs) = if (typeArgs.length === arity) An(SubstMap.empty) else An.error(pos, safe"Type arguments ${TypeArgs.signature(typeArgs, env)} do not match parameters of type parameter ${signature(env)}")
   }
   //   def inst(typeArgs: Seq[TypeCon], env: Env) =
   //     if (typeArgs.length == typeParam.arity)
@@ -199,8 +207,8 @@ object Analyzer {
     def typeArgs: TypeArgs
     def isSubTypeOf(other: TypeInst): Boolean
     def arity = 0
-    def getValueMember(name: String): Option[ValueMember]
-    def valueMember(env: Env, pos: Pos, name: String): An[ValueMember] = getValueMember(name).toRight(Impl.error(pos, safe"type ${signature(env)} does not have member $name"))
+    def getValueMember(env: Env, pos: Pos, name: String): Option[An[ValueMember]]
+    def valueMember(env: Env, pos: Pos, name: String): An[ValueMember] = getValueMember(env, pos, name).getOrElse(An.error(pos, safe"type ${signature(env)} does not have member $name"))
     def valueMemberInst(env: Env, pos: Pos, name: String, methodTypeArgs: TypeArgs): An[TypeInst] =
       valueMember(env, pos, name).flatMap(_.inst(env, pos, name, methodTypeArgs))
     def subst(env: Env, pos: Pos, substMap: SubstMap): An[TypeInst]
@@ -213,8 +221,14 @@ object Analyzer {
     // def substMap: SubstMap = con match {
     //   case ctCon: ClassTypeCon => Map(ctCon.header -> ctCon)
     // }
-    def getValueMember(name: String) = con.getValueMember(name)
+    def getValueMember(env: Env, pos: Pos, name: String) =
+      con.getValueMember(env, pos, name).map(_.flatMap { m =>
+        con.insideSubstMap(env, pos, typeArgs).flatMap { insideSubstMap =>
+          m.subst(env, pos, insideSubstMap)
+        }
+      })
     def subst(env: Env, pos: Pos, substMap: SubstMap) = con match {
+      // TODO better not to check VarTypeCon here but just the arity?
       case v: VarTypeCon if typeArgs == Nil => An(substMap.instArg(v).getOrElse(this))
       case _ => con.subst(env, pos, substMap) flatMap { substCon =>
         An.seq(typeArgs.map(_.subst(env, pos, substMap))) flatMap { substTypeArgs =>
@@ -240,7 +254,7 @@ object Analyzer {
     def typeArgs = Nil
     def envName(env: Env) = sourceName
     def signature(env: Env) = envName(env)
-    def getValueMember(name: String) = None
+    def getValueMember(env: Env, pos: Pos, name: String) = None
     def subst(env: Env, pos: Pos, substMap: SubstMap) = An(this)
   }
 
@@ -277,6 +291,7 @@ object Analyzer {
 
   sealed trait ValueMember {
     def typeInst: TypeInst
+    def subst(env: Env, pos: Pos, substMap: SubstMap): An[ValueMember]
     def inst(env: Env, pos: Pos, name: String, typeArgs: TypeArgs): An[TypeInst]
   }
 
@@ -298,10 +313,22 @@ object Analyzer {
   }
   sealed trait AbstractValueMember extends ValueMember
   sealed trait ConcreteValueMember extends ValueMember
-  case class PlainValueMemberDecl(typeInst: TypeInst) extends PlainValueMember with AbstractValueMember
-  case class PlainValueMemberDef(typeInst: TypeInst) extends PlainValueMember with ConcreteValueMember
-  case class MethodMemberDecl(typeParams: TypeParams, typeInst: TypeInst) extends MethodMember with AbstractValueMember
-  case class MethodMemberDef(typeParams: TypeParams, typeInst: TypeInst) extends MethodMember with ConcreteValueMember
+  case class PlainValueMemberDecl(typeInst: TypeInst) extends PlainValueMember with AbstractValueMember {
+    def subst(env: Env, pos: Pos, substMap: SubstMap) =
+      typeInst.subst(env, pos, substMap).map(substInst => this.copy(typeInst = substInst))
+  }
+  case class PlainValueMemberDef(typeInst: TypeInst) extends PlainValueMember with ConcreteValueMember {
+    def subst(env: Env, pos: Pos, substMap: SubstMap) =
+      typeInst.subst(env, pos, substMap).map(substInst => this.copy(typeInst = substInst))
+  }
+  case class MethodMemberDecl(typeParams: TypeParams, typeInst: TypeInst) extends MethodMember with AbstractValueMember {
+    def subst(env: Env, pos: Pos, substMap: SubstMap) =
+      typeInst.subst(env, pos, substMap).map(substInst => this.copy(typeInst = substInst))
+  }
+  case class MethodMemberDef(typeParams: TypeParams, typeInst: TypeInst) extends MethodMember with ConcreteValueMember {
+    def subst(env: Env, pos: Pos, substMap: SubstMap) =
+      typeInst.subst(env, pos, substMap).map(substInst => this.copy(typeInst = substInst))
+  }
 
   case class Members(types: Namespace[TypeCon], values: Namespace[ValueMember]) {
     def addValue(binding: (String, ValueMember), pos: Pos) = addOrShadowValue(binding, Members.empty, pos)
@@ -365,11 +392,12 @@ object Analyzer {
           if (astMembers.length == 0)
             An(ti)
           else
-            walkMemberDecls(env)(Some(ti), astMembers) flatMap { members =>
-              val name = "$AnonymousClass"
-              val anonClass = ClassTypeCon(ClassHeaderTypeCon(name, TypeParams.empty, Some(ti)), members)
+            walkMemberDecls(env)(Some(ti), astMembers, false) flatMap { members =>
+              expectAllConcrete(pos)(members).map(_ => ti)
+              // val name = "$AnonymousClass"
+              // val anonClass = ClassTypeCon(ClassHeaderTypeCon(name, TypeParams.empty, Some(ti)), members)
 
-              anonClass.inst(env, pos, Nil)
+              // anonClass.inst(env, pos, Nil)
             }
         }
 
@@ -452,8 +480,10 @@ object Analyzer {
 
     def walkDelegateCallTarget(env: Env, argPos: Pos, callPos: Pos)(calleeType: TypeInst): An[FuncTypeInst] = calleeType match {
       case func: FuncTypeInst => An(func)
-      case _ => calleeType.getValueMember("apply").map { applyMember =>
-        applyMember.inst(env, callPos, "apply", Nil).flatMap(walkDelegateCallTarget(env, argPos, callPos)(_))
+      case _ => calleeType.getValueMember(env, callPos, "apply").map { applyMember =>
+        applyMember.
+          flatMap(_.inst(env, callPos, "apply", Nil)).
+          flatMap(walkDelegateCallTarget(env, argPos, callPos)(_))
       } getOrElse {
         An.error(argPos, safe"type `${calleeType.signature(env)}` cannot be called (does not have member `apply`)")
       }
@@ -470,7 +500,7 @@ object Analyzer {
           val selfHead = ClassHeaderTypeCon(name, typeParams, parentInst)
 
           insideEnv.addType((name, selfHead), pos) flatMap { bodyEnv =>
-            walkMemberDecls(bodyEnv)(parentInst, astMembers) flatMap { members =>
+            walkMemberDecls(bodyEnv)(parentInst, astMembers, true) flatMap { members =>
               env.addType((name, ClassTypeCon(selfHead, members)), pos)
             }
           }
@@ -504,14 +534,14 @@ object Analyzer {
       case None => An(None)
     }
 
-    def walkMemberDecls(env: Env)(parentInst: Option[TypeInst], members: Seq[MemberDecl]): An[Members] =
+    def walkMemberDecls(env: Env)(parentInst: Option[TypeInst], members: Seq[MemberDecl], allowNewMembers: Boolean): An[Members] =
       members.foldLeft(WalkMemberDeclsState.begin(env, parentInst)) { case (state, memberDecl) =>
         state.step(memberDecl)
       }.end
 
     case class WalkMemberDeclsState(env: Env, parentInst: Option[TypeInst], currentErrors: Errors, currentDirectMembers: Members) {
-      def noValueInParent(name: String, pos: Pos): An[Unit] = parentInst.flatMap(_.getValueMember(name)) match {
-          case Some(_) => An.error(pos, "sMember value `$name` already defined in parent")
+      def noValueInParent(name: String, pos: Pos): An[Unit] = parentInst.flatMap(_.getValueMember(env, pos, name)) match {
+          case Some(_) => An.error(pos, safe"Member value `$name` already defined in parent")
           case None => An(())
         }
       // def currentValueMember(name: String): Option[ValueMember] = currentDirectMembers.values.get(name).orElse(
@@ -535,42 +565,44 @@ object Analyzer {
             }
           }
         }
-        case ValueDef(NamePattern(name, namePos), e, defPos) => parentInst.flatMap(_.getValueMember(name)) match {
-            case Some(_: ConcreteValueMember) => An.error(defPos, safe"Member already defined: `$name`")
-            case Some(_: MethodMemberDecl) =>
-              An.error(defPos, safe"Member `$name` is declared to be a method.")
-            case Some(PlainValueMemberDecl(expectedInst)) =>
-              walkValueExpr(env)(e).flatMap { actualInst =>
-                // TODO: maybe less generic error message
-                expectSubTypeOf(env, defPos)((actualInst, expectedInst)).flatMap { _ =>
-                  currentDirectMembers.addValue((name, PlainValueMemberDef(actualInst)), defPos)
+        case ValueDef(NamePattern(name, namePos), e, defPos) => parentInst.flatMap(_.getValueMember(env, defPos, name)) match {
+            case Some(existing) => existing.flatMap {
+              case _: ConcreteValueMember => An.error(defPos, safe"Member already defined: `$name`")
+              case _: MethodMemberDecl =>
+                An.error(defPos, safe"Member `$name` is declared to be a method.")
+              case decl: PlainValueMemberDecl =>
+                walkValueExpr(env)(e).flatMap { actualInst =>
+                  // TODO: maybe less generic error message
+                  expectSubTypeOf(env, defPos)((actualInst, decl.typeInst)).flatMap { _ =>
+                    currentDirectMembers.addValue((name, PlainValueMemberDef(actualInst)), defPos)
+                  }
                 }
-              }
+            }
             case None =>
               walkValueExpr(env)(e).flatMap { ti =>
                 currentDirectMembers.addValue((name, PlainValueMemberDef(ti)), defPos)
               }
           }
-        case complex: ValueDef => An.error(complex.pos, "Error: Complex pattern not allowed in class member value declaration.")
+        case ValueDef(complexPattern, _, _) => An.error(complexPattern.pos, "Error: Complex patterns are not allowed in class member value.")
         case MethodDef(name, typeParams, body, pos) =>
-          parentInst.flatMap(_.getValueMember(name)) match {
-            case Some(_: ConcreteValueMember) => An.error(pos, safe"Member already defined: `$name`")
-            case Some(_: PlainValueMemberDecl) =>
-              An.error(pos, safe"Member `$name` is declared to be a plain value.")
-            case Some(MethodMemberDecl(expectedTypeParams, expectedInst)) =>
-              walkTypeParams(env)(typeParams).flatMap { case (insideEnv, actualTypeParams) =>
-                // TODO def type params should be contravariant
-                // TODO name difference should not matter
-                if (actualTypeParams == expectedTypeParams) {
-                  walkValueExpr(insideEnv)(body).flatMap { actualInst =>
-                    expectSubTypeOf(env, pos)((actualInst, expectedInst)).flatMap { _ =>
-                      currentDirectMembers.addValue((name, MethodMemberDef(actualTypeParams, actualInst)), pos)
+          parentInst.flatMap(_.getValueMember(env, pos, name)) match {
+            case Some(existing) => existing.flatMap {
+              case _: ConcreteValueMember => An.error(pos, safe"Member already defined: `$name`")
+              case _: PlainValueMemberDecl =>
+                An.error(pos, safe"Member `$name` is declared to be a plain value.")
+              case decl: MethodMemberDecl =>
+                walkTypeParams(env)(typeParams).flatMap { case (insideEnv, actualTypeParams) =>
+                  if (actualTypeParams.items.map(_.arity) === decl.typeParams.items.map(_.arity)) {
+                    walkValueExpr(insideEnv)(body).flatMap { actualInst =>
+                      expectSubTypeOf(env, pos)((actualInst, decl.typeInst)).flatMap { _ =>
+                        currentDirectMembers.addValue((name, MethodMemberDef(actualTypeParams, actualInst)), pos)
+                      }
                     }
+                  } else {
+                    An.error(pos, safe"Type parameters ${TypeParams.signature(actualTypeParams, env)} do not match declaration ${TypeParams.signature(decl.typeParams, env)}")
                   }
-                } else {
-                  An.error(pos, "Type parameters do not match declaration.")
                 }
-              }
+            }
             case None =>
               walkTypeParams(env)(typeParams).flatMap { case (insideEnv, params) =>
                 walkValueExpr(insideEnv)(body).flatMap { ti =>
@@ -587,6 +619,19 @@ object Analyzer {
 
     object WalkMemberDeclsState {
       def begin(env: Env, parentInst: Option[TypeInst]) = WalkMemberDeclsState(env, parentInst, Nil, Members.empty)
+    }
+
+    def expectAllConcrete(pos: Pos)(members: Members): An[Unit] = {
+      // TODO check type members also if we add them
+      members.values.entries.filter {
+        case (_, avm: AbstractValueMember) => true
+        case (_, cvm: ConcreteValueMember) => false
+      } match {
+        case Nil => An(())
+        case abstracts => Left(abstracts.map { case (name, avm) =>
+          Error(pos, safe"Value member `$name` needs to be defined")
+        })
+      }
     }
 
     //////
