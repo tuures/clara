@@ -3,13 +3,13 @@ package clara
 case class Parser(sourceName: String, input: String) {
   val sourceInfo = SourceInfo.fromString(sourceName, input)
 
-  def parseAsProgramBlock: Either[Seq[Error], Ast.Block] = {
+  def parseAsProgramBlock: Either[Seq[SourceError], Ast.Block] = {
     import fastparse.core.Parsed
 
     Parser.Impl(Some(sourceInfo)).program.parse(input) match {
       case Parsed.Success(block, index) => Right(block)
       case Parsed.Failure(p, index, extra) =>
-        Left(Seq(Error(SourcePos(sourceInfo, index, None), "Parse error: " + extra.traced.trace)))
+        Left(Seq(SourceError(SourcePos(sourceInfo, index, None), "Parse error: " + extra.traced.trace)))
     }
   }
 }
@@ -226,7 +226,7 @@ object Parser {
       P("{" ~ sep.rep ~ memberDecl.rep(0, sep=sep.rep(1)) ~ sep.rep ~ "}")
     }
 
-    val classDef: P[ClassDef] = P(pp("::classafe" ~ name ~ maybeTypeParams ~ ("<<" ~ namedType).? ~ classBody)(ClassDef.apply _))
+    val classDef: P[ClassDef] = P(pp("::class" ~ name ~ maybeTypeParams ~ ("<<" ~ namedType).? ~ classBody)(ClassDef.apply _))
 
     val freeDecl: P[FreeDecl] = P(classDef | valueDef)
 

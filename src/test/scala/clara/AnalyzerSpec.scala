@@ -8,14 +8,16 @@ class AnalyzerSpec extends FunSuite {
   import Ast._
 
   def ve(testName: String, expectedSignature: String)(valueExpr: ValueExpr) = test(testName) {
-    val blockWithPrelude = {
-      // TODO have some useful test fixtures
-      Block(Prelude.Prelude ++ Seq(valueExpr))
-    }
-
-    Analyzer.analyze(blockWithPrelude) match {
+    Analyzer.analyze(Prelude.prependTo(valueExpr)) match {
       case Right(t) => assert(t.signature(Analyzer.Env.empty) == expectedSignature)
       case Left(errors) => fail(errors.map(_.humanFormat).safeMkString("\n"))
+    }
+  }
+
+  def err(testName: String, expectedErrorContains: String)(valueExpr: ValueExpr) = test(testName) {
+    Analyzer.analyze(Prelude.prependTo(valueExpr)) match {
+      case Right(t) => fail("should not have been ok")
+      case Left(errors) => assert(errors.map(_.humanFormat).exists(_.contains(expectedErrorContains)), errors.map(_.humanFormat))
     }
   }
 
@@ -59,5 +61,17 @@ class AnalyzerSpec extends FunSuite {
       NamedValue("foo")
     ))
   }
+
+  err("Should not be allowed to add new members to calls during ::new", "Not allowed to declare new member here")(
+    Block(Seq(
+      ClassDef("Foo", Nil, None, Seq(
+        ValueDecl("bar", NamedType("String", Nil))
+      )),
+      ClassNew(NamedType("Foo", Nil), Seq(
+        ValueDef(NamePattern("bar"), StringLiteral("BAR")),
+        ValueDef(NamePattern("zot"), StringLiteral("OOPS"))
+      ))
+    ))
+  )
 
 }

@@ -16,6 +16,8 @@ object Prelude {
       ValueDecl("apply", FuncType(NamedType("P", Nil), NamedType("R", Nil)))
     ))
   )
+
+  def prependTo(ve: ValueExpr) = Block(Prelude :+ ve)
 }
 
 // object Stdlib {

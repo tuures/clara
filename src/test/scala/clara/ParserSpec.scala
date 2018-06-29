@@ -27,82 +27,7 @@ class ParserSpec extends FunSuite {
 
   val p = Parser.Impl(None)
 
-  parse(p.unitLiteral, "()")(UnitLiteral())
-  parse(p.unitType,    "()")(UnitType())
-  parse(p.unitPattern, "()")(UnitPattern())
-
-  parse(p.integerLiteral, "123")(IntegerLiteral("123"))
-
-  parse(p.stringLiteral, "'str'")(StringLiteral("str"))
-
-  parse(p.tuple,        "((),())")(
-    Tuple(Seq(UnitLiteral(), UnitLiteral()))
-  )
-  err(p.tuple, "()")
-
-  parse(p.tupleType,    "(() , ())")(
-    TupleType(Seq(UnitType(), UnitType()))
-  )
-  parse(p.tuplePattern, "(\n(),\n(),\n)")(
-    TuplePattern(Seq(UnitPattern(), UnitPattern()))
-  )
-
-  parse(p.parens, "((()))")(UnitLiteral())
-  parse(p.typeParens, "((()))")(UnitType())
-  parse(p.patternParens, "((()))")(UnitPattern())
-
-  parse(p.block, "(\n\n()\n;\n()\n())")(
-    Block(Seq.fill(3)(UnitLiteral()))
-  )
-  err(p.block, "()")
-
-  parse(p.namedValue, "foo")(NamedValue("foo"))
-
-  parse(p.namedType, "Foo")(NamedType("Foo", Nil))
-  parse(p.namedType, "Foo[Bar]")(
-    NamedType("Foo", Seq(NamedType("Bar", Nil)))
-  )
-  parse(p.namedType, "Foo[Bar, Baz[Zot]]")(
-    NamedType("Foo", Seq(
-      NamedType("Bar", Nil),
-      NamedType("Baz", Seq(NamedType("Zot", Nil))))
-    )
-  )
-
-  parse(p.namePattern, "foo")(NamePattern("foo"))
-
-  parse(p.valueAs, "foo: String")(
-    ValueAs(NamedValue("foo"), NamedType("String", Nil))
-  )
-
-  parse(p.lambda, "() => ()")(
-    Lambda(UnitPattern(), UnitLiteral())
-  )
-
-  parse(p.funcType, "() => ()")(
-    FuncType(UnitType(), UnitType())
-  )
-
-  parse(p.memberOrCall, "foo.length.toString")(
-    MemberSelection(MemberSelection(NamedValue("foo"), "length", Nil), "toString", Nil)
-  )
-  parse(p.memberOrCall, "foo.bar[Zot]")(
-    MemberSelection(NamedValue("foo"), "bar", Seq(NamedType("Zot", Nil)))
-  )
-  parse(p.memberOrCall, "foo()")(
-    Call(NamedValue("foo"), UnitLiteral())
-  )
-  parse(p.memberOrCall, "foo ()")(
-    Call(NamedValue("foo"), UnitLiteral())
-  )
-  parse(p.memberOrCall, "foo bar")(
-    Call(NamedValue("foo"), NamedValue("bar"))
-  )
-
-  parse(p.program, "(foo)")(
-    Block(Seq(NamedValue("foo")))
-  )
-
+  // TODO migrate:
   // t("(a: Int, b: String) => (b, a, 1, 'foobar')")
   // t("(a, b): (Int, Int) => 1")
   // t("(a: Int, (b: Int, c: Int)) => 'str'")
@@ -134,23 +59,6 @@ class ParserSpec extends FunSuite {
   // t("foo 'asd'")
   // t("foo ()")
   // t("foo 1")
-  //
-  // nt("simple block")(
-  //   """|(
-  //      |  foo
-  //      |  bar
-  //      |)""".stripMargin,
-  //   Some(Block(Seq(Block(Seq(NamedValue("foo"), NamedValue("bar"))))))
-  // )
-  //
-  // nt("semicolon block")(
-  //   """|(
-  //      |  foo; bar;
-  //      |  baz;;
-  //      |  xyzzy
-  //      |)""".stripMargin
-  // )
-  //
   // nt("one block program")(
   //   """|bl = (
   //      |  x = 5; y = 6
@@ -164,21 +72,38 @@ class ParserSpec extends FunSuite {
   //      |bla.squared
   //      |""".stripMargin
   // )
-  //
   // nt("block as argument")(
   //   """|foo (
   //      |  bar
   //      |  baz
   //      |)""".stripMargin
   // )
-  //
+
+  parse(p.unitLiteral, "()")(UnitLiteral())
+  parse(p.unitType,    "()")(UnitType())
+  parse(p.unitPattern, "()")(UnitPattern())
+
+  parse(p.integerLiteral, "123")(IntegerLiteral("123"))
+
+  parse(p.stringLiteral, "'str'")(StringLiteral("str"))
+
+  parse(p.tuple,        "((),())")(
+    Tuple(Seq(UnitLiteral(), UnitLiteral()))
+  )
+  err(p.tuple, "()")
+
+  parse(p.tupleType,    "(() , ())")(
+    TupleType(Seq(UnitType(), UnitType()))
+  )
+  parse(p.tuplePattern, "(\n(),\n(),\n)")(
+    TuplePattern(Seq(UnitPattern(), UnitPattern()))
+  )
   // nt("multi-line tuple")(
   //   """|(
   //      |  1,
   //      |  2
   //      |)""".stripMargin
   // )
-  //
   // nt("multi-line tuple, trailing comma")(
   //   """|(
   //      |  1,
@@ -186,21 +111,83 @@ class ParserSpec extends FunSuite {
   //      |)""".stripMargin,
   //   Some(Block(Seq(Tuple(Seq(IntegerLiteral("1"), IntegerLiteral("2"))))))
   // )
-  //
+
+
+  parse(p.parens, "((()))")(UnitLiteral())
+  parse(p.parens, "((\n\n  ())\n)")(UnitLiteral())
+  // nt("multi-line parens")(
+  //   """|(
+  //      |  1
+  //      |)
+  //      |""".stripMargin
+  // )
+  parse(p.typeParens, "((()))")(UnitType())
+  parse(p.patternParens, "((()))")(UnitPattern())
+
+  parse(p.block, "(\n\n()\n;\n()\n();();;)")(
+    Block(Seq.fill(4)(UnitLiteral()))
+  )
+  // nt("simple block")(
+  //   """|(
+  //      |  foo
+  //      |  bar
+  //      |)""".stripMargin,
+  //   Some(Block(Seq(Block(Seq(NamedValue("foo"), NamedValue("bar"))))))
+  // )
+  // nt("semicolon block")(
+  //   """|(
+  //      |  foo; bar;
+  //      |  baz;;
+  //      |  xyzzy
+  //      |)""".stripMargin
+  // )
+  err(p.block, "()")
+
+  parse(p.namedValue, "foo")(NamedValue("foo"))
+
+  parse(p.namedType, "Foo")(NamedType("Foo", Nil))
+  parse(p.namedType, "Foo[Bar]")(
+    NamedType("Foo", Seq(NamedType("Bar", Nil)))
+  )
+  parse(p.namedType, "Foo[Bar, Baz[Zot]]")(
+    NamedType("Foo", Seq(
+      NamedType("Bar", Nil),
+      NamedType("Baz", Seq(NamedType("Zot", Nil))))
+    )
+  )
+
+  parse(p.namePattern, "foo")(NamePattern("foo"))
+
+  parse(p.valueAs, "foo: String")(
+    ValueAs(NamedValue("foo"), NamedType("String", Nil))
+  )
+
+  parse(p.lambda, "() => ()")(
+    Lambda(UnitPattern(), UnitLiteral())
+  )
+  parse(p.lambda, "() =>\n  ()")(
+    Lambda(UnitPattern(), UnitLiteral())
+  )
   // nt("multi-line function")(
   //   """|a = () =>
   //      |  1.squared
   //      |2
   //      |""".stripMargin
   // )
-  //
-  // nt("multi-line parensafe")(
-  //   """|(
-  //      |  1
-  //      |)
-  //      |""".stripMargin
-  // )
-  //
+
+  parse(p.funcType, "() => ()")(
+    FuncType(UnitType(), UnitType())
+  )
+
+  parse(p.memberOrCall, "foo.length.toString")(
+    MemberSelection(MemberSelection(NamedValue("foo"), "length", Nil), "toString", Nil)
+  )
+  parse(p.memberOrCall, "foo.bar[Zot]")(
+    MemberSelection(NamedValue("foo"), "bar", Seq(NamedType("Zot", Nil)))
+  )
+  parse(p.memberOrCall, "foo.\n  length.\n  toString")(
+    MemberSelection(MemberSelection(NamedValue("foo"), "length", Nil), "toString", Nil)
+  )
   // nt("multi-line member")(
   //   """|123.
   //      |  squared.
@@ -208,19 +195,50 @@ class ParserSpec extends FunSuite {
   //      |  sqrt
   //      |""".stripMargin
   // )
-  //
-  // nt("multi-line assignment with extra spacesafe")(
+  parse(p.memberOrCall, "foo()")(
+    Call(NamedValue("foo"), UnitLiteral())
+  )
+  parse(p.memberOrCall, "foo ()")(
+    Call(NamedValue("foo"), UnitLiteral())
+  )
+  parse(p.memberOrCall, "foo bar")(
+    Call(NamedValue("foo"), NamedValue("bar"))
+  )
+
+  parse(p.program, "(foo)")(
+    Block(Seq(NamedValue("foo")))
+  )
+
+  parse(p.valueDef, "a =\u0020\u0020\n\u0020\u0020\n  foo")(
+    ValueDef(NamePattern("a"), NamedValue("foo"))
+  )
+  // nt("multi-line assignment with extra spaces")(
   //   """|a =\u0020\u0020
   //      |\u0020\u0020
   //      |  foo
   //      |""".stripMargin
   // )
-  //
-  // nt("single-line classafe")(
+
+  parse(p.classDef, "::class Book {isbn: String, desc: String}")(
+    ClassDef("Book", Nil, None, Seq(
+      ValueDecl("isbn", NamedType("String", Nil)),
+      ValueDecl("desc", NamedType("String", Nil))
+    ))
+  )
+  // nt("single-line class")(
   //   "::class Book {isbn: String, author: String, title: String}"
   // )
-  //
-  // nt("multi-line classafe")(
+
+  parse(p.classDef, "::class Book[+D] {\n  isbn: String,\n  desc: String,\n}")(
+    ClassDef("Book", Seq(TypeParam(Covariant, "D", 0)), None, Seq(
+      ValueDecl("isbn", NamedType("String", Nil)),
+      ValueDecl("desc", NamedType("String", Nil))
+    ))
+  )
+  // nt("class with simple type params and value declarations")(
+  //   "::class Book[A] {isbn: String, author: String, title: String}"
+  // )
+  // nt("multi-line class")(
   //   """|::class Book {
   //      |  isbn: String
   //      |  author: String
@@ -229,8 +247,9 @@ class ParserSpec extends FunSuite {
   //      |}
   //      |""".stripMargin
   // )
-  //
-  // nt("class fields and methodsafe")(
+
+  // TODO migrate:
+  // nt("class fields and methods")(
   //   """|::class Foo << Bar {
   //      |  yyy: Int = 2
   //      |  yyy = 3
@@ -244,16 +263,17 @@ class ParserSpec extends FunSuite {
   //      |}
   //      |""".stripMargin
   // )
-  //
-  // t("::new Foo {}")
-  //
-  // nt("class with simple type params and value declarationsafe")(
-  //   "::class Book[A] {isbn: String, author: String, title: String}"
-  // )
-  //
-  // nt("complex type params and method declarationsafe")(
+  // nt("complex type params and method declarations")(
   //   "::class Functor[A, M[_]] { ::method map[B]: (A => B) => M[B] }"
   // )
+
+  parse(p.classNew, "::new Foo {bar = 1, zot = 2}")(
+    ClassNew(NamedType("Foo", Nil), Seq(
+      ValueDef(NamePattern("bar"), IntegerLiteral("1")),
+      ValueDef(NamePattern("zot"), IntegerLiteral("2"))
+    ))
+  )
+  // t("::new Foo {}")
 
   err(p.valueExpr, "foo square = 1")
   err(p.valueExpr, "1square = 1")

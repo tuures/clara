@@ -8,7 +8,7 @@ object Analyzer {
 
   def mapPair[A, B](f: A => B)(a: (A, A)) = (f(a._1), f(a._2))
 
-  type Errors = Seq[Error]
+  type Errors = Seq[SourceError]
 
   type An[A] = Either[Errors, A]
 
@@ -345,7 +345,7 @@ object Analyzer {
     def empty = Members(Namespace.empty[TypeCon], Namespace.empty[ValueMember])
   }
 
-  def analyze(valueExpr: Ast.ValueExpr): Either[Seq[Error], TypeInst] = Impl.walkValueExpr(Env.empty)(valueExpr)
+  def analyze(valueExpr: Ast.ValueExpr): Either[Seq[SourceError], TypeInst] = Impl.walkValueExpr(Env.empty)(valueExpr)
 
   object Impl {
     import Ast._
@@ -353,7 +353,7 @@ object Analyzer {
     //////
     // Helpers
 
-    def error(pos: Pos, message: String) = Seq(Error(pos, message))
+    def error(pos: Pos, message: String) = Seq(SourceError(pos, message))
 
     //////
     // General
@@ -535,14 +535,18 @@ object Analyzer {
     }
 
     def walkMemberDecls(env: Env)(parentInst: Option[TypeInst], members: Seq[MemberDecl], allowNewMembers: Boolean): An[Members] =
-      members.foldLeft(WalkMemberDeclsState.begin(env, parentInst)) { case (state, memberDecl) =>
+      members.foldLeft(WalkMemberDeclsState.begin(env, parentInst, allowNewMembers)) { case (state, memberDecl) =>
         state.step(memberDecl)
       }.end
 
-    case class WalkMemberDeclsState(env: Env, parentInst: Option[TypeInst], currentErrors: Errors, currentDirectMembers: Members) {
-      def noValueInParent(name: String, pos: Pos): An[Unit] = parentInst.flatMap(_.getValueMember(env, pos, name)) match {
-          case Some(_) => An.error(pos, safe"Member value `$name` already defined in parent")
-          case None => An(())
+    case class WalkMemberDeclsState(env: Env, parentInst: Option[TypeInst], currentErrors: Errors, currentDirectMembers: Members, allowNewMembers: Boolean) {
+      def newMemberDisallowedError(pos: Pos) = An.error(pos, "Not allowed to declare new member here, definition for existing declaration expected")
+      def okToDeclare(name: String, pos: Pos): An[Unit] = parentInst.
+        flatMap(_.getValueMember(env, pos, name)).map(_.flatMap { _ =>
+          An.error(pos, safe"Member value `$name` already defined in parent")
+        }).getOrElse {
+          if (allowNewMembers) An(())
+          else newMemberDisallowedError(pos)
         }
       // def currentValueMember(name: String): Option[ValueMember] = currentDirectMembers.values.get(name).orElse(
       //   parentInst.flatMap(_.valueMember(name))
@@ -553,12 +557,12 @@ object Analyzer {
           case Left(errors) => this.copy(currentErrors=(currentErrors ++ errors))
         }
       def walkMemberDecl(memberDecl: MemberDecl): An[Members] = memberDecl match {
-        case ValueDecl(name, t, pos) => noValueInParent(name, pos).flatMap { _ =>
+        case ValueDecl(name, t, pos) => okToDeclare(name, pos).flatMap { _ =>
           walkTypeInstExpr(env)(t) flatMap { ti =>
             currentDirectMembers.addValue((name, PlainValueMemberDecl(ti)), pos)
           }
         }
-        case MethodDecl(name, typeParams, t, pos) => noValueInParent(name, pos).flatMap { _ =>
+        case MethodDecl(name, typeParams, t, pos) => okToDeclare(name, pos).flatMap { _ =>
           walkTypeParams(env)(typeParams).flatMap { case (insideEnv, paramInsts) =>
             walkTypeInstExpr(insideEnv)(t) flatMap { ti =>
               currentDirectMembers.addValue((name, MethodMemberDecl(paramInsts, ti)), pos)
@@ -578,10 +582,11 @@ object Analyzer {
                   }
                 }
             }
-            case None =>
+            case None if allowNewMembers=>
               walkValueExpr(env)(e).flatMap { ti =>
                 currentDirectMembers.addValue((name, PlainValueMemberDef(ti)), defPos)
               }
+            case None => newMemberDisallowedError(defPos)
           }
         case ValueDef(complexPattern, _, _) => An.error(complexPattern.pos, "Error: Complex patterns are not allowed in class member value.")
         case MethodDef(name, typeParams, body, pos) =>
@@ -603,12 +608,13 @@ object Analyzer {
                   }
                 }
             }
-            case None =>
+            case None if allowNewMembers =>
               walkTypeParams(env)(typeParams).flatMap { case (insideEnv, params) =>
                 walkValueExpr(insideEnv)(body).flatMap { ti =>
                   currentDirectMembers.addValue((name, MethodMemberDef(params, ti)), pos)
                 }
               }
+            case None => newMemberDisallowedError(pos)
           }
       }
       def end = currentErrors match {
@@ -618,7 +624,7 @@ object Analyzer {
     }
 
     object WalkMemberDeclsState {
-      def begin(env: Env, parentInst: Option[TypeInst]) = WalkMemberDeclsState(env, parentInst, Nil, Members.empty)
+      def begin(env: Env, parentInst: Option[TypeInst], allowNewMembers: Boolean) = WalkMemberDeclsState(env, parentInst, Nil, Members.empty, allowNewMembers)
     }
 
     def expectAllConcrete(pos: Pos)(members: Members): An[Unit] = {
@@ -629,7 +635,7 @@ object Analyzer {
       } match {
         case Nil => An(())
         case abstracts => Left(abstracts.map { case (name, avm) =>
-          Error(pos, safe"Value member `$name` needs to be defined")
+          SourceError(pos, safe"Value member `$name` needs to be defined")
         })
       }
     }
