@@ -3,6 +3,7 @@ package clara
 import ai.x.safe._
 
 trait Error {
+  def message: String
   def humanFormat: String
 }
 

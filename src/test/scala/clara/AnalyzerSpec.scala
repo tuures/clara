@@ -14,10 +14,10 @@ class AnalyzerSpec extends FunSuite {
     }
   }
 
-  def err(testName: String, expectedErrorContains: String)(valueExpr: ValueExpr) = test(testName) {
+  def err(testName: String)(expectedErrorMessages: Seq[String])(valueExpr: ValueExpr) = test(testName) {
     Analyzer.analyze(Prelude.prependTo(valueExpr)) match {
       case Right(t) => fail("should not have been ok")
-      case Left(errors) => assert(errors.map(_.humanFormat).exists(_.contains(expectedErrorContains)), errors.map(_.humanFormat))
+      case Left(errors) => assert(errors.map(_.message) == expectedErrorMessages)
     }
   }
 
@@ -62,7 +62,9 @@ class AnalyzerSpec extends FunSuite {
     ))
   }
 
-  err("Should not be allowed to add new members to calls during ::new", "Not allowed to declare new member here")(
+  err("Should not be allowed to add new members to calls during ::new")(Seq(
+    "Not allowed to declare new member here, definition for existing declaration expected"
+  ))(
     Block(Seq(
       ClassDef("Foo", Nil, None, Seq(
         ValueDecl("bar", NamedType("String", Nil))
@@ -71,6 +73,56 @@ class AnalyzerSpec extends FunSuite {
         ValueDef(NamePattern("bar"), StringLiteral("BAR")),
         ValueDef(NamePattern("zot"), StringLiteral("OOPS"))
       ))
+    ))
+  )
+
+  err("All members must be concrete in ::new")(Seq(
+    "Value member `baz` needs to be defined"
+  ))(
+    Block(Seq(
+      ClassDef("Foo", Nil, None, Seq(
+        ValueDecl("bar", NamedType("String", Nil)),
+        ValueDecl("baz", NamedType("String", Nil))
+      )),
+      ClassNew(NamedType("Foo", Nil), Seq(
+        ValueDef(NamePattern("bar"), StringLiteral("BAR"))
+      ))
+    ))
+  )
+
+  err("::new should not work with type parameters")(Seq(
+    "Members not known for type parameter"
+  ))(
+    Block(Seq(
+      ClassDef("Foo", Seq(TypeParam(Invariant, "A", 0)), None, Seq(
+        ValueDef(NamePattern("bar"), ClassNew(NamedType("A", Nil), Nil))
+      ))
+    ))
+  )
+
+  err("::new should not work with recursive type reference")(Seq(
+    "Members not known for self-recursive type reference"
+  ))(
+    Block(Seq(
+      ClassDef("Foo", Nil, None, Seq(
+        ValueDef(NamePattern("bar"), ClassNew(NamedType("Foo", Nil), Nil))
+      ))
+    ))
+  )
+
+  err("::new should not work with top type")(Seq(
+    "Not found: type `⊤`"
+  ))(
+    Block(Seq(
+      ValueDef(NamePattern("foo"), ClassNew(NamedType("⊤", Nil), Nil))
+    ))
+  )
+
+  err("::new should not work with bottom type")(Seq(
+    "Not found: type `⊥`"
+  ))(
+    Block(Seq(
+      ValueDef(NamePattern("foo"), ClassNew(NamedType("⊥", Nil), Nil))
     ))
   )
 

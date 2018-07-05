@@ -1,7 +1,7 @@
 ## Clara
 Clara is an experimental/WIP statically-typed FP/OO programming language that compiles to JavaScript.
 
-**Features currently implemented:**
+**Features currently implemented/WIP:**
 - Static, polymorphic, single-rooted, class-based (nominal) type system with type inference
 - Literals for strings, integers, functions, and unit type.
 - Functions are (monomorphic) first-class values. Function application is binary operation (all functions are unary).
@@ -16,6 +16,7 @@ Clara is an experimental/WIP statically-typed FP/OO programming language that co
 - Pattern matching and destructuring
 - Standard library
 - Little syntactic sugar such as definition shorthand for curried functions (multiple parameters)
+- Tail call optimization
 
 ### Philosophy and Goals
 - Syntax: Do not make me think
