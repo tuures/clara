@@ -5,18 +5,16 @@ import ai.x.safe._
 object ClaraCli {
 
   case class Options(
-    val printAst: Boolean,
-    val inputPath: String
+    val printAst: Boolean = false,
+    val inputPath: String = "-",
+    val outputPath: Option[String] = None
   )
 
   object Options {
-    def defaults = Options(
-      printAst = false,
-      inputPath = ""
-    )
     def parse(args: List[String]) = {
-      def p(as: List[String], o: Options = defaults): Option[Options] = as match {
+      def p(as: List[String], o: Options = Options()): Option[Options] = as match {
         case "-a" :: rest => p(rest, o.copy(printAst = true))
+        case "-o" :: str :: rest => p(rest, o.copy(outputPath = Some(str)))
         case str :: Nil => Some(o.copy(inputPath = str))
         case _ => None
       }
@@ -25,26 +23,14 @@ object ClaraCli {
     }
   }
 
-  val usage = """
-  | Usage: [options] <input file>
-  | Options:
-  |   -a\tprint parsed AST
+  val usage = s"""
+  |Usage: [options] <input file>
+  |Options:
+  |  -a\tprint parsed AST
+  |  -o\toutput path
   """.stripMargin
 
-  def readInput(path: String): Either[Seq[Error], String] = {
-    import scala.io.Source
-
-    try {
-      val s = Source.fromFile(path, "UTF-8")
-      try {
-        Right(s.getLines.mkString("\n"))
-      } finally s.close()
-    } catch {
-      case e: Exception => Left(Seq(GeneralError(safe"Could not read input file `$path`: ${e.toString()}")))
-    }
-  }
-
-  def run(options: Options) = readInput(options.inputPath).flatMap { input =>
+  def run(options: Options) = FileIo.readFile(options.inputPath).flatMap { input =>
     Parser(options.inputPath, input).parseAsProgramBlock
   }.flatMap { block =>
     if (options.printAst) {
@@ -53,10 +39,16 @@ object ClaraCli {
       println()
     }
 
-    // println(JsEmitter.emitString(blockWithPrelude))
-    // println()
+    val blockWithPrelude = Prelude.prependTo(block)
 
-    Analyzer.analyze(Prelude.prependTo(block))
+    options.outputPath.foreach { outputPath =>
+      FileIo.writeFile(outputPath, JsEmitter.emitString(blockWithPrelude)) match {
+        case Left(errors) => println(errors.map(_.humanFormat).safeMkString("\n"))
+        case Right(()) => ()
+      }
+    }
+
+    Analyzer.analyze(blockWithPrelude)
   } match {
     case Right(resultType) => println(resultType.signature(Analyzer.Env.empty))
     case Left(errors) =>
@@ -68,6 +60,30 @@ object ClaraCli {
       run(options)
     }.getOrElse {
       println(usage)
+    }
+  }
+
+
+  object FileIo {
+    import java.nio.file.{Files, Paths}
+    import java.nio.charset.StandardCharsets
+
+    def readFile(path: String): Either[Seq[Error], String] = {
+      try {
+        Right(new String(Files.readAllBytes(Paths.get(path)), StandardCharsets.UTF_8))
+      } catch {
+        case e: Exception => Left(Seq(GeneralError(safe"Could not read file `$path`: ${e.toString()}")))
+      }
+    }
+
+    def writeFile(path: String, content: String): Either[Seq[Error], Unit] = {
+      try {
+        Files.write(Paths.get(path), content.getBytes(StandardCharsets.UTF_8))
+
+        Right(())
+      } catch {
+        case e: Exception => Left(Seq(GeneralError(safe"Could not write file `$path`: ${e.toString()}")))
+      }
     }
   }
 }
