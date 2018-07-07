@@ -124,7 +124,7 @@ class ParserSpec extends FunSuite {
   parse(p.typeParens, "((()))")(UnitType())
   parse(p.patternParens, "((()))")(UnitPattern())
 
-  parse(p.block, "(\n\n()\n;\n()\n();();;)")(
+  parse(p.block, "(\n\n// comment\n()\n;\n()\n();();;)")(
     Block(Seq.fill(4)(UnitLiteral()))
   )
   // nt("simple block")(
@@ -166,6 +166,9 @@ class ParserSpec extends FunSuite {
     Lambda(UnitPattern(), UnitLiteral())
   )
   parse(p.lambda, "() =>\n  ()")(
+    Lambda(UnitPattern(), UnitLiteral())
+  )
+  parse(p.lambda, "() =>//comment\n  ()")(
     Lambda(UnitPattern(), UnitLiteral())
   )
   // nt("multi-line function")(

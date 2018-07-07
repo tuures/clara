@@ -479,7 +479,6 @@ object Analyzer {
           walkValueDef(parentEnv)(currentEnv, target, t)
         } map (newEnv => (newEnv, None))
       case classDef: ClassDef => walkClassDef(currentEnv)(classDef) map (newEnv => (newEnv, None))
-      case Comment(_, pos) => Right((currentEnv, None))
       case e: ValueExpr => An.join(instUnit(currentEnv, e.pos), walkValueExpr(currentEnv)(e)).map { case (unit, t) => (currentEnv, Some(t).filter(_ !== unit))
       }
     }

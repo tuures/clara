@@ -38,7 +38,6 @@ object Ast {
   case class MethodDef(name: String, typeParams: Seq[TypeParam], body: ValueExpr, pos: Pos = NoPos) extends MemberDef
   case class ClassDef(name: String, typeParams: Seq[TypeParam], parent: Option[NamedType], members: Seq[MemberDecl], pos: Pos = NoPos) extends FreeDef
   case class ClassNew(namedType: NamedType, members: Seq[MemberDecl], pos: Pos = NoPos) extends ValueExpr
-  case class Comment(text: String, pos: Pos = NoPos) extends BlockContent
 
   sealed trait Variance
   case object Covariant extends Variance

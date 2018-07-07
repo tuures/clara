@@ -18,10 +18,15 @@ object Parser {
   case class Impl(sourceInfo: Option[SourceInfo]) {
     import fastparse.noApi._
 
+    val nlPred = (_: Char) == '\n'
+
     val White = fastparse.WhitespaceApi.Wrapper {
       import fastparse.all._
+
+      val comment = P("//" ~ CharsWhile(!nlPred(_)))
+
       // TODO have comments here
-      NoTrace(" ".rep)
+      NoTrace((" " | comment).rep)
     }
     import White._
 
@@ -62,7 +67,6 @@ object Parser {
     //////
     // Basics
 
-    val nlPred = (_: Char) == '\n'
     val nl = P(CharPred(nlPred)).opaque("newline")
 
     val comma = P(CharPred(_ == ',')).opaque("comma")
@@ -120,7 +124,7 @@ object Parser {
 
     def blockContents(acceptSingle: Boolean): P[Seq[BlockContent]] = {
       val sep = (nl | semi)
-      P(sep.rep ~ (comment | freeDecl | valueExpr).rep(if (acceptSingle) 1 else 2, sep=sep.rep(1)) ~ sep.rep)
+      P(sep.rep ~ (freeDecl | valueExpr).rep(if (acceptSingle) 1 else 2, sep=sep.rep(1)) ~ sep.rep)
     }
 
     val block: P[Block] = P(pp("(" ~ blockContents(false) ~ ")")(Block.apply _))
@@ -231,11 +235,6 @@ object Parser {
     val freeDecl: P[FreeDecl] = P(classDef | valueDef)
 
     val classNew: P[ClassNew] = P(pp("::new" ~ namedType ~ classBody)(ClassNew.apply _))
-
-    //////
-    // Comments
-    // TODO: allow start anywhere not just after newline
-    val comment: P[Comment] = P(pp("//" ~ CharsWhile(!nlPred(_)).!)(Comment.apply _))
 
     //////
     // Top level rules
