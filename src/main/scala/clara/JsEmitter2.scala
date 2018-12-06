@@ -2,7 +2,7 @@
 //
 // import ai.x.safe._
 //
-// object JsEmitter {
+// object JsEmitter2 {
 //
 //   def emitString(valueExpr: Ast.ValueExpr): String = Impl.walkValueExpr(Impl.Indent())(valueExpr)
 //

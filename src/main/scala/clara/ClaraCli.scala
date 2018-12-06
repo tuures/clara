@@ -41,12 +41,12 @@ object ClaraCli {
 
     val blockWithPrelude = Prelude.prependTo(block)
 
-    options.outputPath.foreach { outputPath =>
-      FileIo.writeFile(outputPath, JsEmitter.emitString(blockWithPrelude)) match {
-        case Left(errors) => println(errors.map(_.humanFormat).safeMkString("\n"))
-        case Right(()) => ()
-      }
-    }
+    // options.outputPath.foreach { outputPath =>
+    //   FileIo.writeFile(outputPath, JsEmitter.emitString(blockWithPrelude)) match {
+    //     case Left(errors) => println(errors.map(_.humanFormat).safeMkString("\n"))
+    //     case Right(()) => ()
+    //   }
+    // }
 
     Analyzer.analyze(blockWithPrelude)
   } match {

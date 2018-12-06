@@ -178,7 +178,7 @@ object Parser {
 
         part match {
           case Left((dotIndex, name, typeArgs)) =>
-            MemberSelection(e, name, typeArgs, posFrom(dotIndex), pos)
+            MemberSelection(e, NamedMember(name, typeArgs, posFrom(dotIndex)), pos)
           case Right(argument) =>
             Call(e, argument, pos)
         }

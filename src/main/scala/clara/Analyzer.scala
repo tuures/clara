@@ -235,6 +235,7 @@ object Analyzer {
     def getValueMemberInst(env: Env, pos: Pos, name: String, methodTypeArgs: TypeArgs): An[Option[TypeInst]] =
       getValueMember(env, pos, name).flatMap {
         case Some(valueMember) => valueMember.inst(env, pos, name, methodTypeArgs).map(Some(_))
+        case None => An(None)
       }
     def subst(env: Env, pos: Pos, substMap: SubstMap): An[TypeInst]
   }
@@ -408,7 +409,7 @@ object Analyzer {
       case ValueAs(e, asType, pos) =>
         An.join(walkValueExpr(env)(e), walkTypeInstExpr(env)(asType)).flatMap(expectSubTypeOf(env, pos))
       case Lambda(parameter, body, pos) => walkLambda(env)(parameter, None, body, pos)
-      case MemberSelection(e, memberName, typeArgs, memberPos, pos) =>
+      case MemberSelection(e, NamedMember(memberName, typeArgs, memberPos), pos) =>
         An.join(walkValueExpr(env)(e), walkTypeInstExprs(env)(typeArgs)).flatMap { case (inst, args) =>
           inst.getValueMemberInst(env, memberPos, memberName, args).
           flatMap(_.map(An(_)).getOrElse(An.error(memberPos, safe"type ${inst.signature(env)} does not have member $memberName")))
@@ -709,7 +710,7 @@ object Analyzer {
 
     def instNullary(env: Env, pos: Pos)(name: String): An[TypeInst] = env.useType(name, pos).flatMap(_.inst(env, pos, Nil))
 
-    def instUnit(env: Env, pos: Pos): An[TypeInst] = instNullary(env, pos)("()")
+    def instUnit(env: Env, pos: Pos): An[TypeInst] = instNullary(env, pos)("Unit")
 
     def instTuple(env: Env, pos: Pos)(types: Seq[TypeInst]): An[TypeInst] =
       if (types.length == 2) {

@@ -4,11 +4,12 @@ object Prelude {
   import Ast._
 
   val Prelude: Seq[BlockContent] = Seq(
-    ClassDef("()", Nil, None, Nil),
+    ClassDef("Unit", Nil, None, Nil),
     ClassDef("Int", Nil, None, Seq(
       // FIXME need support for mutually recursive defs
       // ValueDecl("toString", NamedType("String", Nil))
     )),
+    // TODO maybe String should be just an alias for List[Char] where Char is single unicode codepoint
     ClassDef("String", Nil, None, Seq(
       ValueDecl("length", NamedType("Int", Nil))
     )),

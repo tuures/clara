@@ -29,7 +29,8 @@ object Ast {
   case class PatternAs(p: Pattern, t: TypeExpr, pos: Pos = NoPos) extends Pattern
   case class Lambda(parameter: Pattern, body: ValueExpr, pos: Pos = NoPos) extends ValueExpr
   case class FuncType(parameter: TypeExpr, result: TypeExpr, pos: Pos = NoPos) extends TypeExpr
-  case class MemberSelection(e: ValueExpr, memberName: String, typeArgs: Seq[TypeExpr], memberPos: Pos = NoPos, pos: Pos = NoPos) extends ValueExpr
+  case class NamedMember(name: String, typeArgs: Seq[TypeExpr], pos: Pos = NoPos)
+  case class MemberSelection(e: ValueExpr, member: NamedMember, pos: Pos = NoPos) extends ValueExpr
   case class Call(callee: ValueExpr, argument: ValueExpr, pos: Pos = NoPos) extends ValueExpr
   case class ValueDecl(name: String, t: TypeExpr, pos: Pos = NoPos) extends MemberDecl
   case class ValueDef(target: Pattern, e: ValueExpr, pos: Pos = NoPos) extends FreeDef with MemberDef
