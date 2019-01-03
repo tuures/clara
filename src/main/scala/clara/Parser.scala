@@ -88,12 +88,50 @@ object Parser {
 
     val integerLiteral = P(pp(digit.rep(1).!)(IntegerLiteral.apply _))
 
-    val stringLiteral = {
-      val q = '\''
-      val boundary = CharPred(_ == q).opaque("quote")
-      val value = CharsWhile(_ != q)
-      P(pp(boundary ~ value.! ~ boundary)(StringLiteral.apply _))
+    val processedStringLiteral = {
+      implicit class CharToString(c: Char) {
+        def s = c.toString
+      }
+
+      val quote = '"'
+      val escapeStart = '\\'
+      val exprStart = '$'
+
+      val boundary = CharPred(_ == quote).opaque("quote")
+
+      val plainPart: P[StringLiteralPlainPart] = {
+        val nothingSpecial = (c: Char) => c != quote && c != escapeStart && c != exprStart
+
+        P(CharsWhile(nothingSpecial).!.map(StringLiteralPlainPart(_)))
+      }
+
+      val escapeBody = P(quote.s | escapeStart.s | exprStart.s | "n" | "t")
+      val escapePart: P[StringLiteralEscapePart] =
+        P((escapeStart.s ~ escapeBody.!).rep(1).map(StringLiteralEscapePart(_)))
+
+      val exprPart: P[StringLiteralExpressionPart] =
+        P((exprStart.s ~ (parens | namedValue)).map(StringLiteralExpressionPart(_)))
+
+      val part: P[StringLiteralPart] = P(plainPart | escapePart | exprPart)
+
+      P(pp(boundary ~ part.rep(1) ~ boundary)(StringLiteral.apply _))
     }
+
+    val verbatimStringLiteral = {
+      val quote = '\''
+      val boundary = CharPred(_ == quote).opaque("quote")
+      val startMarker: P[Int] = P("#".rep.!.map(_.length) ~ boundary)
+      def endMarker(hashCount: Int) = P(boundary ~ "#".rep(exactly=hashCount))
+      val valueBetweenMarkers = startMarker.flatMap { hashCount =>
+        val end = endMarker(hashCount)
+        val value = (!end ~ AnyChar).rep.!
+
+        (value ~ end).map(s => Seq(StringLiteralPlainPart(s)))
+      }
+      P(pp(valueBetweenMarkers)(StringLiteral.apply _))
+    }
+
+    val stringLiteral = P(processedStringLiteral | verbatimStringLiteral)
 
     //////
     // Tuples

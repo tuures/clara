@@ -28,24 +28,24 @@ class AnalyzerSpec extends FunSuite {
   ve("Calling a higher-order function should infer type of the lambda that has no type annotation in the parameter pattern", "Int") {
     val strLength = Lambda(
       NamePattern("str"), // no type annotation
-      MemberSelection(NamedValue("str"), "length", Nil)
+      MemberSelection(NamedValue("str"), NamedMember("length", Nil))
     )
 
     val applyToHello = Lambda(
       // f: String => Int
       PatternAs(NamePattern("f"), FuncType(NamedType("String", Nil), NamedType("Int", Nil))),
-      Call(NamedValue("f"), StringLiteral("Hello"))
+      Call(NamedValue("f"), StringLiteral(Seq(StringLiteralPlainPart("Hello"))))
     )
 
     Call(applyToHello, strLength)
   }
 
   ve("Block yields type of the last expression", "String") {
-    Block(Seq(UnitLiteral(), StringLiteral("foo")))
+    Block(Seq(UnitLiteral(), StringLiteral(Seq(StringLiteralPlainPart("foo")))))
   }
 
   ve("Selecting plain value member", "Int") {
-    MemberSelection(StringLiteral("foo"), "length", Nil)
+    MemberSelection(StringLiteral(Seq(StringLiteralPlainPart("foo"))), NamedMember("length", Nil))
   }
 
   ve("Class definition and instantiation", "Foo[String]") {
@@ -55,8 +55,8 @@ class AnalyzerSpec extends FunSuite {
         ValueDecl("zot", NamedType("A", Nil))
       )),
       ValueDef(NamePattern("foo"), ClassNew(NamedType("Foo", Seq(NamedType("String", Nil))), Seq(
-        ValueDef(NamePattern("bar"), StringLiteral("foobar")),
-        ValueDef(NamePattern("zot"), StringLiteral("foobar"))
+        ValueDef(NamePattern("bar"), StringLiteral(Seq(StringLiteralPlainPart("foobar")))),
+        ValueDef(NamePattern("zot"), StringLiteral(Seq(StringLiteralPlainPart("foobar"))))
       ))),
       NamedValue("foo")
     ))
@@ -70,8 +70,8 @@ class AnalyzerSpec extends FunSuite {
         ValueDecl("bar", NamedType("String", Nil))
       )),
       ClassNew(NamedType("Foo", Nil), Seq(
-        ValueDef(NamePattern("bar"), StringLiteral("BAR")),
-        ValueDef(NamePattern("zot"), StringLiteral("OOPS"))
+        ValueDef(NamePattern("bar"), StringLiteral(Seq(StringLiteralPlainPart("BAR")))),
+        ValueDef(NamePattern("zot"), StringLiteral(Seq(StringLiteralPlainPart("OOPS"))))
       ))
     ))
   )
@@ -85,7 +85,7 @@ class AnalyzerSpec extends FunSuite {
         ValueDecl("baz", NamedType("String", Nil))
       )),
       ClassNew(NamedType("Foo", Nil), Seq(
-        ValueDef(NamePattern("bar"), StringLiteral("BAR"))
+        ValueDef(NamePattern("bar"), StringLiteral(Seq(StringLiteralPlainPart("BAR"))))
       ))
     ))
   )

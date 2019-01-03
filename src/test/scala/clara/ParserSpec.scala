@@ -85,7 +85,47 @@ class ParserSpec extends FunSuite {
 
   parse(p.integerLiteral, "123")(IntegerLiteral("123"))
 
-  parse(p.stringLiteral, "'str'")(StringLiteral("str"))
+  parse(p.processedStringLiteral, """"str($foo)"""")(StringLiteral(Seq(
+    StringLiteralPlainPart("str("),
+    StringLiteralExpressionPart(NamedValue("foo")),
+    StringLiteralPlainPart(")")
+  )))
+  parse(p.processedStringLiteral, "\"line1 \n line2\"")(StringLiteral(Seq(
+    StringLiteralPlainPart("line1 \n line2")
+  )))
+  parse(p.processedStringLiteral, """"str$(bar)"""")(StringLiteral(Seq(
+    StringLiteralPlainPart("str"),
+    StringLiteralExpressionPart(NamedValue("bar"))
+  )))
+  parse(p.processedStringLiteral, """"\"\\10\$\n"""")(StringLiteral(Seq(
+    StringLiteralEscapePart(Seq('"'.toString, """\""")),
+    StringLiteralPlainPart("10"),
+    StringLiteralEscapePart(Seq("$", "n"))
+  )))
+  err(p.processedStringLiteral, """"10$"""")
+  err(p.processedStringLiteral, """"10$$"""")
+  err(p.processedStringLiteral, """"10\"""")
+  err(p.processedStringLiteral, """"10\ö"""")
+
+  parse(p.verbatimStringLiteral, "'str'")(StringLiteral(Seq(
+    StringLiteralPlainPart("str")
+  )))
+  parse(p.verbatimStringLiteral, "'line1 \n line2'")(StringLiteral(Seq(
+    StringLiteralPlainPart("line1 \n line2")
+  )))
+  parse(p.verbatimStringLiteral, """'"'""")(StringLiteral(Seq(
+    StringLiteralPlainPart('"'.toString)
+  )))
+  parse(p.verbatimStringLiteral, """'c:\n\$BAR\\a\'""")(StringLiteral(Seq(
+    StringLiteralPlainPart("""c:\n\$BAR\\a\""")
+  )))
+  parse(p.verbatimStringLiteral, """#'''#""")(StringLiteral(Seq(
+    StringLiteralPlainPart("'")
+  )))
+  parse(p.verbatimStringLiteral, """##''#'##""")(StringLiteral(Seq(
+    StringLiteralPlainPart("'#")
+  )))
+  err(p.verbatimStringLiteral, """'''""")
 
   parse(p.tuple,        "((),())")(
     Tuple(Seq(UnitLiteral(), UnitLiteral()))
@@ -183,13 +223,13 @@ class ParserSpec extends FunSuite {
   )
 
   parse(p.memberOrCall, "foo.length.toString")(
-    MemberSelection(MemberSelection(NamedValue("foo"), "length", Nil), "toString", Nil)
+    MemberSelection(MemberSelection(NamedValue("foo"), NamedMember("length", Nil)), NamedMember("toString", Nil))
   )
   parse(p.memberOrCall, "foo.bar[Zot]")(
-    MemberSelection(NamedValue("foo"), "bar", Seq(NamedType("Zot", Nil)))
+    MemberSelection(NamedValue("foo"), NamedMember("bar", Seq(NamedType("Zot", Nil))))
   )
   parse(p.memberOrCall, "foo.\n  length.\n  toString")(
-    MemberSelection(MemberSelection(NamedValue("foo"), "length", Nil), "toString", Nil)
+    MemberSelection(MemberSelection(NamedValue("foo"), NamedMember("length", Nil)), NamedMember("toString", Nil))
   )
   // nt("multi-line member")(
   //   """|123.
