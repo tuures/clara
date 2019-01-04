@@ -127,12 +127,12 @@ class ParserSpec extends FunSuite {
   )))
   err(p.verbatimStringLiteral, """'''""")
 
-  parse(p.tuple,        "((),())")(
+  parse(p.tuple, "((),())")(
     Tuple(Seq(UnitLiteral(), UnitLiteral()))
   )
   err(p.tuple, "()")
 
-  parse(p.tupleType,    "(() , ())")(
+  parse(p.tupleType, "(() , ())")(
     TupleType(Seq(UnitType(), UnitType()))
   )
   parse(p.tuplePattern, "(\n(),\n(),\n)")(
@@ -248,7 +248,7 @@ class ParserSpec extends FunSuite {
     Call(NamedValue("foo"), NamedValue("bar"))
   )
 
-  parse(p.program, "(foo)")(
+  parse(p.program, "(foo/*comment\n /*  \n // line2*/)")(
     Block(Seq(NamedValue("foo")))
   )
 

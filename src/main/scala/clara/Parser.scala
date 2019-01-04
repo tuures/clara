@@ -23,9 +23,16 @@ object Parser {
     val White = fastparse.WhitespaceApi.Wrapper {
       import fastparse.all._
 
-      val comment = P("//" ~ CharsWhile(!nlPred(_)))
+      val lineComment = P("//" ~ CharsWhile(!nlPred(_)))
 
-      // TODO have comments here
+      val blockComment = {
+        val (start, end) = ("/*", "*/")
+
+        P(start ~ (!end ~ AnyChar).rep ~ end)
+      }
+
+      val comment = P(lineComment | blockComment)
+
       NoTrace((" " | comment).rep)
     }
     import White._
