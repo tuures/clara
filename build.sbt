@@ -1,18 +1,15 @@
-import Dependencies._
+ThisBuild / scalaVersion := "2.12.8"
+ThisBuild / organization := "com.example"
+ThisBuild / version      := "0.1.0-SNAPSHOT"
 
-lazy val root = (project in file(".")).
-  settings(
-    inThisBuild(List(
-      organization := "com.example",
-      scalaVersion := "2.12.1",
-      version      := "0.1.0-SNAPSHOT"
-    )),
+lazy val main = (project in file("."))
+  .settings(
     name := "Clara",
     libraryDependencies ++= Seq(
-      fastParse,
-      sext,
-      safe,
-      scalaTest % Test
+      "com.lihaoyi" %% "fastparse" % "0.4.2",
+      "com.github.nikita-volkov" % "sext" % "0.2.4",
+      "ai.x" %% "safe" % "0.1.0",
+      "org.scalatest" %% "scalatest" % "3.0.1" % Test
     ),
     scalacOptions ++= Seq(
       "-target:jvm-1.8",
