@@ -13,6 +13,7 @@ object Analyzer {
   type An[A] = Either[Errors, A]
 
   object An {
+
     def apply[A](a: A) = Right(a)
 
     def error(pos: Pos, message: String) = Left(Impl.error(pos, message))
@@ -42,33 +43,6 @@ object Analyzer {
 
       join(a, b)
     }
-  }
-
-  case class Namespace[I](m: ListMap[String, I]) {
-    def addOrUpdate(binding: (String, I)): Namespace[I] = this.copy(m = m + binding)
-    def add(binding: (String, I)): Option[Namespace[I]] = m.get(binding._1) match {
-      case Some(_) => None
-      case None => Some(this.addOrUpdate(binding))
-    }
-    def addOrShadow(binding: (String, I), allowShadow: Namespace[I]): Option[Namespace[I]] =
-      if (allowShadow.get(binding._1).isDefined) {
-        Some(addOrUpdate(binding))
-      } else {
-        add(binding)
-      }
-    def get(name: String): Option[I] = m.get(name)
-    def getName(item: I): Option[String] = m.find { case (name, i) => i == item } map(_._1)
-    def length = m.size
-    def names = m.keys
-    def items = m.values
-    def entries = m.toList
-    def filter(p: (String, I) => Boolean) = Namespace.fromEntries(entries.filter(p.tupled))
-    def merge(other: Namespace[I]) = Namespace(m ++ other.m)
-  }
-
-  object Namespace {
-    def empty[I] = Namespace(ListMap.empty[String, I])
-    def fromEntries[I](es: Seq[(String, I)]) = Namespace(ListMap(es:_*))
   }
 
   case class SubstMap(
@@ -180,7 +154,7 @@ object Analyzer {
       header.explicitParent.
       map(_.getAllValueMembers(env, pos)).
       getOrElse(An(Namespace.empty[ValueMember])).
-      map(_.merge(directMembers.values))
+      map(_.mergeShadowingEverything(directMembers.values))
     def abstractValueMembers(env: Env, pos: Pos): An[Namespace[ValueMember]] =
       // TODO check type members also if we add them
       getAllValueMembers(env, pos).map { _.filter {
@@ -260,7 +234,7 @@ object Analyzer {
             valueMember.subst(env, pos, insideSubstMap).map { substValueMember =>
               (name, substValueMember)
             }
-          }).map(Namespace.fromEntries)
+          }).map(Namespace.Impl.fromEntriesUnsafe)
         }
       }
     // def abstractValueMembers(pos: Pos) = con.abstractValueMembers(pos)
