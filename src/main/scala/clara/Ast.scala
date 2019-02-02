@@ -19,7 +19,13 @@ object Ast {
   case class UnitType(pos: Pos = NoPos) extends TypeExpr
   case class UnitPattern(pos: Pos = NoPos) extends Pattern
 
-  case class IntegerLiteral(value: String, pos: Pos = NoPos) extends ValueExpr
+  case class FloatLiteral(whole: String, fraction: String, pos: Pos = NoPos) extends ValueExpr
+
+  sealed trait IntegerLiteralValue
+  case class IntegerLiteralBinValue(value: String) extends IntegerLiteralValue
+  case class IntegerLiteralDecValue(value: String) extends IntegerLiteralValue
+  case class IntegerLiteralHexValue(value: String) extends IntegerLiteralValue
+  case class IntegerLiteral(value: IntegerLiteralValue, pos: Pos = NoPos) extends ValueExpr
 
   sealed trait StringLiteralPart
   case class StringLiteralPlainPart(value: String) extends StringLiteralPart

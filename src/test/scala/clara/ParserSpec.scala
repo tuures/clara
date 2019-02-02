@@ -13,8 +13,8 @@ class ParserSpec extends FunSuite {
       case f: Parsed.Failure =>
         fail(input + "\n" + f.toString + "\n" + f.extra.traced.toString)
       case s: Parsed.Success[_] =>
-        assert(s.index == input.length)
         assert(s.value == expected)
+        assert(s.index == input.length, "did not parse the whole input")
     }
   }
 
@@ -83,15 +83,30 @@ class ParserSpec extends FunSuite {
   parse(p.unitType,    "()")(UnitType())
   parse(p.unitPattern, "()")(UnitPattern())
 
-  parse(p.integerLiteral, "123")(IntegerLiteral("123"))
+  parse(p.floatLiteral, "3.14")(FloatLiteral("3", "14"))
+  parse(p.floatLiteral, "1_000.123_456")(FloatLiteral("1000", "123456"))
+
+  parse(p.integerLiteral, "123")(IntegerLiteral(IntegerLiteralDecValue("123")))
+  parse(p.integerLiteral, "1_000")(IntegerLiteral(IntegerLiteralDecValue("1000")))
+  parse(p.integerLiteral, "1_\n000")(IntegerLiteral(IntegerLiteralDecValue("1000")))
+  parse(p.integerLiteral, "#x1a")(IntegerLiteral(IntegerLiteralHexValue("1a")))
+  parse(p.integerLiteral, "#x1A")(IntegerLiteral(IntegerLiteralHexValue("1A")))
+  parse(p.integerLiteral, "#b0010")(IntegerLiteral(IntegerLiteralBinValue("0010")))
+  err(p.integerLiteral, "1 0")
+  err(p.integerLiteral, "1_")
+  err(p.integerLiteral, "#\nx\n1")
+  err(p.integerLiteral, "#x1g")
+  err(p.integerLiteral, "#x1G")
+  err(p.integerLiteral, "#x1ö")
+  err(p.integerLiteral, "#b2")
 
   parse(p.processedStringLiteral, """"str($foo)"""")(StringLiteral(Seq(
     StringLiteralPlainPart("str("),
     StringLiteralExpressionPart(NamedValue("foo")),
     StringLiteralPlainPart(")")
   )))
-  parse(p.processedStringLiteral, "\"line1 \n line2\"")(StringLiteral(Seq(
-    StringLiteralPlainPart("line1 \n line2")
+  parse(p.processedStringLiteral, "\" line1 \n line2\"")(StringLiteral(Seq(
+    StringLiteralPlainPart(" line1 \n line2")
   )))
   parse(p.processedStringLiteral, """"str$(bar)"""")(StringLiteral(Seq(
     StringLiteralPlainPart("str"),
@@ -107,8 +122,8 @@ class ParserSpec extends FunSuite {
   err(p.processedStringLiteral, """"10\"""")
   err(p.processedStringLiteral, """"10\ö"""")
 
-  parse(p.verbatimStringLiteral, "'str'")(StringLiteral(Seq(
-    StringLiteralPlainPart("str")
+  parse(p.verbatimStringLiteral, "' str '")(StringLiteral(Seq(
+    StringLiteralPlainPart(" str ")
   )))
   parse(p.verbatimStringLiteral, "'line1 \n line2'")(StringLiteral(Seq(
     StringLiteralPlainPart("line1 \n line2")
@@ -312,12 +327,13 @@ class ParserSpec extends FunSuite {
 
   parse(p.classNew, "::new Foo {bar = 1, zot = 2}")(
     ClassNew(NamedType("Foo", Nil), Seq(
-      ValueDef(NamePattern("bar"), IntegerLiteral("1")),
-      ValueDef(NamePattern("zot"), IntegerLiteral("2"))
+      ValueDef(NamePattern("bar"), IntegerLiteral(IntegerLiteralDecValue("1"))),
+      ValueDef(NamePattern("zot"), IntegerLiteral(IntegerLiteralDecValue("2")))
     ))
   )
   // t("::new Foo {}")
 
+  parse(p.valueExpr, "123")(IntegerLiteral(IntegerLiteralDecValue("123")))
   err(p.valueExpr, "foo square = 1")
   err(p.valueExpr, "1square = 1")
 }
