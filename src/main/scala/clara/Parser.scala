@@ -73,6 +73,7 @@ object Parser {
     //
     //   safe"def pp$typeParams$valueParams = $impl"
     // }.foreach(println)
+    def pp[A](p: P[Unit])(f: Pos => A) = withPos(p).map(t => f(t._2))
     def pp[A, B](p: P[A])(f: (A, Pos) => B) = withPos(p).map(t => f(t._1, t._2))
     def pp[A, B, C](p: P[(A, B)])(f: (A, B, Pos) => C) = withPos(p).map(t => f(t._1._1, t._1._2, t._2))
     def pp[A, B, C, D](p: P[(A, B, C)])(f: (A, B, C, Pos) => D) = withPos(p).map(t => f(t._1._1, t._1._2, t._1._3, t._2))
@@ -81,30 +82,31 @@ object Parser {
     //////
     // Basics
 
-    val nl = P(CharPred(nlPred)).opaque("newline")
+    val nl = CharPred(nlPred).opaque("newline")
 
-    val comma = P(CharPred(_ == ',')).opaque("comma")
+    val comma = ","
 
     def commaSeparatedRep[T](min: Int, p: => P[T]) = nl.rep ~ p.rep(min, sep=(comma ~ nl.rep)) ~ comma.? ~ nl.rep
 
-    val dot = P(".").opaque(".")
+    val dot = "."
+
+    val underscore = "_"
 
     //////
     // Literals
 
-    val unitSyntax = P("()")
+    val unitSyntax = "()"
 
-    val unitLiteral: P[UnitLiteral] = P(unitSyntax.map(_ => UnitLiteral()))
+    val unitLiteral: P[UnitLiteral] = P(pp(unitSyntax)(UnitLiteral.apply _))
 
-    val unitType: P[UnitType] = P(unitSyntax.map(_ => UnitType()))
+    val unitType: P[UnitType] = P(pp(unitSyntax)(UnitType.apply _))
 
-    val unitPattern: P[UnitPattern] = P(unitSyntax.map(_ => UnitPattern()))
-
+    val unitPattern: P[UnitPattern] = P(pp(unitSyntax)(UnitPattern.apply _))
 
     val hash = "#"
 
     def withUnderscores[A](digits: => P[A]): P[String] =
-      P(digits.! ~~ ("_" ~ nl.rep ~ digits.!).repX).map { case (head, tail) =>
+      (digits.! ~~ (underscore ~ nl.rep ~ digits.!).repX).map { case (head, tail) =>
         head + tail.foldLeft("")(_ + _)
       }
 
@@ -112,31 +114,31 @@ object Parser {
     val decimalDigits = CharIn('0' to '9').repX(1)
     val decimalDigitsWithUnderscore = withUnderscores(decimalDigits)
 
-    val integerLiteral = {
+    val integerLiteral = P {
       def withPrefixAndUnderscores[A](prefix: String, digits: => P[A]): P[String] =
-        P(hash ~~ prefix ~~ withUnderscores(digits))
+        hash ~~ prefix ~~ withUnderscores(digits)
 
       val binaryDigits = CharIn('0' to '1').repX(1)
-      val binary = P(withPrefixAndUnderscores("b", binaryDigits)).map(IntegerLiteralBinValue.apply _)
+      val binary = withPrefixAndUnderscores("b", binaryDigits).map(IntegerLiteralBinValue.apply _)
 
-      val decimal = P(decimalDigitsWithUnderscore).map(IntegerLiteralDecValue.apply _)
+      val decimal = decimalDigitsWithUnderscore.map(IntegerLiteralDecValue.apply _)
 
       val hexDigits = (decimalDigits | CharIn('A' to 'F') | CharIn('a' to 'f')).repX(1)
-      val hex = P(withPrefixAndUnderscores("x", hexDigits)).map(IntegerLiteralHexValue.apply _)
+      val hex = withPrefixAndUnderscores("x", hexDigits).map(IntegerLiteralHexValue.apply _)
 
-      val value: P[IntegerLiteralValue] = P(binary | decimal | hex)
+      val value: P[IntegerLiteralValue] = binary | decimal | hex
 
-      P(pp(value)(IntegerLiteral.apply _))
+      pp(value)(IntegerLiteral.apply _)
     }
 
-    val floatLiteral = {
+    val floatLiteral = P {
       val n = decimalDigitsWithUnderscore
-      val value: P[(String, String)] = (n ~~ dot ~~ n)
+      val value: P[(String, String)] = n ~~ dot ~~ n
 
-      P(pp(value)(FloatLiteral.apply _))
+      pp(value)(FloatLiteral.apply _)
     }
 
-    val processedStringLiteral = {
+    val processedStringLiteral = P {
       implicit class CharToString(c: Char) {
         def s = c.toString
       }
@@ -154,19 +156,19 @@ object Parser {
       }
 
       // TODO use StringIn for better performance
-      val escapeBody = P(quote.s | escapeStart.s | exprStart.s | "n" | "t")
+      val escapeBody = quote.s | escapeStart.s | exprStart.s | "n" | "t"
       val escapePart: P[StringLiteralEscapePart] =
-        P((escapeStart.s ~~ escapeBody.!).rep(1).map(StringLiteralEscapePart(_)))
+        (escapeStart.s ~~ escapeBody.!).rep(1).map(StringLiteralEscapePart(_))
 
       val exprPart: P[StringLiteralExpressionPart] =
-        P((exprStart.s ~~ (parens | namedValue)).map(StringLiteralExpressionPart(_)))
+        (exprStart.s ~~ (parens | namedValue)).map(StringLiteralExpressionPart(_))
 
       val part: P[StringLiteralPart] = P(plainPart | escapePart | exprPart)
 
-      P(pp(boundary ~~ part.rep(1) ~~ boundary)(StringLiteral.apply _))
+      pp(boundary ~~ part.rep(1) ~~ boundary)(StringLiteral.apply _)
     }
 
-    val verbatimStringLiteral = {
+    val verbatimStringLiteral = P {
       val quote = '\''
       val boundary = CharPred(_ == quote).opaque("quote")
       val startMarker: P[Int] = P(hash.repX.!.map(_.length) ~~ boundary)
@@ -177,15 +179,18 @@ object Parser {
 
         (value ~~ end).map(s => Seq(StringLiteralPlainPart(s)))
       }
-      P(pp(valueBetweenMarkers)(StringLiteral.apply _))
+
+      pp(valueBetweenMarkers)(StringLiteral.apply _)
     }
 
-    val stringLiteral = P(processedStringLiteral | verbatimStringLiteral)
+    val stringLiteral = processedStringLiteral | verbatimStringLiteral
 
     //////
     // Tuples
+    val openParens = "("
+    val closeParens = ")"
 
-    def tupleSyntax[T](p: => P[T]) = ("(" ~ commaSeparatedRep(2, p) ~ ")")
+    def tupleSyntax[T](p: => P[T]) = openParens ~ commaSeparatedRep(2, p) ~ closeParens
 
     val tuple: P[Tuple] = P(pp(tupleSyntax(valueExpr))(Tuple.apply _))
 
@@ -196,7 +201,7 @@ object Parser {
     //////
     // Parens
 
-    def parensSyntax[T](p: => P[T]) = P("(" ~ nl.rep ~ p ~ nl.rep ~ ")")
+    def parensSyntax[T](p: => P[T]) = openParens ~ nl.rep ~ p ~ nl.rep ~ closeParens
 
     val parens: P[ValueExpr] = P(parensSyntax(valueExpr))
 
@@ -207,19 +212,19 @@ object Parser {
     //////
     // Blocks
 
-    val semi = P(CharPred(_ == ';')).opaque("semicolon")
+    val semi = ";"
 
     def blockContents(acceptSingle: Boolean): P[Seq[BlockContent]] = {
       val sep = (nl | semi)
       P(sep.rep ~ (freeDecl | valueExpr).rep(if (acceptSingle) 1 else 2, sep=sep.rep(1)) ~ sep.rep)
     }
 
-    val block: P[Block] = P(pp("(" ~ blockContents(false) ~ ")")(Block.apply _))
+    val block: P[Block] = P(pp(openParens ~ blockContents(false) ~ closeParens)(Block.apply _))
 
     //////
     // Names
 
-    val name = P(CharsWhile(c => Character.isLetter(c)).!).opaque("name") // NOTE: Character.isLetter works only with BMP characters
+    val name = P(CharsWhile(c => Character.isLetter(c)).!) // NOTE: Character.isLetter works only with BMP characters
 
     val namedValue: P[NamedValue] = P(pp(name)(NamedValue.apply _))
 
@@ -237,7 +242,8 @@ object Parser {
     //////
     // ValueAs
 
-    val colon = P(":").opaque(":")
+    val colon = ":"
+
     val typed: P[TypeExpr] = P(colon ~ typeExpr)
 
     val valueAs: P[ValueAs] = P(pp(simple ~ typed)(ValueAs.apply _))
@@ -245,7 +251,8 @@ object Parser {
     //////
     // Function syntax
 
-    val funcArrow = P("=>").opaque("=>")
+    val funcArrow = "=>"
+
     def funcSyntax[T1, T2](p1: => P[T1], p2: => P[T2]) = P(p1 ~ funcArrow ~ nl.rep ~ p2)
 
     val lambda: P[Lambda] = P(pp(funcSyntax(pattern, valueExpr))(Lambda.apply _))
@@ -255,7 +262,7 @@ object Parser {
     //////
     // Member selection / call
 
-    val memberOrCall: P[ValueExpr] = {
+    val memberOrCall: P[ValueExpr] = P {
       type MemberPart = (Int, String, Seq[TypeExpr])
       type CallPart = ValueExpr
       type Part = Either[MemberPart, CallPart]
@@ -273,10 +280,10 @@ object Parser {
         }
       }
 
-      val member = P(Index ~ dot ~ nl.rep ~ name ~ maybeTypeArgs).map(Left(_))
+      val member = (Index ~ dot ~ nl.rep ~ name ~ maybeTypeArgs).map(Left(_))
       val call = simple.map(Right(_))
 
-      P(Index ~ simple ~ ((member | call) ~ Index).rep(1)).map { case (startIndex, base, parts) =>
+      (Index ~ simple ~ ((member | call) ~ Index).rep(1)).map { case (startIndex, base, parts) =>
         val mk = makeNode(startIndex) _
         parts.tail.foldLeft(mk(base, parts.head))(mk)
       }
@@ -287,16 +294,19 @@ object Parser {
     val plus = P("+")
     val minus = P("-")
 
-    val typeParam: P[TypeParam] = {
+    def typeListSyntax[T](p: => P[T]): P[Seq[T]] = P(bracketOpen ~ commaSeparatedRep(1, p) ~ bracketClose)
+
+    val typeParam: P[TypeParam] = P {
       val plusOrMinusVariance: P[Variance] = P(plus.map(_ => Covariant) | minus.map(_ => Contravariant))
       val variance = P(plusOrMinusVariance.?.map(_.getOrElse(Invariant)))
 
-      val arity: P[Int] = typeListSyntax("_").?.map(_.map(_.length).getOrElse(0))
+      val arity: P[Int] = typeListSyntax(underscore).?.map(_.map(_.length).getOrElse(0))
 
-      P(pp(variance ~ name ~ arity)(TypeParam.apply _))
+      pp(variance ~ name ~ arity)(TypeParam.apply _)
     }
 
-    def typeListSyntax[T](p: => P[T]): P[Seq[T]] = P("[" ~ commaSeparatedRep(1, p) ~ "]")
+    val bracketOpen = "["
+    val bracketClose = "]"
 
     val maybeTypeParams: P[Seq[TypeParam]] = typeListSyntax(typeParam).?.map(_.getOrElse(Nil))
 
@@ -304,7 +314,7 @@ object Parser {
 
     //////
     // Declarations
-    val equalsSign = P("=")
+    val equalsSign = "="
 
     val valueDecl: P[ValueDecl] = P(pp(name ~ typed)(ValueDecl.apply _))
 
