@@ -1,4 +1,4 @@
-package clara
+package clara.analyzer
 
 import scala.collection.immutable.ListMap
 

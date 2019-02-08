@@ -1,4 +1,4 @@
-package clara
+package clara.ast
 
 import ai.x.safe._
 

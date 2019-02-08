@@ -1,9 +1,11 @@
-package clara
+package clara.parser
+
+import clara.ast.{Ast, NoPos, Pos, SourcePos, SourceInfo, SourceMessage}
 
 case class Parser(sourceName: String, input: String) {
   val sourceInfo = SourceInfo.fromString(sourceName, input)
 
-  def parseAsProgramBlock: Either[Seq[SourceError], Ast.Block] = {
+  def parseAsProgramBlock: Either[Seq[SourceMessage], Ast.Block] = {
     import fastparse.core.Parsed
 
     Parser.Impl(Some(sourceInfo)).program.parse(input) match {
@@ -15,7 +17,7 @@ case class Parser(sourceName: String, input: String) {
       case Parsed.Failure(p, index, extra) => {
         val msg = s"expected $p TRACE: ${extra.traced.trace}"
 
-        Left(Seq(SourceError(SourcePos(sourceInfo, index, None), s"Parse error: $msg")))
+        Left(Seq(SourceMessage(SourcePos(sourceInfo, index, None), s"Parse error: $msg")))
       }
     }
   }
@@ -216,7 +218,7 @@ object Parser {
 
     def blockContents(acceptSingle: Boolean): P[Seq[BlockContent]] = {
       val sep = (nl | semi)
-      P(sep.rep ~ (freeDecl | valueExpr).rep(if (acceptSingle) 1 else 2, sep=sep.rep(1)) ~ sep.rep)
+      P(sep.rep ~ (inBlockDef | valueExpr).rep(if (acceptSingle) 1 else 2, sep=sep.rep(1)) ~ sep.rep)
     }
 
     val block: P[Block] = P(pp(openParens ~ blockContents(false) ~ closeParens)(Block.apply _))
@@ -313,34 +315,39 @@ object Parser {
     val maybeTypeArgs: P[Seq[TypeExpr]] = typeListSyntax(typeExpr).?.map(_.getOrElse(Nil))
 
     //////
-    // Declarations
+    // In-block defs
     val equalsSign = "="
+    val doubleColon = "::"
+    def keyword(word: String) = doubleColon ~~ word
 
-    val valueDecl: P[ValueDecl] = P(pp(name ~ typed)(ValueDecl.apply _))
+    val valueNamesDef: P[ValueNamesDef] = P(pp(pattern ~ equalsSign ~/ nl.rep ~ valueExpr)(ValueNamesDef.apply _))
 
-    val valueDef: P[ValueDef] = P(pp(pattern ~ !funcArrow ~ equalsSign ~/ nl.rep ~ valueExpr)(ValueDef.apply _))
+    val typeDef: P[TypeDef] = P(pp(keyword("type") ~ name ~ equalsSign ~ underscore)(TypeDef.apply _))
 
-    val methodDecl: P[MethodDecl] = P(pp("::method" ~ name ~ maybeTypeParams ~ typed)(MethodDecl.apply _))
+    val inBlockDef: P[InBlockDef] = P(valueNamesDef | typeDef)
 
-    val methodDef: P[MethodDef] = P(pp("::method" ~ name ~ maybeTypeParams ~ equalsSign ~/ valueExpr)(MethodDef.apply _))
+    //
+    // val valueDecl: P[ValueDecl] = P(pp(name ~ typed)(ValueDecl.apply _))
+    //
+    // val methodDecl: P[MethodDecl] = P(pp("::method" ~ name ~ maybeTypeParams ~ typed)(MethodDecl.apply _))
+    //
+    // val methodDef: P[MethodDef] = P(pp("::method" ~ name ~ maybeTypeParams ~ equalsSign ~/ valueExpr)(MethodDef.apply _))
+    //
+    // val memberDecl: P[MemberDecl] = P(valueDef | methodDef | valueDecl | methodDecl)
+    //
+    // val classBody: P[Seq[MemberDecl]] = {
+    //   val sep = (nl | comma)
+    //   P("{" ~ sep.rep ~ memberDecl.rep(0, sep=sep.rep(1)) ~ sep.rep ~ "}")
+    // }
+    //
+    // val classDef: P[ClassDef] = P(pp("::class" ~ name ~ maybeTypeParams ~ ("<<" ~ namedType).? ~ classBody)(ClassDef.apply _))
 
-    val memberDecl: P[MemberDecl] = P(valueDef | methodDef | valueDecl | methodDecl)
-
-    val classBody: P[Seq[MemberDecl]] = {
-      val sep = (nl | comma)
-      P("{" ~ sep.rep ~ memberDecl.rep(0, sep=sep.rep(1)) ~ sep.rep ~ "}")
-    }
-
-    val classDef: P[ClassDef] = P(pp("::class" ~ name ~ maybeTypeParams ~ ("<<" ~ namedType).? ~ classBody)(ClassDef.apply _))
-
-    val freeDecl: P[FreeDecl] = P(classDef | valueDef)
-
-    val classNew: P[ClassNew] = P(pp("::new" ~ namedType ~ classBody)(ClassNew.apply _))
+    // val classNew: P[ClassNew] = P(pp("::new" ~ namedType ~ classBody)(ClassNew.apply _))
 
     //////
     // Top level rules
 
-    val valueExpr: P[ValueExpr] = P(classNew | memberOrCall | lambda | valueAs | simple)
+    val valueExpr: P[ValueExpr] = P(/*classNew | */memberOrCall | lambda | valueAs | simple)
 
     val typeExpr: P[TypeExpr] = P(funcType | simpleType)
 

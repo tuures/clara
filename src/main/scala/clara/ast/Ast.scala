@@ -1,4 +1,4 @@
-package clara
+package clara.ast
 
 object Ast {
 
@@ -10,8 +10,7 @@ object Ast {
   sealed trait TypeExpr extends Node
   sealed trait Pattern extends Node
   sealed trait ValueExpr extends BlockContent
-  sealed trait FreeDecl extends BlockContent
-  sealed trait FreeDef extends FreeDecl
+  sealed trait InBlockDef extends BlockContent
   sealed trait MemberDecl extends Node
   sealed trait MemberDef extends MemberDecl
 
@@ -54,8 +53,12 @@ object Ast {
 
   case class Call(callee: ValueExpr, argument: ValueExpr, pos: Pos = NoPos) extends ValueExpr
 
-  case class ValueDecl(name: String, t: TypeExpr, pos: Pos = NoPos) extends MemberDecl
-  case class ValueDef(target: Pattern, e: ValueExpr, pos: Pos = NoPos) extends FreeDef with MemberDef
+  case class ValueNamesDef(target: Pattern, e: ValueExpr, pos: Pos = NoPos) extends InBlockDef
+
+  case class TypeDef(name: String, pos: Pos = NoPos) extends InBlockDef
+
+
+  // case class ValueDecl(name: String, t: TypeExpr, pos: Pos = NoPos) extends MemberDecl
 
   sealed trait Variance
   case object Covariant extends Variance
@@ -63,11 +66,11 @@ object Ast {
   case object Invariant extends Variance
   case class TypeParam(variance: Variance, name: String, arity: Int, pos: Pos = NoPos) extends Node
 
-  case class MethodDecl(name: String, typeParams: Seq[TypeParam], t: TypeExpr, pos: Pos = NoPos) extends MemberDecl
-  case class MethodDef(name: String, typeParams: Seq[TypeParam], body: ValueExpr, pos: Pos = NoPos) extends MemberDef
-
-  case class ClassDef(name: String, typeParams: Seq[TypeParam], parent: Option[NamedType], members: Seq[MemberDecl], pos: Pos = NoPos) extends FreeDef
-
-  // TODO members should probably be narrowed to Seq[ValueDef], requires dedicated parser rule, now Seq[MemberDecl] because classBody rule is reused
-  case class ClassNew(namedType: NamedType, members: Seq[MemberDecl], pos: Pos = NoPos) extends ValueExpr
+  // case class MethodDecl(name: String, typeParams: Seq[TypeParam], t: TypeExpr, pos: Pos = NoPos) extends MemberDecl
+  // case class MethodDef(name: String, typeParams: Seq[TypeParam], body: ValueExpr, pos: Pos = NoPos) extends MemberDef
+  //
+  // case class ClassDef(name: String, typeParams: Seq[TypeParam], parent: Option[NamedType], members: Seq[MemberDecl], pos: Pos = NoPos) extends InBlockDef
+  //
+  // // TODO members should probably be narrowed to Seq[ValueDef], requires dedicated parser rule, now Seq[MemberDecl] because classBody rule is reused
+  // case class ClassNew(namedType: NamedType, members: Seq[MemberDecl], pos: Pos = NoPos) extends ValueExpr
 }
