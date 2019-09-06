@@ -19,7 +19,13 @@ Clara is an experimental/WIP statically-typed FP/OO programming language that co
 - Tail call optimization
 
 ### Philosophy and Goals
+
+Simplicity, Safety, Batteries included.
+
+Features should be orthogonal. There should be only one obvious way to do something.
+
 - Syntax: Do not make me think
+  - Syntax should be easy-to-read and also as easy-to-write as possible without compromising the first.
   - Provide small orthogonal language features, do not provide to many ways to do a same thing.
   - Refactoring should require minimal amount of changes on the syntax level, keep related language features syntactically similar.
   - Keep syntax to the minimal, do not reserve words from being used as identifier.
@@ -27,3 +33,17 @@ Clara is an experimental/WIP statically-typed FP/OO programming language that co
 - Semantics: Be safe but practical
   - Prefer immutability but provide unsafe escapes with warning labels.
   - When unsure, default to safety.
+
+## Design decisions
+
+- Functions have (only) one parameter. Return another function or take tuples if multiple parameters are needed.
+- No operators/precedence. All values are objects which have members. `1 + 2 * 3` stuff is common in tutorials but not on real application code. Just use parenthesis.
+- No multiple inheritance. Can sum types be used for `Mouse extends Animal with Device` -> `Animal = Mouse | ...; Device = Mouse | ...` ?
+
+## Influencers
+
+- Scala: syntax, FP/OOP unification
+- Typescript
+- OCaml: all functions are unary, call without parens
+- Reason
+- Smalltalk: no operator precedence, operators are methods, all values are objects

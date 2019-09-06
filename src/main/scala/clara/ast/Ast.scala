@@ -48,7 +48,7 @@ object Ast {
   case class Lambda(parameter: Pattern, body: ValueExpr, pos: Pos = NoPos) extends ValueExpr
   case class FuncType(parameter: TypeExpr, result: TypeExpr, pos: Pos = NoPos) extends TypeExpr
 
-  case class NamedMember(name: String, typeArgs: Seq[TypeExpr], pos: Pos = NoPos)
+  case class NamedMember(name: String, typeArgs: Seq[TypeExpr], pos: Pos = NoPos) extends Node
   case class MemberSelection(e: ValueExpr, member: NamedMember, pos: Pos = NoPos) extends ValueExpr
 
   case class Call(callee: ValueExpr, argument: ValueExpr, pos: Pos = NoPos) extends ValueExpr

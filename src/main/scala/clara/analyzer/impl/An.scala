@@ -1,4 +1,4 @@
-package clara.analyzer
+package clara.analyzer.impl
 
 import clara.util.Message
 
@@ -31,6 +31,7 @@ case class An[+A](w: An.Impl[A]) {
 
 object An {
   type Errors = Vector[Message]
+
   type Impl[+A] = Writer[Either[Errors, A], Message]
 
   def result[A](a: A): An[A] = An(Writer(Right(a), Vector()))
@@ -54,4 +55,7 @@ object An {
 
     An(Writer(seqValue, log))
   }
+
+  // TODO better name `fromOption`?
+  def someOrError[A](o: Option[A], e: => Message): An[A] = o.map(An.result).getOrElse(An.error(e))
 }

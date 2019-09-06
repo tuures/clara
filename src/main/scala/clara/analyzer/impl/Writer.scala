@@ -1,4 +1,4 @@
-package clara.analyzer
+package clara.analyzer.impl
 
 case class Writer[+A, +M](value: A, log: Vector[M]) {
   def flatMap[B, M2 >: M](f: A => Writer[B, M2]) = {

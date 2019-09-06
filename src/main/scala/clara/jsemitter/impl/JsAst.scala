@@ -1,4 +1,4 @@
-package clara
+package clara.jsemitter.impl
 
 import scala.collection.immutable.ListMap
 
@@ -16,4 +16,6 @@ object JsAst {
   case class Named(name: String) extends Expr
   case class Member(e: Expr, name: String) extends Expr
   case class UnaryCall(target: Expr, argument: Expr) extends Expr
+
+  case class Return(expr: Expr) extends Stmt
 }

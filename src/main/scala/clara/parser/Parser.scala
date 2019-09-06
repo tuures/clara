@@ -4,20 +4,22 @@ import clara.ast.{Ast, NoPos, Pos, SourcePos, SourceInfo, SourceMessage}
 
 case class Parser(sourceName: String, input: String) {
   val sourceInfo = SourceInfo.fromString(sourceName, input)
+  val impl = Parser.Impl(Some(sourceInfo))
 
   def parseAsProgramBlock: Either[Seq[SourceMessage], Ast.Block] = {
     import fastparse.core.Parsed
 
-    Parser.Impl(Some(sourceInfo)).program.parse(input) match {
+    impl.program.parse(input) match {
       case Parsed.Success(block, index) => {
         assert(index == sourceInfo.length)
 
         Right(block)
       }
       case Parsed.Failure(p, index, extra) => {
+        val pos = SourcePos(sourceInfo, index, None)
         val msg = s"expected $p TRACE: ${extra.traced.trace}"
 
-        Left(Seq(SourceMessage(SourcePos(sourceInfo, index, None), s"Parse error: $msg")))
+        Left(Seq(SourceMessage(pos, s"Parse error: $msg")))
       }
     }
   }

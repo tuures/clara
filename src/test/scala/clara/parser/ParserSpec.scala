@@ -1,8 +1,10 @@
-package clara
+package clara.parser
 
-import org.scalatest._
 import ai.x.safe._
-import fastparse.all._
+import fastparse.all.{P, Parsed}
+import org.scalatest._
+
+import clara.ast.Ast
 
 class ParserSpec extends FunSuite {
 
@@ -267,8 +269,8 @@ class ParserSpec extends FunSuite {
     Block(Seq(NamedValue("foo")))
   )
 
-  parse(p.valueDef, "a =\u0020\u0020\n\u0020\u0020\n  foo")(
-    ValueDef(NamePattern("a"), NamedValue("foo"))
+  parse(p.valueNamesDef, "a =\u0020\u0020\n\u0020\u0020\n  foo")(
+    ValueNamesDef(NamePattern("a"), NamedValue("foo"))
   )
   // nt("multi-line assignment with extra spaces")(
   //   """|a =\u0020\u0020
@@ -277,22 +279,24 @@ class ParserSpec extends FunSuite {
   //      |""".stripMargin
   // )
 
-  parse(p.classDef, "::class Book {isbn: String, desc: String}")(
-    ClassDef("Book", Nil, None, Seq(
-      ValueDecl("isbn", NamedType("String", Nil)),
-      ValueDecl("desc", NamedType("String", Nil))
-    ))
-  )
+  parse(p.typeDef, "::type String = _")(TypeDef("String"))
+
+  // parse(p.classDef, "::class Book {isbn: String, desc: String}")(
+  //   ClassDef("Book", Nil, None, Seq(
+  //     ValueDecl("isbn", NamedType("String", Nil)),
+  //     ValueDecl("desc", NamedType("String", Nil))
+  //   ))
+  // )
   // nt("single-line class")(
   //   "::class Book {isbn: String, author: String, title: String}"
   // )
 
-  parse(p.classDef, "::class Book[+D] {\n  isbn: String,\n  desc: String,\n}")(
-    ClassDef("Book", Seq(TypeParam(Covariant, "D", 0)), None, Seq(
-      ValueDecl("isbn", NamedType("String", Nil)),
-      ValueDecl("desc", NamedType("String", Nil))
-    ))
-  )
+  // parse(p.classDef, "::class Book[+D] {\n  isbn: String,\n  desc: String,\n}")(
+  //   ClassDef("Book", Seq(TypeParam(Covariant, "D", 0)), None, Seq(
+  //     ValueDecl("isbn", NamedType("String", Nil)),
+  //     ValueDecl("desc", NamedType("String", Nil))
+  //   ))
+  // )
   // nt("class with simple type params and value declarations")(
   //   "::class Book[A] {isbn: String, author: String, title: String}"
   // )
@@ -325,12 +329,12 @@ class ParserSpec extends FunSuite {
   //   "::class Functor[A, M[_]] { ::method map[B]: (A => B) => M[B] }"
   // )
 
-  parse(p.classNew, "::new Foo {bar = 1, zot = 2}")(
-    ClassNew(NamedType("Foo", Nil), Seq(
-      ValueDef(NamePattern("bar"), IntegerLiteral(IntegerLiteralDecValue("1"))),
-      ValueDef(NamePattern("zot"), IntegerLiteral(IntegerLiteralDecValue("2")))
-    ))
-  )
+  // parse(p.classNew, "::new Foo {bar = 1, zot = 2}")(
+  //   ClassNew(NamedType("Foo", Nil), Seq(
+  //     ValueDef(NamePattern("bar"), IntegerLiteral(IntegerLiteralDecValue("1"))),
+  //     ValueDef(NamePattern("zot"), IntegerLiteral(IntegerLiteralDecValue("2")))
+  //   ))
+  // )
   // t("::new Foo {}")
 
   parse(p.valueExpr, "123")(IntegerLiteral(IntegerLiteralDecValue("123")))
