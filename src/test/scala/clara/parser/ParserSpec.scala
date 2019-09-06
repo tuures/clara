@@ -87,6 +87,8 @@ class ParserSpec extends FunSuite {
 
   parse(p.floatLiteral, "3.14")(FloatLiteral("3", "14"))
   parse(p.floatLiteral, "1_000.123_456")(FloatLiteral("1000", "123456"))
+  err(p.floatLiteral, "1._2")
+  err(p.floatLiteral, "1_.2")
 
   parse(p.integerLiteral, "123")(IntegerLiteral(IntegerLiteralDecValue("123")))
   parse(p.integerLiteral, "1_000")(IntegerLiteral(IntegerLiteralDecValue("1000")))
@@ -96,6 +98,7 @@ class ParserSpec extends FunSuite {
   parse(p.integerLiteral, "#b0010")(IntegerLiteral(IntegerLiteralBinValue("0010")))
   err(p.integerLiteral, "1 0")
   err(p.integerLiteral, "1_")
+  err(p.integerLiteral, "1__2")
   err(p.integerLiteral, "#\nx\n1")
   err(p.integerLiteral, "#x1g")
   err(p.integerLiteral, "#x1G")
