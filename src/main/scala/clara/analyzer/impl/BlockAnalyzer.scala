@@ -6,10 +6,11 @@ import clara.util.Message
 
 
 case class BlockAnalyzer(parentEnv: Env) {
+
   def walkBlock(bcs: Seq[Ast.BlockContent], pos: Pos): An[Asg.Block] =
-    bcs.zipWithIndex.foldLeft(WalkBlockState.begin) { case (state, (bc, index)) =>
-      state.step(bc, index == bcs.length - 1)
-    }.end.flatMap { case (contents, returnType, _) =>
+    An.step(bcs.zipWithIndex)(WalkBlockState.begin) { case (currentState, (bc, index)) =>
+      walkBlockContent(currentState, bc, index == bcs.length - 1)
+    }.flatMap { case WalkBlockState(contents, returnType, _) =>
       returnType match {
         case Some(typeInst) => An.result(Asg.Block(contents, typeInst, pos))
         case None => An.error(SourceMessage(pos, "Block must include an expression"))
@@ -17,29 +18,16 @@ case class BlockAnalyzer(parentEnv: Env) {
     }
 
   case class WalkBlockState(
-    currentErrors: Vector[Message],
-    currentLog: Vector[Message],
     currentContents: Vector[Asg.BlockContent],
     currentReturnType: Option[Asg.TypeInst],
     currentEnv: Env
-  ) {
-    def step(bc: Ast.BlockContent, isLast: Boolean): WalkBlockState = {
-      walkBlockContent(currentContents, currentReturnType, currentEnv, bc, isLast) match {
-        case An.Success((contents, returnType, nextEnv), log) => WalkBlockState(currentErrors, currentLog ++ log, contents, returnType, nextEnv)
-        case An.Failure((errors), log) => WalkBlockState(currentErrors ++ errors, currentLog ++ log, currentContents, currentReturnType, currentEnv)
-      }
-    }
-    def end = currentErrors.isEmpty match {
-      case true => An(Writer(Right((currentContents, currentReturnType, currentEnv)), currentLog))
-      case false => An(Writer(Left(currentErrors), currentLog))
-    }
-  }
-
+  )
   object WalkBlockState {
-    def begin = WalkBlockState(Vector[Message](), Vector[Message](), Nil.toVector, None, parentEnv)
+    def begin = WalkBlockState(Nil.toVector, None, parentEnv)
   }
 
-  def walkBlockContent(currentContents: Vector[Asg.BlockContent], currentReturnType: Option[Asg.TypeInst], currentEnv: Env, bc: Ast.BlockContent, isLast: Boolean): An[(Vector[Asg.BlockContent], Option[Asg.TypeInst], Env)] = {
+  def walkBlockContent(currentState: WalkBlockState, bc: Ast.BlockContent, isLast: Boolean): An[WalkBlockState] = {
+    val WalkBlockState(currentContents: Vector[Asg.BlockContent], currentReturnType: Option[Asg.TypeInst], currentEnv: Env) = currentState
 
     (bc match {
       case e: Ast.ValueExpr => {
@@ -61,7 +49,7 @@ case class BlockAnalyzer(parentEnv: Env) {
       }
       // case classDef: Ast.ClassDef => walkClassDef(currentEnv)(classDef) map (newEnv => (newEnv, None))
     }).map { case (content, typeInst, nextEnv) =>
-      (currentContents :+ content, typeInst, nextEnv)
+      WalkBlockState(currentContents :+ content, typeInst, nextEnv)
     }
   }
 
