@@ -72,4 +72,42 @@ object An {
 
   // TODO better name `fromOption`?
   def someOrError[A](o: Option[A], e: => Message): An[A] = o.map(An.result).getOrElse(An.error(e))
+
+  /*
+  Starting with `initialResult` result, for each element in `as`,
+  apply `f` to the result and the element to obtain the next result.
+  If any `An` returned from `f` contains errors, return all accumulated errors,
+  otherwise return the last result.
+
+  In other words, analyse a list of elements when the analysis of the next
+  element depends on the analysis results of the previous element.
+  */
+  def step[A, B](as: Seq[A])(initialResult: B)(f: (B, A) => An[B]): An[B] =
+    as.foldLeft(StepState.begin(initialResult)) { case (state, a) =>
+      state.step(a, f)
+    }.end
+
+  case class StepState[B](
+    currentErrors: Vector[Message],
+    currentLog: Vector[Message],
+    currentResult: B
+  ) {
+    def step[A](a: A, f: (B, A) => An[B]): StepState[B] = f(currentResult, a) match {
+      case An.Success(result, log) => StepState(currentErrors, currentLog ++ log, result)
+      case An.Failure(errors, log) => StepState(currentErrors ++ errors, currentLog ++ log, currentResult)
+    }
+    def end = currentErrors.isEmpty match {
+      case true => An(Writer(Right(currentResult), currentLog))
+      case false => An(Writer(Left(currentErrors), currentLog))
+    }
+  }
+
+  object StepState {
+    def begin[B](currentResult: B) = StepState(Vector[Message](), Vector[Message](), currentResult)
+  }
+
 }
+
+
+
+
