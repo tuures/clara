@@ -34,9 +34,23 @@ object An {
 
   type Impl[+A] = Writer[Either[Errors, A], Message]
 
-  def result[A](a: A): An[A] = An(Writer(Right(a), Vector()))
+  object Success {
+    def apply[A](a: A, log: Vector[Message]): An[A] = An(Writer(Right(a), log))
+    def unapply[A](an: An[A]): Option[(A, Vector[Message])] = an.w.value match {
+      case Right(a) => Some((a, an.w.log))
+      case Left(_) => None
+    }
+  }
+  def result[A](a: A): An[A] = Success(a, Vector())
 
-  def error(e: Message): An[Nothing] = An(Writer(Left(Vector(e)), Vector()))
+  object Failure {
+    def apply[A](errors: Vector[Message], log: Vector[Message]): An[Nothing] = An(Writer(Left(errors), log))
+    def unapply[A](an: An[A]): Option[(Vector[Message], Vector[Message])] = an.w.value match {
+      case Right(_) => None
+      case Left(errors) => Some((errors, an.w.log))
+    }
+  }
+  def error(e: Message): An[Nothing] = Failure(Vector(e), Vector())
 
   def seq[A](ans: Seq[An[A]]) = {
     val Writer(values, log) = Writer.seq(ans.map(_.w))

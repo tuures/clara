@@ -19,11 +19,13 @@ object ClaraCli {
   val OutputPath = "-o"
 
   def parseCmdLineOptions(args: List[String]) = {
+    def unexpected(s: String) = Left(s"Unexpected command line argument: $s")
     def p(as: List[String], o: Options = Options()): Either[String, Options] = as match {
       case `PrintAst` :: rest => p(rest, o.copy(printAst = true))
       case `OutputPath` :: str :: rest => p(rest, o.copy(outputPath = Some(str)))
-      case str :: Nil => Right(o.copy(inputPath = str))
-      case list => Left(s"Unknown option: ${list.safeMkString(" ")}")
+      case str :: rest if (o.inputPath === "-") => p(rest, o.copy(inputPath = str))
+      case Nil => Right(o)
+      case rest => unexpected(rest.safeMkString(" "))
     }
 
     p(args)

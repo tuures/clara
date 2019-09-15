@@ -25,8 +25,8 @@ case class BlockAnalyzer(parentEnv: Env) {
   ) {
     def step(bc: Ast.BlockContent, isLast: Boolean): WalkBlockState = {
       walkBlockContent(currentContents, currentReturnType, currentEnv, bc, isLast) match {
-        case An(Writer(Right((contents, returnType, nextEnv)), log)) => WalkBlockState(currentErrors, currentLog ++ log, contents, returnType, nextEnv)
-        case An(Writer(Left(errors), log)) => WalkBlockState(currentErrors ++ errors, currentLog ++ log, currentContents, currentReturnType, currentEnv)
+        case An.Success((contents, returnType, nextEnv), log) => WalkBlockState(currentErrors, currentLog ++ log, contents, returnType, nextEnv)
+        case An.Failure((errors), log) => WalkBlockState(currentErrors ++ errors, currentLog ++ log, currentContents, currentReturnType, currentEnv)
       }
     }
     def end = currentErrors.isEmpty match {
