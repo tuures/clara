@@ -1,0 +1,25 @@
+{
+    "name": "clara",
+    "displayName": "Clara",
+    "description": "Clara language syntax highlighting",
+    "version": "0.0.1",
+    "engines": {
+        "vscode": "^1.40.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "contributes": {
+        "languages": [{
+            "id": "clara",
+            "aliases": ["Clara", "clara"],
+            "extensions": [".clara"],
+            "configuration": "./language-configuration.json"
+        }],
+        "grammars": [{
+            "language": "clara",
+            "scopeName": "source.clara",
+            "path": "./syntaxes/clara.tmLanguage.json"
+        }]
+    }
+}
