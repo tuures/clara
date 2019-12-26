@@ -2,6 +2,8 @@ package clara
 
 import clara.analyzer.Analyzer
 import clara.ast.AstPrinter
+import clara.jsemitter.JsEmitter
+import clara.jsemitter.impl.JsPrinter
 import clara.parser.Parser
 import clara.util.FileIo
 
@@ -57,9 +59,13 @@ object ClaraCli {
 
     // Analyzer.analyze(blockWithPrelude)
     Analyzer.analyzeProgramBlock(programBlock)
+  }.map { asg =>
+    JsEmitter.emitProgram(asg)
+  }.map { jsAst =>
+    JsPrinter.emitString(jsAst)
   } match {
     // case Right(resultType) => println(resultType.signature(Analyzer.Env.empty))
-    case Right(_) => println("")
+    case Right(out) => println(out)
     case Left(errors) =>
       println(errors.map(_.humanFormat).safeMkString("\n"))
   }

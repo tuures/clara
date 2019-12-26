@@ -2,6 +2,8 @@ package clara.ast
 
 import ai.x.safe._
 
+// TODO unit tests for this file, lot's of + - 1 index stuff
+
 // zero-indexed line and col
 case class LineCol(line: Int, col: Int) {
   // for humans use 1-indexed presentation
@@ -11,19 +13,22 @@ case class LineCol(line: Int, col: Int) {
   def humanFormat = safe"$humanFormatLine:$humanFormatCol"
 }
 
-case class SourceInfo(name: String, lineIndices: Seq[Int], length: Int) {
+case class SourceInfo(name: String, newlineIndices: Vector[Int], length: Int) {
   def lineCol(index: Int): LineCol = {
-    assert(index < length, "index out of range")
+    require(index >= 0 && index < length, "index out of range")
 
-    lineIndices.view.zipWithIndex.
-      find(index >= _._1).
-      map { case (lineStart, lineIndex) =>
-        LineCol(lineIndex, index - lineStart)
-      }.getOrElse(LineCol(0, index))
+    // TODO this could be optimised using a binary search for precessor
+    val lineIndex = newlineIndices.lastIndexWhere(index > _)
+    if (lineIndex === -1) {
+      LineCol(0, index)
+    } else {
+      val newlineIndex = newlineIndices(lineIndex)
+      LineCol(lineIndex + 1, index - (newlineIndex + 1))
+    }
   }
 }
 
 object SourceInfo {
   def fromString(name: String, input: String) =
-    SourceInfo(name, "\n".r.findAllMatchIn(input).map(_.start).toList, input.length)
+    SourceInfo(name, "\n".r.findAllMatchIn(input).map(_.start).toVector, input.length)
 }

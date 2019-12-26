@@ -14,20 +14,22 @@ object Asg {
   }
   sealed trait TypeInst
 
-  case class DummyTypeCon(uniq: Uniq) extends TypeCon {
-    def inst() = DummyTypeInst(this)
+  case class UniqTypeCon(uniq: Uniq) extends TypeCon {
+    def inst() = UniqTypeInst(this)
   }
-  object DummyTypeCon {
-    def apply(): DummyTypeCon = DummyTypeCon(new Uniq())
+  object UniqTypeCon {
+    def apply(): UniqTypeCon = UniqTypeCon(new Uniq())
   }
 
-  case class DummyTypeInst(con: DummyTypeCon) extends TypeInst
+  case class UniqTypeInst(con: UniqTypeCon) extends TypeInst
 
   sealed trait BlockContent
   sealed trait ValueExpr extends BlockContent {
     def typeInst: TypeInst
   }
   sealed trait InBlockDef extends BlockContent
+
+  case class UnitLiteral(typeInst: TypeInst, pos: Pos = NoPos) extends ValueExpr
 
   case class Block(bcs: Seq[BlockContent], typeInst: TypeInst, pos: Pos = NoPos) extends ValueExpr
   case class TypeDef(name: String, pos: Pos = NoPos) extends InBlockDef

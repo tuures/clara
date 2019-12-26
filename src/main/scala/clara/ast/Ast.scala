@@ -11,8 +11,8 @@ object Ast {
   sealed trait Pattern extends Node
   sealed trait ValueExpr extends BlockContent
   sealed trait InBlockDef extends BlockContent
-  sealed trait MemberDecl extends Node
-  sealed trait MemberDef extends MemberDecl
+  // sealed trait MemberDecl extends Node
+  // sealed trait MemberDef extends MemberDecl
 
   case class UnitLiteral(pos: Pos = NoPos) extends ValueExpr
   case class UnitType(pos: Pos = NoPos) extends TypeExpr
@@ -56,6 +56,10 @@ object Ast {
   case class ValueNamesDef(target: Pattern, e: ValueExpr, pos: Pos = NoPos) extends InBlockDef
 
   case class TypeDef(name: String, pos: Pos = NoPos) extends InBlockDef
+
+  case class MethodDef(name: String, body: ValueExpr, pos: Pos = NoPos) extends Node
+
+  case class MethodsDef(typeName: String, methods: Seq[MethodDef], pos: Pos = NoPos) extends InBlockDef
 
 
   // case class ValueDecl(name: String, t: TypeExpr, pos: Pos = NoPos) extends MemberDecl

@@ -1,0 +1,67 @@
+// things that are written often should have terse syntax
+foobarzot = 'foo${bar}zot'
+
+::nativetype JsString = {
+
+}
+
+
+// a b c
+// if b = foo (letters)
+// (a foo) c <=> a.apply(foo).apply(c)
+// if b = * (non-letters)
+// (a.*(c))
+
+::type Point = {
+  x: Int
+  y: Int
+}
+
+::methods p1: Point {
+  distanceFrom = (p2: Point) => (
+    dx = p1.x - p2.x
+    dy = p2.y - p2.y
+
+    ((dx * dx) + (dy * dy)).sqrt
+  )
+}
+
+// unstructured type
+::type UserId = string: String
+userId = ::new UserId 'foo'
+userIdStr = userId.string
+
+// deep copy
+::type Address = {
+  country: String
+  zipCode: String
+}
+::type User = {
+  email: String
+  address: Address
+}
+user = ::new User {
+  email = ''
+  address = ::new Address {
+    country = 'FI'
+    zipCode = '00100'
+  }
+}
+updatedUser = ::copy user {
+  address.zipCode = 12345
+  email = 'foo@bar.invalid'
+}
+// property list notation:
+// {
+//   address.zipCode = 12345
+//   email = 'foo@bar.invalid'
+// }
+
+::type Maybe[T] = None | Some value: T
+
+::methods ma: Maybe[A] = {
+  map[B] = (f: A => B) => ::match ma {
+    | None => None
+    | Some(v: A) => ::new Some (f v)
+  }
+}

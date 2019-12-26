@@ -1,0 +1,3 @@
+import clara._
+parser.Parser("input", util.FileIo.readFile("input.clara").toOption.get).parseAsProgramBlock
+ast.AstPrinter.print(res0.toOption.get)
