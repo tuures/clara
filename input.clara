@@ -1,0 +1,13 @@
+::type Int = ()
+
+::type String = ()
+
+::declare ::methods Int {
+  plus: Int => Int // does not actually exist
+}
+
+::declare ::methods String {
+  length: Int
+}
+
+()

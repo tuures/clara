@@ -31,12 +31,14 @@ case class BlockAnalyzer(parentEnv: Env) {
 
     (bc match {
       case e: Ast.ValueExpr => {
+        // TODO
         /*val discardWarning = if (!isLast && !isUnit) Seq(SourceMessage(bc.pos, "Non-Unit value discarded in block")) else Nil*/
         /*.tell(discardWarning)*/
         ValueExprAnalyzer(currentEnv).walkValueExpr(e).
           map(content => (content, Some(content.typeInst), currentEnv))
       }
       case Ast.ValueNamesDef(target, e, pos) => {
+        // TODO
         // ValueExprAnalyzer(currentEnv).walkValueExpr(e).flatMap { valueExpr =>
         //   walkValueDef(currentEnv, target, valueExpr.typeInst)
         // }
@@ -44,7 +46,7 @@ case class BlockAnalyzer(parentEnv: Env) {
         ???
       }
       case Ast.TypeDef(name, pos) => {
-        currentEnv.addType((name, Asg.DummyTypeCon()), pos).
+        currentEnv.addType((name, Asg.UniqTypeCon()), pos).
           map(nextEnv => (Asg.TypeDef(name, pos), None, nextEnv))
       }
       // case classDef: Ast.ClassDef => walkClassDef(currentEnv)(classDef) map (newEnv => (newEnv, None))

@@ -1,0 +1,41 @@
+### module support
+
+start from the "entry point" file
+source -> AST -> dependencyAnalyzer -> list of filenames
+starting from first dependency repeat parsing + dependency analysis recursively, on every step append parsed AST
+as node into a dependency tree
+use post-order DFS to analyze the tree
+
+module can either be a regular clara module (.clara) or a native JS module (.js + .d.clara)
+
+all value and type declarations from the top level block of a module are "exported"
+
+imports can appear any level of the code
+
+
+### operators
+
+operators are methods with non-letter name
+examples:
+`foo.bar` -> member (foo, member `bar`)
+`foo .bar` -> member (foo, member `bar`)
+`foo . bar` -> operator (foo, member `.`, apply `bar`)
+`foo asd bar` -> apply (foo, apply asd, apply bar)
+
+
+### equality and friends
+=~ (equivalence, for example rational numbers 2/4 =~ 1/2)
+== equality (structural equality)
+=_= identity (reference equality)
+
+
+-------------------
+functional type system, case class keyword implemented as macro that is a "template" for making new types
+macro is a function in type level
+
+
+----
+
+std lib
+
+- list.soleHead return the head if list has just one item (combined head + assert length == 1)

@@ -2,7 +2,7 @@ package clara.parser
 
 import ai.x.safe._
 import fastparse.all.{P, Parsed}
-import org.scalatest._
+import org.scalatest.FunSuite
 
 import clara.ast.Ast
 

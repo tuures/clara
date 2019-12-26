@@ -1,6 +1,6 @@
 // package clara
 //
-// import org.scalatest._
+// import org.scalatest.FunSuite
 //
 // import ai.x.safe._
 //

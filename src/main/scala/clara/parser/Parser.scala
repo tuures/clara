@@ -324,9 +324,22 @@ object Parser {
 
     val valueNamesDef: P[ValueNamesDef] = P(pp(pattern ~ equalsSign ~/ nl.rep ~ valueExpr)(ValueNamesDef.apply _))
 
+    // TODO
     val typeDef: P[TypeDef] = P(pp(keyword("type") ~ name ~ equalsSign ~ underscore)(TypeDef.apply _))
 
-    val inBlockDef: P[InBlockDef] = P(valueNamesDef | typeDef)
+    val methodDef: P[MethodDef] = P(pp(name ~ equalsSign ~ valueExpr)(MethodDef.apply _))
+
+    val braceOpen = "{"
+    val braceClose = "}"
+
+    val methodsBody: P[Seq[MethodDef]] = {
+      val sep = (nl | comma)
+      P(braceOpen ~ sep.rep ~ methodDef.rep(0, sep=sep.rep(1)) ~ sep.rep ~ braceClose)
+    }
+
+    val methodsDef: P[MethodsDef] = P(pp(keyword("methods") ~ name ~ equalsSign ~ methodsBody)(MethodsDef.apply _))
+
+    val inBlockDef: P[InBlockDef] = P(valueNamesDef | typeDef | methodsDef)
 
     //
     // val valueDecl: P[ValueDecl] = P(pp(name ~ typed)(ValueDecl.apply _))
