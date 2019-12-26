@@ -1,0 +1,6 @@
+*
+*/**
+
+!syntaxes/*
+!language-configuration.json
+!package.json
