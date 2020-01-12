@@ -194,7 +194,7 @@ object Parser {
     val openParens = "("
     val closeParens = ")"
 
-    def tupleSyntax[T](p: => P[T]) = openParens ~ commaSeparatedRep(2, p) ~ closeParens
+    def tupleSyntax[T](element: => P[T]) = openParens ~ commaSeparatedRep(2, element) ~ closeParens
 
     val tuple: P[Tuple] = P(pp(tupleSyntax(valueExpr))(Tuple.apply _))
 
@@ -212,6 +212,21 @@ object Parser {
     val typeParens: P[TypeExpr] = P(parensSyntax(typeExpr))
 
     val patternParens: P[Pattern] = P(parensSyntax(pattern))
+
+    //////
+    // Record
+
+    val braceOpen = "{"
+    val braceClose = "}"
+
+    def recordSyntax[T](field: => P[T]) = {
+      val sep = (nl | comma) ~ nl.rep
+      braceOpen ~ nl.rep ~ field.rep(sep=sep) ~ comma.? ~ nl.rep ~ braceClose
+    }
+
+    // val record = recordSyntax
+
+    // val recordType =
 
     //////
     // Blocks
@@ -257,7 +272,7 @@ object Parser {
 
     val funcArrow = "=>"
 
-    def funcSyntax[T1, T2](p1: => P[T1], p2: => P[T2]) = P(p1 ~ funcArrow ~ nl.rep ~ p2)
+    def funcSyntax[T1, T2](in: => P[T1], out: => P[T2]) = P(in ~ funcArrow ~ nl.rep ~ out)
 
     val lambda: P[Lambda] = P(pp(funcSyntax(pattern, valueExpr))(Lambda.apply _))
 
@@ -298,7 +313,7 @@ object Parser {
     val plus = P("+")
     val minus = P("-")
 
-    def typeListSyntax[T](p: => P[T]): P[Seq[T]] = P(bracketOpen ~ commaSeparatedRep(1, p) ~ bracketClose)
+    def typeListSyntax[T](item: => P[T]): P[Seq[T]] = P(bracketOpen ~ commaSeparatedRep(1, item) ~ bracketClose)
 
     val typeParam: P[TypeParam] = P {
       val plusOrMinusVariance: P[Variance] = P(plus.map(_ => Covariant) | minus.map(_ => Contravariant))
@@ -325,19 +340,15 @@ object Parser {
     val valueNamesDef: P[ValueNamesDef] = P(pp(pattern ~ equalsSign ~/ nl.rep ~ valueExpr)(ValueNamesDef.apply _))
 
     // TODO
-    val typeDef: P[TypeDef] = P(pp(keyword("type") ~ name ~ equalsSign ~ underscore)(TypeDef.apply _))
+    val typeDef: P[TypeDef] = P(pp(keyword("type") ~ name ~ equalsSign ~ typeExpr)(TypeDef.apply _))
+
+    val methodDecl: P[MethodDecl] = P(pp(name ~ typed)(MethodDecl.apply _))
 
     val methodDef: P[MethodDef] = P(pp(name ~ equalsSign ~ valueExpr)(MethodDef.apply _))
 
-    val braceOpen = "{"
-    val braceClose = "}"
+    val methodsBody: P[Seq[Method]] = P(recordSyntax(methodDecl | methodDef))
 
-    val methodsBody: P[Seq[MethodDef]] = {
-      val sep = (nl | comma)
-      P(braceOpen ~ sep.rep ~ methodDef.rep(0, sep=sep.rep(1)) ~ sep.rep ~ braceClose)
-    }
-
-    val methodsDef: P[MethodsDef] = P(pp(keyword("methods") ~ name ~ equalsSign ~ methodsBody)(MethodsDef.apply _))
+    val methodsDef: P[MethodSection] = P(pp(keyword("declare").!.?.map(_.isDefined) ~ keyword("methods") ~/ name ~ equalsSign ~ methodsBody)(MethodSection.apply _))
 
     val inBlockDef: P[InBlockDef] = P(valueNamesDef | typeDef | methodsDef)
 

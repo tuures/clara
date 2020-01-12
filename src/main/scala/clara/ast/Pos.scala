@@ -17,6 +17,8 @@ case class SourcePos(sourceInfo: SourceInfo, fromIndex: Int, untilIndex: Option[
 
     safe"${sourceInfo.name}:$from$until"
   }
+
+  override def toString() = s"SourcePos($humanFormat)"
 }
 case object NoPos extends Pos {
   val humanFormat = "unknown position"

@@ -11,8 +11,7 @@ object Ast {
   sealed trait Pattern extends Node
   sealed trait ValueExpr extends BlockContent
   sealed trait InBlockDef extends BlockContent
-  // sealed trait MemberDecl extends Node
-  // sealed trait MemberDef extends MemberDecl
+  sealed trait Method extends Node
 
   case class UnitLiteral(pos: Pos = NoPos) extends ValueExpr
   case class UnitType(pos: Pos = NoPos) extends TypeExpr
@@ -36,6 +35,10 @@ object Ast {
   case class TupleType(ts: Seq[TypeExpr], pos: Pos = NoPos) extends TypeExpr
   case class TuplePattern(ps: Seq[Pattern], pos: Pos = NoPos) extends Pattern
 
+  // case class Record(es: Seq[FieldDef], pos: Pos = NoPos) extends ValueExpr
+  // case class RecordType(ts: Seq[FieldDecl], pos: Pos = NoPos) extends TypeExpr
+  // case class RecordPattern(ps: Seq[FieldPattern], pos: Pos = NoPos) extends Pattern
+
   case class Block(bcs: Seq[BlockContent], pos: Pos = NoPos) extends ValueExpr
 
   case class NamedValue(name: String, pos: Pos = NoPos) extends ValueExpr
@@ -55,11 +58,12 @@ object Ast {
 
   case class ValueNamesDef(target: Pattern, e: ValueExpr, pos: Pos = NoPos) extends InBlockDef
 
-  case class TypeDef(name: String, pos: Pos = NoPos) extends InBlockDef
+  case class TypeDef(name: String, t: TypeExpr, pos: Pos = NoPos) extends InBlockDef
 
-  case class MethodDef(name: String, body: ValueExpr, pos: Pos = NoPos) extends Node
+  case class MethodDecl(name: String, t: TypeExpr, pos: Pos = NoPos) extends Method
+  case class MethodDef(name: String, body: ValueExpr, pos: Pos = NoPos) extends Method
 
-  case class MethodsDef(typeName: String, methods: Seq[MethodDef], pos: Pos = NoPos) extends InBlockDef
+  case class MethodSection(isDecl: Boolean, targetTypeName: String, methods: Seq[Method], pos: Pos = NoPos) extends InBlockDef
 
 
   // case class ValueDecl(name: String, t: TypeExpr, pos: Pos = NoPos) extends MemberDecl

@@ -41,6 +41,7 @@ object An {
       case Left(_) => None
     }
   }
+  /** builds a Success with the result and no log */
   def result[A](a: A): An[A] = Success(a, Vector())
 
   object Failure {
@@ -50,6 +51,7 @@ object An {
       case Left(errors) => Some((errors, an.w.log))
     }
   }
+  /** builds a Failure with the error and no log */
   def error(e: Message): An[Nothing] = Failure(Vector(e), Vector())
 
   def seq[A](ans: Seq[An[A]]) = {
@@ -73,15 +75,15 @@ object An {
   // TODO better name `fromOption`?
   def someOrError[A](o: Option[A], e: => Message): An[A] = o.map(An.result).getOrElse(An.error(e))
 
-  /*
-  Starting with `initialResult` result, for each element in `as`,
-  apply `f` to the result and the element to obtain the next result.
-  If any `An` returned from `f` contains errors, return all accumulated errors,
-  otherwise return the last result.
-
-  In other words, analyse a list of elements when the analysis of the next
-  element depends on the analysis results of the previous element.
-  */
+  /**
+   * Starting with `initialResult` result, for each element in `as`,
+   * apply `f` to the result and the element to obtain the next result.
+   * If any `An` returned from `f` contains errors, return all accumulated errors,
+   * otherwise return the last result.
+   *
+   * In other words, analyse a list of elements when the analysis of the next
+   * element depends on the analysis results of the previous element.
+   */
   def step[A, B](as: Seq[A])(initialResult: B)(f: (B, A) => An[B]): An[B] =
     as.foldLeft(StepState.begin(initialResult)) { case (state, a) =>
       state.step(a, f)

@@ -39,3 +39,25 @@ macro is a function in type level
 std lib
 
 - list.soleHead return the head if list has just one item (combined head + assert length == 1)
+
+---
+
+if-else, ::match
+
+x < 5 then 1 else 0
+
+x < 5 ::match { true => 1, false => 0}
+
+
+---
+
+Option
+
+https://github.com/scala/scala/blob/2.13.x/src/library/scala/Option.scala
+
+
+---
+
+Repl
+
+https://60devs.com/executing-js-code-with-nodes-vm-module.html
