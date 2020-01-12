@@ -15,7 +15,9 @@ object JsEmitter {
 
   def emitBlockContent(blockContent: Asg.BlockContent) = blockContent match {
     case e: Asg.ValueExpr => Some(emitValueExpr(e))
+    case _: Asg.ValueNamesDef => ???
     case _: Asg.TypeDef => None
+    case _: Asg.MethodSection => ???
   }
 
   def emitValueExpr(valueExpr: Asg.ValueExpr) = valueExpr match {

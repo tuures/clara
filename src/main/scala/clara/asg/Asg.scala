@@ -1,5 +1,6 @@
 package clara.asg
 
+import clara.ast.Ast
 import clara.ast.{Pos, NoPos}
 
 object Asg {
@@ -9,29 +10,34 @@ object Asg {
     def apply() = new Uniq()
   }
 
-  sealed trait TypeCon {
-    def inst(): TypeInst
-  }
-  sealed trait TypeInst
+  // type lattice
+  sealed trait Typ
+  sealed trait StructuralTyp extends Typ
+  case object Top extends Typ
+  case object Bottom extends Typ
+  case object Uni extends StructuralTyp // Unit
+  case class Func(parameter: Typ, result: Typ) extends StructuralTyp
+  case class Unique(structure: StructuralTyp, uniq: Uniq = new Uniq()) extends Typ
 
-  case class UniqTypeCon(uniq: Uniq) extends TypeCon {
-    def inst() = UniqTypeInst(this)
-  }
-  object UniqTypeCon {
-    def apply(): UniqTypeCon = UniqTypeCon(new Uniq())
-  }
-
-  case class UniqTypeInst(con: UniqTypeCon) extends TypeInst
-
+  // program structure
   sealed trait BlockContent
   sealed trait ValueExpr extends BlockContent {
-    def typeInst: TypeInst
+    def typ: Typ
   }
   sealed trait InBlockDef extends BlockContent
 
-  case class UnitLiteral(typeInst: TypeInst, pos: Pos = NoPos) extends ValueExpr
+  case class UnitLiteral() extends ValueExpr {
+    def typ = Uni
+  }
+  case class Block(bcs: Seq[BlockContent], typ: Typ) extends ValueExpr
 
-  case class Block(bcs: Seq[BlockContent], typeInst: TypeInst, pos: Pos = NoPos) extends ValueExpr
-  case class TypeDef(name: String, pos: Pos = NoPos) extends InBlockDef
+  case class NamedValue(name: String, typ: Typ) extends ValueExpr
+
+  case class ValueNamesDef() extends InBlockDef
+  case class TypeDef(name: String) extends InBlockDef
+  sealed trait MethodSection extends InBlockDef
+  case class MethodDefSection(typ: Typ) extends InBlockDef
+  case class MethodDeclSection(typ: Typ) extends InBlockDef
+  case class Method(name: String)
 
 }

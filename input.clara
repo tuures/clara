@@ -2,11 +2,11 @@
 
 ::type String = ()
 
-::declare ::methods Int {
+::declare ::methods Int = {
   plus: Int => Int // does not actually exist
 }
 
-::declare ::methods String {
+::declare ::methods String = {
   length: Int
 }
 
