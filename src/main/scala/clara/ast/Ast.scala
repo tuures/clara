@@ -63,7 +63,7 @@ object Ast {
   case class MethodDecl(name: String, t: TypeExpr, pos: Pos = NoPos) extends Method
   case class MethodDef(name: String, body: ValueExpr, pos: Pos = NoPos) extends Method
 
-  case class MethodSection(isDecl: Boolean, typeName: String, methods: Seq[Method], pos: Pos = NoPos) extends InBlockDef
+  case class MethodSection(isDecl: Boolean, targetTypeName: String, methods: Seq[Method], pos: Pos = NoPos) extends InBlockDef
 
 
   // case class ValueDecl(name: String, t: TypeExpr, pos: Pos = NoPos) extends MemberDecl

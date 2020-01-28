@@ -1,6 +1,6 @@
 package clara.analyzer.impl
 
-import clara.asg.Asg
+import clara.asg.{Asg, Namespace}
 import clara.ast.{Ast, Pos, SourceMessage}
 
 import ai.x.safe._
@@ -55,11 +55,19 @@ case class BlockAnalyzer(parentEnv: Env) {
           case _ => An.error(SourceMessage(typeExpr.pos, "Structural type expected"))
         }
       }
-      case Ast.MethodSection(isDeclSection, typeName, methodAsts, pos) => {
-        currentEnv.useType(typeName, pos /* FIXME: give more accurate Pos */).flatMap { typ =>
-          walkMethods(currentEnv, isDeclSection, methodAsts).flatMap { methodsNs =>
-            currentEnv.addMethods((typ, methodsNs), pos).map { nextEnv =>
-              (Asg.MethodSection(typ), None, nextEnv)
+      case Ast.MethodSection(isDeclSection, targetTypeName, methodAsts, pos) => {
+        currentEnv.useType(targetTypeName, pos /* FIXME: give more accurate Pos */).flatMap { targetType =>
+          (if (isDeclSection) {
+            walkMethodDecls(currentEnv, methodAsts).map { methodDeclNs =>
+              Asg.MethodDeclSection(targetType, methodDeclNs)
+            }
+          } else {
+            walkMethodDefs(currentEnv, methodAsts).map { methodDefNs =>
+              Asg.MethodDefSection(targetType, methodDefNs)
+            }
+          }).flatMap { methodSection =>
+            currentEnv.addMethods((targetType, methodSection), pos).map { nextEnv =>
+              (methodSection, None, nextEnv)
             }
           }
         }
@@ -74,22 +82,29 @@ case class BlockAnalyzer(parentEnv: Env) {
     case _ => ???
   }
 
-  def walkMethods(currentEnv: Env, isDeclSection: Boolean, methodAsts: Seq[Ast.Method]): An[Namespace[Asg.Typ]] = {
-    An.step(methodAsts)(Namespace.empty[Asg.Typ]){ case (ns, methodAst) =>
+  def walkMethodDefs(currentEnv: Env, methodAsts: Seq[Ast.Method]): An[Namespace[Asg.MethodDef]] = {
+    An.step(methodAsts)(Namespace.empty[Asg.MethodDef]){ case (ns, methodAst) =>
       (methodAst match {
-        case _: Ast.MethodDecl if !isDeclSection => An.error(SourceMessage(methodAst.pos, "Definition expected"))
-        case _: Ast.MethodDef if isDeclSection => An.error(SourceMessage(methodAst.pos, "Declaration expected"))
-        case Ast.MethodDecl(name, typeExpr, pos) =>
-          TypeExprAnalyzer(currentEnv).walkTypeExpr(typeExpr).flatMap { typ =>
-            lazy val error = SourceMessage(pos, "Already declared")
-
-            An.someOrError(ns.add((name, typ)), error)
-          }
+        case _: Ast.MethodDecl => An.error(SourceMessage(methodAst.pos, "Method definition expected"))
         case Ast.MethodDef(name, body, pos) =>
           ValueExprAnalyzer(currentEnv).walkValueExpr(body).flatMap { valueExprAsg =>
             lazy val error = SourceMessage(pos, "Already defined")
 
-            An.someOrError(ns.add((name, valueExprAsg.typ)), error)
+            An.someOrError(ns.add((name, Asg.MethodDef(valueExprAsg))), error)
+          }
+      })
+    }
+  }
+
+  def walkMethodDecls(currentEnv: Env, methodAsts: Seq[Ast.Method]): An[Namespace[Asg.MethodDecl]] = {
+    An.step(methodAsts)(Namespace.empty[Asg.MethodDecl]){ case (ns, methodAst) =>
+      (methodAst match {
+        case _: Ast.MethodDef => An.error(SourceMessage(methodAst.pos, "Method declaration expected"))
+        case Ast.MethodDecl(name, typeExpr, pos) =>
+          TypeExprAnalyzer(currentEnv).walkTypeExpr(typeExpr).flatMap { typ =>
+            lazy val error = SourceMessage(pos, "Already declared")
+
+            An.someOrError(ns.add((name, Asg.MethodDecl(typ))), error)
           }
       })
     }

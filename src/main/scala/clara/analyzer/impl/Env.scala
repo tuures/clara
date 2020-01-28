@@ -3,10 +3,10 @@ package clara.analyzer.impl
 import ai.x.safe._
 
 import clara.ast.{Pos, SourceMessage}
-import clara.asg.Asg
+import clara.asg.{Asg, Namespace}
 import clara.asg.Asg.Typ
 
-case class Env(types: Namespace[Typ], values: Namespace[Typ], methods: TypeInfo[Namespace[Typ]]) {
+case class Env(types: Namespace[Typ], values: Namespace[Typ], methods: TypeInfo[Asg.MethodSection]) {
   // def getValue(name: String): Option[Typ] = values.get(name)
   def useValue(name: String, pos: Pos): An[Typ] = An.someOrError(values.get(name), SourceMessage(pos, safe"Not found: value `$name`"))
   // def getType(name: String): Option[Typ] = types.get(name)
@@ -26,12 +26,12 @@ case class Env(types: Namespace[Typ], values: Namespace[Typ], methods: TypeInfo[
 
     An.someOrError(ns, error).map(t => this.copy(types = t))
   }
-  def addMethods(binding: (Typ, Namespace[Typ]), pos: Pos): An[Env] = {
+  def addMethods(binding: (Typ, Asg.MethodSection), pos: Pos): An[Env] = {
     lazy val error = SourceMessage(pos, "Already defined: methods")
     An.someOrError(methods.add(binding), error).map(m => this.copy(methods = m))
   }
 }
 
 object Env {
-  def empty = Env(Namespace.empty[Typ], Namespace.empty[Typ], TypeInfo.empty[Namespace[Asg.Typ]])
+  def empty = Env(Namespace.empty[Typ], Namespace.empty[Typ], TypeInfo.empty[Asg.MethodSection])
 }

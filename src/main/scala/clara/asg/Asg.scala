@@ -3,7 +3,7 @@ package clara.asg
 import clara.ast.Ast
 import clara.ast.{Pos, NoPos}
 
-object Asg {
+object Asg { // split: Types, Terms
 
   class Uniq()
   object Uniq {
@@ -35,9 +35,11 @@ object Asg {
 
   case class ValueNamesDef() extends InBlockDef
   case class TypeDef(name: String) extends InBlockDef
+
   sealed trait MethodSection extends InBlockDef
-  case class MethodDefSection(typ: Typ) extends InBlockDef
-  case class MethodDeclSection(typ: Typ) extends InBlockDef
-  case class Method(name: String)
+  case class MethodDeclSection(targetType: Typ, methodsDecls: Namespace[MethodDecl]) extends MethodSection
+  case class MethodDecl(typ: Typ)
+  case class MethodDefSection(targetType: Typ, methodDefs: Namespace[MethodDef]) extends MethodSection
+  case class MethodDef(body: ValueExpr)
 
 }
