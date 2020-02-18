@@ -1,8 +1,8 @@
 .DS_Store
 /project/.bloop/
-/project/target/
-/target/
 /.ensime
 /.ensime_cache/
 /.bloop/
 /.metals/
+/project/metals.sbt
+target/

@@ -6,6 +6,7 @@ object JsAst {
   sealed trait Node
   sealed trait Expr extends Node
   sealed trait Stmt extends Node
+  sealed trait Defi extends Node
 
   case object Undefined extends Expr
   case class NumberLiteral(value: String) extends Expr
@@ -18,4 +19,8 @@ object JsAst {
   case class UnaryCall(target: Expr, argument: Expr) extends Expr
 
   case class Return(expr: Expr) extends Stmt
+
+  case class Const(name: String, e: Expr) extends Defi
+
+  case class Module(nodes: Seq[Node])
 }

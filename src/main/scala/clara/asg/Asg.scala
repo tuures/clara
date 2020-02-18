@@ -21,6 +21,7 @@ object Asg { // split: Types, Terms
 
   // program structure
   sealed trait BlockContent
+  sealed trait Pattern
   sealed trait ValueExpr extends BlockContent {
     def typ: Typ
   }
@@ -32,14 +33,15 @@ object Asg { // split: Types, Terms
   case class Block(bcs: Seq[BlockContent], typ: Typ) extends ValueExpr
 
   case class NamedValue(name: String, typ: Typ) extends ValueExpr
+  case class NamePattern(name: String) extends Pattern
 
-  case class ValueNamesDef() extends InBlockDef
+  case class ValueNamesDef(target: Pattern, e: ValueExpr) extends InBlockDef
   case class TypeDef(name: String) extends InBlockDef
 
   sealed trait MethodSection extends InBlockDef
   case class MethodDeclSection(targetType: Typ, methodsDecls: Namespace[MethodDecl]) extends MethodSection
   case class MethodDecl(typ: Typ)
-  case class MethodDefSection(targetType: Typ, methodDefs: Namespace[MethodDef]) extends MethodSection
+  case class MethodDefSection(typeName: String, targetType: Typ, methodDefs: Namespace[MethodDef]) extends MethodSection
   case class MethodDef(body: ValueExpr)
 
 }

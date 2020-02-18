@@ -63,6 +63,7 @@ object Ast {
   case class MethodDecl(name: String, t: TypeExpr, pos: Pos = NoPos) extends Method
   case class MethodDef(name: String, body: ValueExpr, pos: Pos = NoPos) extends Method
 
+  // TODO: should we allow any type expr as target, not just named type?
   case class MethodSection(isDecl: Boolean, targetTypeName: String, methods: Seq[Method], pos: Pos = NoPos) extends InBlockDef
 
 

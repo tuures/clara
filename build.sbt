@@ -11,6 +11,7 @@ lazy val main = (project in file("."))
       "ai.x" %% "safe" % "0.1.0",
       "org.scalatest" %% "scalatest" % "3.0.1" % Test
     ),
+    scalaVersion := "2.12.10",
     scalacOptions ++= Seq(
       "-target:jvm-1.8",
       "-encoding", "UTF-8",
