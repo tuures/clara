@@ -5,7 +5,7 @@ package clara.jsemitter.impl
 import ai.x.safe._
 
 object JsPrinter {
-  def emitString(node: JsAst.Node): String = JsPrinterImpl().walkNode(node)
+  def emitString(module: JsAst.Module): String = JsPrinterImpl().walkModule(module)
 }
 
 case class JsPrinterImpl(i: String = "  ") {
@@ -13,9 +13,12 @@ case class JsPrinterImpl(i: String = "  ") {
 
   val nli = safe"\n$i"
 
-  def walkNode(node: Node) = node match {
+  def walkModule(module: Module) = module.nodes.map(walkNode).safeMkString("\n\n")
+
+  def walkNode(node: Node): String = node match {
     case e: Expr => walkExpr(e)
     case s: Stmt => walkStmt(s)
+    case d: Defi => walkDefi(d)
   }
 
   def walkExpr(expr: Expr): String = expr match {
@@ -45,6 +48,12 @@ case class JsPrinterImpl(i: String = "  ") {
     }
   }
 
-  def walkStmt(expr: Stmt) = ???
+  def walkStmt(stmt: Stmt): String = stmt match {
+    case Return(expr) => safe"return ${walkExpr(expr)}"
+  }
+
+  def walkDefi(defi: Defi): String = defi match {
+    case Const(name, expr) => safe"const $name = ${walkExpr(expr)}"
+  }
 
 }

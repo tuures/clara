@@ -15,7 +15,7 @@ case class BlockAnalyzer(parentEnv: Env) {
     }.flatMap { case WalkBlockState(contents, returnType, _) =>
       returnType match {
         case Some(typ) => An.result(Asg.Block(contents, typ))
-        case None => An.error(SourceMessage(pos, "Block must include an expression"))
+        case None => An.error(SourceMessage(pos, "Block must end with an expression")) // TODO: make it a warning and return
       }
     }
 
@@ -45,7 +45,7 @@ case class BlockAnalyzer(parentEnv: Env) {
       case Ast.ValueNamesDef(target, e, _) => {
         ValueExprAnalyzer(currentEnv).walkValueExpr(e).flatMap { valueExprAsg =>
           walkValueNamesDef(currentEnv, target, valueExprAsg)
-        }.map(nextEnv => (Asg.ValueNamesDef(), None, nextEnv))
+        }.map { case (namesDef, nextEnv) => (namesDef, None, nextEnv) }
       }
       case Ast.TypeDef(name, typeExpr, pos) => {
         TypeExprAnalyzer(currentEnv).walkTypeExpr(typeExpr).flatMap {
@@ -56,6 +56,7 @@ case class BlockAnalyzer(parentEnv: Env) {
         }
       }
       case Ast.MethodSection(isDeclSection, targetTypeName, methodAsts, pos) => {
+        // TODO split into MethodSectionAnalyzer
         currentEnv.useType(targetTypeName, pos /* FIXME: give more accurate Pos */).flatMap { targetType =>
           (if (isDeclSection) {
             walkMethodDecls(currentEnv, methodAsts).map { methodDeclNs =>
@@ -63,7 +64,7 @@ case class BlockAnalyzer(parentEnv: Env) {
             }
           } else {
             walkMethodDefs(currentEnv, methodAsts).map { methodDefNs =>
-              Asg.MethodDefSection(targetType, methodDefNs)
+              Asg.MethodDefSection(targetTypeName, targetType, methodDefNs)
             }
           }).flatMap { methodSection =>
             currentEnv.addMethods((targetType, methodSection), pos).map { nextEnv =>
@@ -77,8 +78,10 @@ case class BlockAnalyzer(parentEnv: Env) {
     }
   }
 
-  def walkValueNamesDef(currentEnv: Env, target: Ast.Pattern, valueExprAsg: Asg.ValueExpr): An[Env] = target match {
-    case Ast.NamePattern(name, pos) => currentEnv.addOrShadowValue((name, valueExprAsg.typ), parentEnv, pos)
+  def walkValueNamesDef(currentEnv: Env, target: Ast.Pattern, valueExprAsg: Asg.ValueExpr): An[(Asg.ValueNamesDef, Env)] = target match {
+    case Ast.NamePattern(name, pos) => currentEnv.addOrShadowValue((name, valueExprAsg.typ), parentEnv, pos).map { nextEnv =>
+      (Asg.ValueNamesDef(Asg.NamePattern(name), valueExprAsg), nextEnv)
+    }
     case _ => ???
   }
 
