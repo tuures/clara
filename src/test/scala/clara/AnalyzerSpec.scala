@@ -34,18 +34,18 @@
 //     val applyToHello = Lambda(
 //       // f: String => Int
 //       PatternAs(NamePattern("f"), FuncType(NamedType("String", Nil), NamedType("Int", Nil))),
-//       Call(NamedValue("f"), StringLiteral(Seq(StringLiteralPlainPart("Hello"))))
+//       Call(NamedValue("f"), StringLiteral(Seq(LiteralValue.StringPlainPart("Hello"))))
 //     )
 //
 //     Call(applyToHello, strLength)
 //   }
 //
 //   ve("Block yields type of the last expression", "String") {
-//     Block(Seq(UnitLiteral(), StringLiteral(Seq(StringLiteralPlainPart("foo")))))
+//     Block(Seq(UnitLiteral(), StringLiteral(Seq(LiteralValue.StringPlainPart("foo")))))
 //   }
 //
 //   ve("Selecting plain value member", "Int") {
-//     MemberSelection(StringLiteral(Seq(StringLiteralPlainPart("foo"))), NamedMember("length", Nil))
+//     MemberSelection(StringLiteral(Seq(LiteralValue.StringPlainPart("foo"))), NamedMember("length", Nil))
 //   }
 //
 //   ve("Class definition and instantiation", "Foo[String]") {
@@ -55,8 +55,8 @@
 //         ValueDecl("zot", NamedType("A", Nil))
 //       )),
 //       ValueDef(NamePattern("foo"), ClassNew(NamedType("Foo", Seq(NamedType("String", Nil))), Seq(
-//         ValueDef(NamePattern("bar"), StringLiteral(Seq(StringLiteralPlainPart("foobar")))),
-//         ValueDef(NamePattern("zot"), StringLiteral(Seq(StringLiteralPlainPart("foobar"))))
+//         ValueDef(NamePattern("bar"), StringLiteral(Seq(LiteralValue.StringPlainPart("foobar")))),
+//         ValueDef(NamePattern("zot"), StringLiteral(Seq(LiteralValue.StringPlainPart("foobar"))))
 //       ))),
 //       NamedValue("foo")
 //     ))
@@ -70,8 +70,8 @@
 //         ValueDecl("bar", NamedType("String", Nil))
 //       )),
 //       ClassNew(NamedType("Foo", Nil), Seq(
-//         ValueDef(NamePattern("bar"), StringLiteral(Seq(StringLiteralPlainPart("BAR")))),
-//         ValueDef(NamePattern("zot"), StringLiteral(Seq(StringLiteralPlainPart("OOPS"))))
+//         ValueDef(NamePattern("bar"), StringLiteral(Seq(LiteralValue.StringPlainPart("BAR")))),
+//         ValueDef(NamePattern("zot"), StringLiteral(Seq(LiteralValue.StringPlainPart("OOPS"))))
 //       ))
 //     ))
 //   )
@@ -85,7 +85,7 @@
 //         ValueDecl("baz", NamedType("String", Nil))
 //       )),
 //       ClassNew(NamedType("Foo", Nil), Seq(
-//         ValueDef(NamePattern("bar"), StringLiteral(Seq(StringLiteralPlainPart("BAR"))))
+//         ValueDef(NamePattern("bar"), StringLiteral(Seq(LiteralValue.StringPlainPart("BAR"))))
 //       ))
 //     ))
 //   )

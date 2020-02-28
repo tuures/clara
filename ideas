@@ -61,3 +61,12 @@ https://github.com/scala/scala/blob/2.13.x/src/library/scala/Option.scala
 Repl
 
 https://60devs.com/executing-js-code-with-nodes-vm-module.html
+
+
+---
+
+Nullary methods:
+
+::methods Boolean {
+  not: => Boolean
+}

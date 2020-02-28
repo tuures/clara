@@ -17,19 +17,11 @@ object Ast {
   case class UnitType(pos: Pos = NoPos) extends TypeExpr
   case class UnitPattern(pos: Pos = NoPos) extends Pattern
 
-  case class FloatLiteral(whole: String, fraction: String, pos: Pos = NoPos) extends ValueExpr
+  case class IntegerLiteral(value: LiteralValue.Integer, pos: Pos = NoPos) extends ValueExpr
 
-  sealed trait IntegerLiteralValue
-  case class IntegerLiteralBinValue(value: String) extends IntegerLiteralValue
-  case class IntegerLiteralDecValue(value: String) extends IntegerLiteralValue
-  case class IntegerLiteralHexValue(value: String) extends IntegerLiteralValue
-  case class IntegerLiteral(value: IntegerLiteralValue, pos: Pos = NoPos) extends ValueExpr
+  case class FloatLiteral(value: LiteralValue.Float, pos: Pos = NoPos) extends ValueExpr
 
-  sealed trait StringLiteralPart
-  case class StringLiteralPlainPart(value: String) extends StringLiteralPart
-  case class StringLiteralEscapePart(escapes: Seq[String]) extends StringLiteralPart
-  case class StringLiteralExpressionPart(e: ValueExpr) extends StringLiteralPart
-  case class StringLiteral(parts: Seq[StringLiteralPart], pos: Pos = NoPos) extends ValueExpr
+  case class StringLiteral(parts: Seq[LiteralValue.StringPart], pos: Pos = NoPos) extends ValueExpr
 
   case class Tuple(es: Seq[ValueExpr], pos: Pos = NoPos) extends ValueExpr
   case class TupleType(ts: Seq[TypeExpr], pos: Pos = NoPos) extends TypeExpr
@@ -52,7 +44,7 @@ object Ast {
   case class FuncType(parameter: TypeExpr, result: TypeExpr, pos: Pos = NoPos) extends TypeExpr
 
   case class NamedMember(name: String, typeArgs: Seq[TypeExpr], pos: Pos = NoPos) extends Node
-  case class MemberSelection(e: ValueExpr, member: NamedMember, pos: Pos = NoPos) extends ValueExpr
+  case class MemberSelection(obj: ValueExpr, member: NamedMember, pos: Pos = NoPos) extends ValueExpr
 
   case class Call(callee: ValueExpr, argument: ValueExpr, pos: Pos = NoPos) extends ValueExpr
 

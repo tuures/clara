@@ -1,27 +1,26 @@
 package clara.analyzer.impl
 
-import clara.asg.{Asg, Namespace}
+import clara.asg.{Terms, Types, Namespace}
 import clara.ast.{Ast, Pos, SourceMessage}
 
 import ai.x.safe._
-import clara.asg.Asg.StructuralTyp
 
 
 case class BlockAnalyzer(parentEnv: Env) {
 
-  def walkBlock(bcs: Seq[Ast.BlockContent], pos: Pos): An[Asg.Block] =
+  def walkBlock(bcs: Seq[Ast.BlockContent], pos: Pos): An[Terms.Block] =
     An.step(bcs.zipWithIndex)(WalkBlockState.begin) { case (currentState, (bc, index)) =>
       walkBlockContent(currentState, bc, index == bcs.length - 1)
     }.flatMap { case WalkBlockState(contents, returnType, _) =>
       returnType match {
-        case Some(typ) => An.result(Asg.Block(contents, typ))
+        case Some(typ) => An.result(Terms.Block(contents, typ))
         case None => An.error(SourceMessage(pos, "Block must end with an expression")) // TODO: make it a warning and return
       }
     }
 
   case class WalkBlockState(
-    currentContents: Vector[Asg.BlockContent],
-    currentReturnType: Option[Asg.Typ],
+    currentContents: Vector[Terms.BlockContent],
+    currentReturnType: Option[Types.Typ],
     currentEnv: Env
   )
   object WalkBlockState {
@@ -29,29 +28,29 @@ case class BlockAnalyzer(parentEnv: Env) {
   }
 
   def walkBlockContent(currentState: WalkBlockState, bc: Ast.BlockContent, isLast: Boolean): An[WalkBlockState] = {
-    val WalkBlockState(currentContents: Vector[Asg.BlockContent], currentReturnType: Option[Asg.Typ], currentEnv: Env) = currentState
+    val WalkBlockState(currentContents: Vector[Terms.BlockContent], currentReturnType: Option[Types.Typ], currentEnv: Env) = currentState
 
     (bc match {
       case valueExprAst: Ast.ValueExpr => {
-        ValueExprAnalyzer(currentEnv).walkValueExpr(valueExprAst).flatMap { valueExprAsg =>
-          val isUnit = valueExprAsg.typ === Asg.Uni
+        ValueExprAnalyzer(currentEnv).walkValueExpr(valueExprAst).flatMap { valueExprTerm =>
+          val isUnit = valueExprTerm.typ === Types.Uni
 
           lazy val discardWarning = SourceMessage(bc.pos, "Non-Unit value discarded in block")
           val maybeDiscardWarning = if (!isLast && !isUnit) Seq(discardWarning) else Nil
 
-          An.result((valueExprAsg, Some(valueExprAsg.typ), currentEnv)).tell(maybeDiscardWarning)
+          An.result((valueExprTerm, Some(valueExprTerm.typ), currentEnv)).tell(maybeDiscardWarning)
         }
       }
       case Ast.ValueNamesDef(target, e, _) => {
-        ValueExprAnalyzer(currentEnv).walkValueExpr(e).flatMap { valueExprAsg =>
-          walkValueNamesDef(currentEnv, target, valueExprAsg)
+        ValueExprAnalyzer(currentEnv).walkValueExpr(e).flatMap { valueExprTerm =>
+          walkValueNamesDef(currentEnv, target, valueExprTerm)
         }.map { case (namesDef, nextEnv) => (namesDef, None, nextEnv) }
       }
       case Ast.TypeDef(name, typeExpr, pos) => {
         TypeExprAnalyzer(currentEnv).walkTypeExpr(typeExpr).flatMap {
-          case st: StructuralTyp =>
-            currentEnv.addOrShadowType((name, Asg.Unique(st)), parentEnv, pos).
-              map(nextEnv => (Asg.TypeDef(name), None, nextEnv))
+          case st: Types.StructuralTyp =>
+            currentEnv.addOrShadowType((name, Types.Unique(st)), parentEnv, pos).
+              map(nextEnv => (Terms.TypeDef(name), None, nextEnv))
           case _ => An.error(SourceMessage(typeExpr.pos, "Structural type expected"))
         }
       }
@@ -60,11 +59,11 @@ case class BlockAnalyzer(parentEnv: Env) {
         currentEnv.useType(targetTypeName, pos /* FIXME: give more accurate Pos */).flatMap { targetType =>
           (if (isDeclSection) {
             walkMethodDecls(currentEnv, methodAsts).map { methodDeclNs =>
-              Asg.MethodDeclSection(targetType, methodDeclNs)
+              Terms.MethodDeclSection(targetType, methodDeclNs)
             }
           } else {
             walkMethodDefs(currentEnv, methodAsts).map { methodDefNs =>
-              Asg.MethodDefSection(targetTypeName, targetType, methodDefNs)
+              Terms.MethodDefSection(targetTypeName, targetType, methodDefNs)
             }
           }).flatMap { methodSection =>
             currentEnv.addMethods((targetType, methodSection), pos).map { nextEnv =>
@@ -78,36 +77,36 @@ case class BlockAnalyzer(parentEnv: Env) {
     }
   }
 
-  def walkValueNamesDef(currentEnv: Env, target: Ast.Pattern, valueExprAsg: Asg.ValueExpr): An[(Asg.ValueNamesDef, Env)] = target match {
-    case Ast.NamePattern(name, pos) => currentEnv.addOrShadowValue((name, valueExprAsg.typ), parentEnv, pos).map { nextEnv =>
-      (Asg.ValueNamesDef(Asg.NamePattern(name), valueExprAsg), nextEnv)
+  def walkValueNamesDef(currentEnv: Env, target: Ast.Pattern, valueExprTerm: Terms.ValueExpr): An[(Terms.ValueNamesDef, Env)] = target match {
+    case Ast.NamePattern(name, pos) => currentEnv.addOrShadowValue((name, valueExprTerm.typ), parentEnv, pos).map { nextEnv =>
+      (Terms.ValueNamesDef(Terms.NamePattern(name), valueExprTerm), nextEnv)
     }
     case _ => ???
   }
 
-  def walkMethodDefs(currentEnv: Env, methodAsts: Seq[Ast.Method]): An[Namespace[Asg.MethodDef]] = {
-    An.step(methodAsts)(Namespace.empty[Asg.MethodDef]){ case (ns, methodAst) =>
+  def walkMethodDefs(currentEnv: Env, methodAsts: Seq[Ast.Method]): An[Namespace[Terms.MethodDef]] = {
+    An.step(methodAsts)(Namespace.empty[Terms.MethodDef]){ case (ns, methodAst) =>
       (methodAst match {
         case _: Ast.MethodDecl => An.error(SourceMessage(methodAst.pos, "Method definition expected"))
         case Ast.MethodDef(name, body, pos) =>
-          ValueExprAnalyzer(currentEnv).walkValueExpr(body).flatMap { valueExprAsg =>
+          ValueExprAnalyzer(currentEnv).walkValueExpr(body).flatMap { valueExprTerm =>
             lazy val error = SourceMessage(pos, "Already defined")
 
-            An.someOrError(ns.add((name, Asg.MethodDef(valueExprAsg))), error)
+            An.someOrError(ns.add((name, Terms.MethodDef(valueExprTerm))), error)
           }
       })
     }
   }
 
-  def walkMethodDecls(currentEnv: Env, methodAsts: Seq[Ast.Method]): An[Namespace[Asg.MethodDecl]] = {
-    An.step(methodAsts)(Namespace.empty[Asg.MethodDecl]){ case (ns, methodAst) =>
+  def walkMethodDecls(currentEnv: Env, methodAsts: Seq[Ast.Method]): An[Namespace[Terms.MethodDecl]] = {
+    An.step(methodAsts)(Namespace.empty[Terms.MethodDecl]){ case (ns, methodAst) =>
       (methodAst match {
         case _: Ast.MethodDef => An.error(SourceMessage(methodAst.pos, "Method declaration expected"))
         case Ast.MethodDecl(name, typeExpr, pos) =>
           TypeExprAnalyzer(currentEnv).walkTypeExpr(typeExpr).flatMap { typ =>
             lazy val error = SourceMessage(pos, "Already declared")
 
-            An.someOrError(ns.add((name, Asg.MethodDecl(typ))), error)
+            An.someOrError(ns.add((name, Terms.MethodDecl(typ))), error)
           }
       })
     }
