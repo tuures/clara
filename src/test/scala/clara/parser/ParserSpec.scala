@@ -90,12 +90,15 @@ class ParserSpec extends FunSuite {
   err(p.floatLiteral, "1._2")
   err(p.floatLiteral, "1_.2")
 
-  parse(p.integerLiteral, "123")(IntegerLiteral(IntegerLiteralDecValue("123")))
-  parse(p.integerLiteral, "1_000")(IntegerLiteral(IntegerLiteralDecValue("1000")))
-  parse(p.integerLiteral, "1_\n000")(IntegerLiteral(IntegerLiteralDecValue("1000")))
-  parse(p.integerLiteral, "#x1a")(IntegerLiteral(IntegerLiteralHexValue("1a")))
-  parse(p.integerLiteral, "#x1A")(IntegerLiteral(IntegerLiteralHexValue("1A")))
-  parse(p.integerLiteral, "#b0010")(IntegerLiteral(IntegerLiteralBinValue("0010")))
+  parse(p.integerLiteral, "123")(IntegerLiteral(LiteralValue.IntegerDec("123")))
+  // parse(p.integerLiteral, "-123")(IntegerLiteral(LiteralValue.IntegerDec("123")))
+  parse(p.integerLiteral, "1_000")(IntegerLiteral(LiteralValue.IntegerDec("1000")))
+  parse(p.integerLiteral, "1_\n000")(IntegerLiteral(LiteralValue.IntegerDec("1000")))
+  parse(p.integerLiteral, "#x1a")(IntegerLiteral(LiteralValue.IntegerHex("1a")))
+  parse(p.integerLiteral, "#x1a")(IntegerLiteral(LiteralValue.IntegerHex("1a")))
+  parse(p.integerLiteral, "#x1A")(IntegerLiteral(LiteralValue.IntegerHex("1A")))
+  parse(p.integerLiteral, "#b0010")(IntegerLiteral(LiteralValue.IntegerBin("0010")))
+  parse(p.integerLiteral, "#b0010")(IntegerLiteral(LiteralValue.IntegerBin("0010")))
   err(p.integerLiteral, "1 0")
   err(p.integerLiteral, "1_")
   err(p.integerLiteral, "1__2")
@@ -106,21 +109,21 @@ class ParserSpec extends FunSuite {
   err(p.integerLiteral, "#b2")
 
   parse(p.processedStringLiteral, """"str($foo)"""")(StringLiteral(Seq(
-    StringLiteralPlainPart("str("),
-    StringLiteralExpressionPart(NamedValue("foo")),
-    StringLiteralPlainPart(")")
+    LiteralValue.StringPlainPart("str("),
+    LiteralValue.StringExpressionPart(NamedValue("foo")),
+    LiteralValue.StringPlainPart(")")
   )))
   parse(p.processedStringLiteral, "\" line1 \n line2\"")(StringLiteral(Seq(
-    StringLiteralPlainPart(" line1 \n line2")
+    LiteralValue.StringPlainPart(" line1 \n line2")
   )))
   parse(p.processedStringLiteral, """"str$(bar)"""")(StringLiteral(Seq(
-    StringLiteralPlainPart("str"),
-    StringLiteralExpressionPart(NamedValue("bar"))
+    LiteralValue.StringPlainPart("str"),
+    LiteralValue.StringExpressionPart(NamedValue("bar"))
   )))
   parse(p.processedStringLiteral, """"\"\\10\$\n"""")(StringLiteral(Seq(
-    StringLiteralEscapePart(Seq('"'.toString, """\""")),
-    StringLiteralPlainPart("10"),
-    StringLiteralEscapePart(Seq("$", "n"))
+    LiteralValue.StringEscapePart(Seq('"'.toString, """\""")),
+    LiteralValue.StringPlainPart("10"),
+    LiteralValue.StringEscapePart(Seq("$", "n"))
   )))
   err(p.processedStringLiteral, """"10$"""")
   err(p.processedStringLiteral, """"10$$"""")
@@ -128,22 +131,22 @@ class ParserSpec extends FunSuite {
   err(p.processedStringLiteral, """"10\ö"""")
 
   parse(p.verbatimStringLiteral, "' str '")(StringLiteral(Seq(
-    StringLiteralPlainPart(" str ")
+    LiteralValue.StringPlainPart(" str ")
   )))
   parse(p.verbatimStringLiteral, "'line1 \n line2'")(StringLiteral(Seq(
-    StringLiteralPlainPart("line1 \n line2")
+    LiteralValue.StringPlainPart("line1 \n line2")
   )))
   parse(p.verbatimStringLiteral, """'"'""")(StringLiteral(Seq(
-    StringLiteralPlainPart('"'.toString)
+    LiteralValue.StringPlainPart('"'.toString)
   )))
   parse(p.verbatimStringLiteral, """'c:\n\$BAR\\a\'""")(StringLiteral(Seq(
-    StringLiteralPlainPart("""c:\n\$BAR\\a\""")
+    LiteralValue.StringPlainPart("""c:\n\$BAR\\a\""")
   )))
   parse(p.verbatimStringLiteral, """#'''#""")(StringLiteral(Seq(
-    StringLiteralPlainPart("'")
+    LiteralValue.StringPlainPart("'")
   )))
   parse(p.verbatimStringLiteral, """##''#'##""")(StringLiteral(Seq(
-    StringLiteralPlainPart("'#")
+    LiteralValue.StringPlainPart("'#")
   )))
   err(p.verbatimStringLiteral, """'''""")
 
@@ -335,13 +338,13 @@ class ParserSpec extends FunSuite {
 
   // parse(p.classNew, "::new Foo {bar = 1, zot = 2}")(
   //   ClassNew(NamedType("Foo", Nil), Seq(
-  //     ValueDef(NamePattern("bar"), IntegerLiteral(IntegerLiteralDecValue("1"))),
-  //     ValueDef(NamePattern("zot"), IntegerLiteral(IntegerLiteralDecValue("2")))
+  //     ValueDef(NamePattern("bar"), IntegerLiteral(LiteralValue.IntegerDec("1"))),
+  //     ValueDef(NamePattern("zot"), IntegerLiteral(LiteralValue.IntegerDec("2")))
   //   ))
   // )
   // t("::new Foo {}")
 
-  parse(p.valueExpr, "123")(IntegerLiteral(IntegerLiteralDecValue("123")))
+  parse(p.valueExpr, "123")(IntegerLiteral(LiteralValue.IntegerDec("123")))
   err(p.valueExpr, "foo square = 1")
   err(p.valueExpr, "1square = 1")
 }

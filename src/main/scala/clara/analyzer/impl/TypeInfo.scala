@@ -1,6 +1,6 @@
 package clara.analyzer.impl
 
-import clara.asg.Asg.Typ
+import clara.asg.Types.Typ
 
 case class TypeInfo[I](m: Map[Typ, I]) {
   def addOrModify(binding: (Typ, I)): TypeInfo[I] = this.copy(m = m + binding)

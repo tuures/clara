@@ -1,13 +1,18 @@
-::type Int = ()
+::type Int = () // = _
 
-::type String = ()
+::type String = () // = _
 
 ::declare ::methods Int = {
-  plus: Int => Int // does not actually exist
+  //binaryOperator +
+  plus: Int => Int
 }
 
 ::declare ::methods String = {
+  //instanceProperty
   length: Int
 }
+
+foo = 1 .plus 1
+
 
 ()

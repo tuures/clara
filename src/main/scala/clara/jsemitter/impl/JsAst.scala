@@ -14,8 +14,11 @@ object JsAst {
   case class ArrayLiteral(values: Seq[Expr]) extends Expr
   case class ObjectLiteral(props: ListMap[String, Expr]) extends Expr
   case class Named(name: String) extends Expr
-  case class UnaryArrowFunc(param: String, body: Seq[Node]) extends Expr
-  case class Member(e: Expr, name: String) extends Expr
+  sealed trait ArrowFunc extends Expr
+  case class NullaryArrowFunc(body: Seq[Node]) extends ArrowFunc
+  case class UnaryArrowFunc(param: String, body: Seq[Node]) extends ArrowFunc
+  case class Member(obj: Expr, memberName: String) extends Expr
+  case class NullaryCall(target: Expr) extends Expr
   case class UnaryCall(target: Expr, argument: Expr) extends Expr
 
   case class Return(expr: Expr) extends Stmt

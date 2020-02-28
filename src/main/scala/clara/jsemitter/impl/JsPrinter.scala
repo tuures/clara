@@ -23,29 +23,35 @@ case class JsPrinterImpl(i: String = "  ") {
 
   def walkExpr(expr: Expr): String = expr match {
     case Undefined => "undefined"
+    case NumberLiteral(value) => value
     case StringLiteral(value) => {
       val quoteChar = "'"
 
       safe"""${quoteChar}${value.replace(quoteChar, s"\\${quoteChar}")}${quoteChar}"""
     }
     case Named(name) => name
-    case UnaryArrowFunc(param, body) => {
-      body match {
-        case Seq((e: JsAst.Expr)) => safe"$param =>$nli" + walkExpr(e) + "\n"
-        case _ => {
-          safe"$param => {" + body.map(walkNode).safeMkString(nli, nli, "") + "\n}"
-        }
-      }
-    }
-    case UnaryCall(target, argument) => {
-      val targetPrinted = walkExpr(target)
-      val wrappedTarget = target match {
-        case _: UnaryArrowFunc => safe"($targetPrinted)"
-        case _ => targetPrinted
-      }
+    case NullaryArrowFunc(body) => walkArrowFunc("()", body)
+    case UnaryArrowFunc(param, body) => walkArrowFunc(param, body)
+    case Member(obj, memberName) => safe"${walkExpr(obj)}.$memberName"
+    case NullaryCall(target) => walkCall(target, "")
+    case UnaryCall(target, argument) => walkCall(target, walkExpr(argument))
+  }
 
-      wrappedTarget + safe"(${walkExpr(argument)})"
+  def walkArrowFunc(param: String, body: Seq[Node]): String = body match {
+    case Seq((e: JsAst.Expr)) => safe"$param =>$nli" + walkExpr(e) + "\n"
+    case _ => {
+      safe"$param => {" + body.map(walkNode).safeMkString(nli, nli, "") + "\n}"
     }
+  }
+
+  def walkCall(target: Expr, argumentPrinted: String) = {
+    val targetPrinted = walkExpr(target)
+    val wrappedTarget = target match {
+      case _: ArrowFunc => safe"($targetPrinted)"
+      case _ => targetPrinted
+    }
+
+    wrappedTarget + safe"(${argumentPrinted})"
   }
 
   def walkStmt(stmt: Stmt): String = stmt match {

@@ -1,6 +1,6 @@
 package clara.parser
 
-import clara.ast.{Ast, NoPos, Pos, SourcePos, SourceInfo, SourceMessage}
+import clara.ast.{Ast, LiteralValue, NoPos, Pos, SourcePos, SourceInfo, SourceMessage}
 
 case class Parser(sourceName: String, input: String) {
   val sourceInfo = SourceInfo.fromString(sourceName, input)
@@ -123,21 +123,21 @@ object Parser {
         hash ~~ prefix ~~ withUnderscores(digits)
 
       val binaryDigits = CharIn('0' to '1').repX(1)
-      val binary = withPrefixAndUnderscores("b", binaryDigits).map(IntegerLiteralBinValue.apply _)
+      val binary = withPrefixAndUnderscores("b", binaryDigits).map(LiteralValue.IntegerBin.apply _)
 
-      val decimal = decimalDigitsWithUnderscore.map(IntegerLiteralDecValue.apply _)
+      val decimal = decimalDigitsWithUnderscore.map(LiteralValue.IntegerDec.apply _)
 
       val hexDigits = (decimalDigits | CharIn('A' to 'F') | CharIn('a' to 'f')).repX(1)
-      val hex = withPrefixAndUnderscores("x", hexDigits).map(IntegerLiteralHexValue.apply _)
+      val hex = withPrefixAndUnderscores("x", hexDigits).map(LiteralValue.IntegerHex.apply _)
 
-      val value: P[IntegerLiteralValue] = binary | decimal | hex
+      val value: P[LiteralValue.Integer] = binary | decimal | hex
 
       pp(value)(IntegerLiteral.apply _)
     }
 
     val floatLiteral = P {
       val n = decimalDigitsWithUnderscore
-      val value: P[(String, String)] = n ~~ dot ~~ n
+      val value = (n ~~ dot ~~ n).map(LiteralValue.Float.tupled)
 
       pp(value)(FloatLiteral.apply _)
     }
@@ -153,21 +153,21 @@ object Parser {
 
       val boundary = CharPred(_ == quote).opaque("quote")
 
-      val plainPart: P[StringLiteralPlainPart] = {
+      val plainPart: P[LiteralValue.StringPlainPart] = {
         val nothingSpecial = (c: Char) => c != quote && c != escapeStart && c != exprStart
 
-        P(CharsWhile(nothingSpecial).!.map(StringLiteralPlainPart(_)))
+        P(CharsWhile(nothingSpecial).!.map(LiteralValue.StringPlainPart(_)))
       }
 
       // TODO use StringIn for better performance
       val escapeBody = quote.s | escapeStart.s | exprStart.s | "n" | "t"
-      val escapePart: P[StringLiteralEscapePart] =
-        (escapeStart.s ~~ escapeBody.!).rep(1).map(StringLiteralEscapePart(_))
+      val escapePart: P[LiteralValue.StringEscapePart] =
+        (escapeStart.s ~~ escapeBody.!).rep(1).map(LiteralValue.StringEscapePart(_))
 
-      val exprPart: P[StringLiteralExpressionPart] =
-        (exprStart.s ~~ (parens | namedValue)).map(StringLiteralExpressionPart(_))
+      val exprPart: P[LiteralValue.StringExpressionPart] =
+        (exprStart.s ~~ (parens | namedValue)).map(LiteralValue.StringExpressionPart(_))
 
-      val part: P[StringLiteralPart] = P(plainPart | escapePart | exprPart)
+      val part: P[LiteralValue.StringPart] = P(plainPart | escapePart | exprPart)
 
       pp(boundary ~~ part.rep(1) ~~ boundary)(StringLiteral.apply _)
     }
@@ -181,7 +181,7 @@ object Parser {
         val end = endMarker(hashCount)
         val value = (!end ~~ AnyChar).repX.!
 
-        (value ~~ end).map(s => Seq(StringLiteralPlainPart(s)))
+        (value ~~ end).map(s => Seq(LiteralValue.StringPlainPart(s)))
       }
 
       pp(valueBetweenMarkers)(StringLiteral.apply _)
@@ -373,7 +373,7 @@ object Parser {
     //////
     // Top level rules
 
-    val valueExpr: P[ValueExpr] = P(/*classNew | */memberOrCall | lambda | valueAs | simple)
+    val valueExpr: P[ValueExpr] = P(/*classNew | */memberOrCall | lambda | valueAs | simple).opaque("expression")
 
     val typeExpr: P[TypeExpr] = P(funcType | simpleType)
 
