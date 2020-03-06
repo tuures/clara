@@ -29,7 +29,9 @@ object JsEmitter {
     case Terms.StringLiteral(parts, _) => emitStringLiteral(parts)
     case Terms.Block(bcs, _) => emitBlock(bcs)
     case Terms.NamedValue(name, _) => JsAst.Named(name)
-    case Terms.MemberSelection(obj, memberName, _) => emitMemberSelection(obj, memberName)
+    case Terms.MemberSelection(obj, memberName, member, _) => emitMemberSelection(obj, memberName, member)
+    case Terms.Call(Terms.MemberSelection(obj, memberName, member, _), argument, _) if member.attributes.emitBinaryOperator =>
+      emitBinaryOperation(obj, memberName, member, argument)
     case Terms.Call(callee, argument, _) => emitCall(callee, argument)
   }
 
@@ -63,8 +65,18 @@ object JsEmitter {
     JsAst.Const(safe"${typeName}$$Methods", JsAst.ObjectLiteral(ListMap(???)))
   }
 
-  def emitMemberSelection(obj: Terms.ValueExpr, memberName: String) =
-    JsAst.Member(emitValueExpr(obj), memberName)
+  def emitMemberName(memberName: String, member: Terms.Member): String = member.attributes.emitName.getOrElse(memberName)
+
+  def emitMemberSelection(obj: Terms.ValueExpr, memberName: String, member: Terms.Member) = {
+    val name = emitMemberName(memberName, member)
+    member.attributes.emitBinaryOperator match {
+      case false => JsAst.Member(emitValueExpr(obj), name)
+      case true => JsAst.UnaryArrowFunc("_", Seq(JsAst.BinaryOperation(name, emitValueExpr(obj), JsAst.Named("_"))))
+    }
+  }
+
+  def emitBinaryOperation(obj: Terms.ValueExpr, memberName: String, member: Terms.Member, argument: Terms.ValueExpr) =
+    JsAst.BinaryOperation(emitMemberName(memberName, member), emitValueExpr(obj), emitValueExpr(argument))
 
   def emitCall(callee: Terms.ValueExpr, argument: Terms.ValueExpr) =
     JsAst.UnaryCall(emitValueExpr(callee), emitValueExpr(argument))

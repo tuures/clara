@@ -88,11 +88,17 @@ case class BlockAnalyzer(parentEnv: Env) {
     An.step(methodAsts)(Namespace.empty[Terms.MethodDef]){ case (ns, methodAst) =>
       (methodAst match {
         case _: Ast.MethodDecl => An.error(SourceMessage(methodAst.pos, "Method definition expected"))
-        case Ast.MethodDef(name, body, pos) =>
-          ValueExprAnalyzer(currentEnv).walkValueExpr(body).flatMap { valueExprTerm =>
+        case Ast.MethodDef(attributes, name, typeOpt, body, pos) =>
+          typeOpt.foreach(_ => ???)
+
+          val memberAttributesAn = walkMemberAttributes(attributes)
+          val bodyTermAn = ValueExprAnalyzer(currentEnv).walkValueExpr(body)
+
+          memberAttributesAn.zip(bodyTermAn).flatMap { case (memberAttributes, bodyTerm) =>
             lazy val error = SourceMessage(pos, "Already defined")
 
-            An.someOrError(ns.add((name, Terms.MethodDef(valueExprTerm))), error)
+            // FIXME check attributes, convert to map
+            An.someOrError(ns.add((name, Terms.MethodDef(memberAttributes, bodyTerm))), error)
           }
       })
     }
@@ -102,13 +108,27 @@ case class BlockAnalyzer(parentEnv: Env) {
     An.step(methodAsts)(Namespace.empty[Terms.MethodDecl]){ case (ns, methodAst) =>
       (methodAst match {
         case _: Ast.MethodDef => An.error(SourceMessage(methodAst.pos, "Method declaration expected"))
-        case Ast.MethodDecl(name, typeExpr, pos) =>
-          TypeExprAnalyzer(currentEnv).walkTypeExpr(typeExpr).flatMap { typ =>
+        case Ast.MethodDecl(attributes, name, typeExpr, pos) =>
+          val memberAttributesAn = walkMemberAttributes(attributes)
+          val typeAn = TypeExprAnalyzer(currentEnv).walkTypeExpr(typeExpr)
+          memberAttributesAn.zip(typeAn).flatMap { case (memberAttributes, typ) =>
             lazy val error = SourceMessage(pos, "Already declared")
 
-            An.someOrError(ns.add((name, Terms.MethodDecl(typ))), error)
+            // FIXME check attributes, convert to map
+            An.someOrError(ns.add((name, Terms.MethodDecl(memberAttributes, typ))), error)
           }
       })
+    }
+  }
+
+  def walkMemberAttributes(attributes: Seq[Ast.Attribute]): An[Terms.MemberAttributes] = {
+    // TODO error for duplicate attributes?
+    An.step(attributes)(Terms.MemberAttributes()) { case (attributes, Ast.Attribute(key, value, pos)) =>
+      (key, value) match {
+        case ("emitKind", Some("binaryOperator")) => An.result(attributes.copy(emitBinaryOperator = true))
+        case ("emitName", Some(emitName)) => An.result(attributes.copy(emitName = Some(emitName)))
+        case _ => An.error(SourceMessage(pos, "Invalid member attribute"))
+      }
     }
   }
 

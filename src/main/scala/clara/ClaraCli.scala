@@ -65,7 +65,10 @@ object ClaraCli {
     JsPrinter.emitString(jsAst)
   } match {
     // case Right(resultType) => println(resultType.signature(Analyzer.Env.empty))
-    case Right(out) => println(out)
+    case Right(out) => options.outputPath match {
+      case Some(outputPath) => FileIo.writeFile(outputPath, out) // FIXME check result
+      case None => println(out)
+    }
     case Left(errors) =>
       println(errors.map(_.humanFormat).safeMkString("\n"))
   }

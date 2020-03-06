@@ -3,16 +3,21 @@
 ::type String = () // = _
 
 ::declare ::methods Int = {
-  //binaryOperator +
+  @[emitKind binaryOperator]
+  @[emitName +]
   plus: Int => Int
+
+  @[emitKind binaryOperator]
+  @[emitName *]
+  multiply: Int => Int
 }
 
 ::declare ::methods String = {
-  //instanceProperty
+  //@[emitKind instanceProperty]
   length: Int
 }
 
-foo = 1 .plus 1
+foo = 1 .plus 2 .multiply 4
 
 
 ()

@@ -12,6 +12,9 @@ object Terms {
     def typ: Typ
   }
   sealed trait InBlockDef extends BlockContent
+  sealed trait Member {
+    def attributes: MemberAttributes
+  }
 
   case class UnitLiteral() extends ValueExpr {
     def typ = Types.Uni
@@ -25,11 +28,8 @@ object Terms {
   case class NamedValue(name: String, typ: Typ) extends ValueExpr
   case class NamePattern(name: String) extends Pattern
 
-  sealed trait MemberLocation
-  case class BinaryOperarator(op: String) extends MemberLocation
-  case object InstanceProperty
-  case object Regular
-  case class MemberSelection(obj: ValueExpr, memberName: String, memberLocation: MemberLocation, typ: Typ) extends ValueExpr
+  case class MemberAttributes(emitBinaryOperator: Boolean = false, emitName: Option[String] = None)
+  case class MemberSelection(obj: ValueExpr, memberName: String, member: Member, typ: Typ) extends ValueExpr
 
   case class Call(callee: ValueExpr, argument: ValueExpr, typ: Typ) extends ValueExpr
 
@@ -38,8 +38,8 @@ object Terms {
 
   sealed trait MethodSection extends InBlockDef
   case class MethodDeclSection(targetType: Typ, methodDecls: Namespace[MethodDecl]) extends MethodSection
-  case class MethodDecl(typ: Typ)
+  case class MethodDecl(attributes: MemberAttributes, typ: Typ) extends Member
   case class MethodDefSection(typeName: String, targetType: Typ, methodDefs: Namespace[MethodDef]) extends MethodSection
-  case class MethodDef(body: ValueExpr)
+  case class MethodDef(attributes: MemberAttributes, body: ValueExpr) extends Member
 
 }
