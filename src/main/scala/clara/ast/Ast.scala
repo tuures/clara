@@ -48,12 +48,14 @@ object Ast {
 
   case class Call(callee: ValueExpr, argument: ValueExpr, pos: Pos = NoPos) extends ValueExpr
 
+  case class Attribute(key: String, value: Option[String], pos: Pos)
+
   case class ValueNamesDef(target: Pattern, e: ValueExpr, pos: Pos = NoPos) extends InBlockDef
 
   case class TypeDef(name: String, t: TypeExpr, pos: Pos = NoPos) extends InBlockDef
 
-  case class MethodDecl(name: String, t: TypeExpr, pos: Pos = NoPos) extends Method
-  case class MethodDef(name: String, body: ValueExpr, pos: Pos = NoPos) extends Method
+  case class MethodDecl(attributes: Seq[Attribute], name: String, t: TypeExpr, pos: Pos = NoPos) extends Method
+  case class MethodDef(attributes: Seq[Attribute], name: String, t: Option[TypeExpr], body: ValueExpr, pos: Pos = NoPos) extends Method
 
   // TODO: should we allow any type expr as target, not just named type?
   case class MethodSection(isDecl: Boolean, targetTypeName: String, methods: Seq[Method], pos: Pos = NoPos) extends InBlockDef

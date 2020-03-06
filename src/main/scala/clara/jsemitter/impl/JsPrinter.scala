@@ -35,6 +35,7 @@ case class JsPrinterImpl(i: String = "  ") {
     case Member(obj, memberName) => safe"${walkExpr(obj)}.$memberName"
     case NullaryCall(target) => walkCall(target, "")
     case UnaryCall(target, argument) => walkCall(target, walkExpr(argument))
+    case BinaryOperation(operator, a, b) => walkBinaryOperation(operator, a, b)
   }
 
   def walkArrowFunc(param: String, body: Seq[Node]): String = body match {
@@ -52,6 +53,16 @@ case class JsPrinterImpl(i: String = "  ") {
     }
 
     wrappedTarget + safe"(${argumentPrinted})"
+  }
+
+  def walkBinaryOperand(e: Expr): String = e match {
+    // wrap inner binary operations in parens to avoid problems with precendence
+    case BinaryOperation(operator, a, b) => safe"(${walkBinaryOperation(operator, a, b)})"
+    case _ => walkExpr(e)
+  }
+
+  def walkBinaryOperation(operator: String, a: Expr, b: Expr): String = {
+    safe"${walkBinaryOperand(a)} $operator ${walkBinaryOperand(b)}"
   }
 
   def walkStmt(stmt: Stmt): String = stmt match {

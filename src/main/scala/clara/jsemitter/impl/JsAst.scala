@@ -20,6 +20,7 @@ object JsAst {
   case class Member(obj: Expr, memberName: String) extends Expr
   case class NullaryCall(target: Expr) extends Expr
   case class UnaryCall(target: Expr, argument: Expr) extends Expr
+  case class BinaryOperation(operator: String, a: Expr, b: Expr) extends Expr
 
   case class Return(expr: Expr) extends Stmt
 

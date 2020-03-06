@@ -4,13 +4,13 @@ import ai.x.safe._
 import fastparse.all.{P, Parsed}
 import org.scalatest.FunSuite
 
-import clara.ast.Ast
+import clara.ast.{Ast, LiteralValue, Meta}
 
 class ParserSpec extends FunSuite {
 
   import Ast._
 
-  def parse[R](parser: P[R], input: String)(expected: Node) = test(safe"valid: ${parser.toString} ${input.replace("\n", "\\n")}") {
+  def parse[R](parser: P[R], input: String)(expected: Any) = test(safe"valid: ${parser.toString} ${input.replace("\n", "\\n")}") {
     parser.parse(input) match {
       case f: Parsed.Failure =>
         fail(input + "\n" + f.toString + "\n" + f.extra.traced.toString)
@@ -85,8 +85,8 @@ class ParserSpec extends FunSuite {
   parse(p.unitType,    "()")(UnitType())
   parse(p.unitPattern, "()")(UnitPattern())
 
-  parse(p.floatLiteral, "3.14")(FloatLiteral("3", "14"))
-  parse(p.floatLiteral, "1_000.123_456")(FloatLiteral("1000", "123456"))
+  parse(p.floatLiteral, "3.14")(FloatLiteral(LiteralValue.Float("3", "14")))
+  parse(p.floatLiteral, "1_000.123_456")(FloatLiteral(LiteralValue.Float("1000", "123456")))
   err(p.floatLiteral, "1._2")
   err(p.floatLiteral, "1_.2")
 
@@ -95,10 +95,10 @@ class ParserSpec extends FunSuite {
   parse(p.integerLiteral, "1_000")(IntegerLiteral(LiteralValue.IntegerDec("1000")))
   parse(p.integerLiteral, "1_\n000")(IntegerLiteral(LiteralValue.IntegerDec("1000")))
   parse(p.integerLiteral, "#x1a")(IntegerLiteral(LiteralValue.IntegerHex("1a")))
-  parse(p.integerLiteral, "#x1a")(IntegerLiteral(LiteralValue.IntegerHex("1a")))
+  // parse(p.integerLiteral, "-#x1a")(IntegerLiteral(LiteralValue.IntegerHex("1a")))
   parse(p.integerLiteral, "#x1A")(IntegerLiteral(LiteralValue.IntegerHex("1A")))
   parse(p.integerLiteral, "#b0010")(IntegerLiteral(LiteralValue.IntegerBin("0010")))
-  parse(p.integerLiteral, "#b0010")(IntegerLiteral(LiteralValue.IntegerBin("0010")))
+  // parse(p.integerLiteral, "-#b0010")(IntegerLiteral(LiteralValue.IntegerBin("0010")))
   err(p.integerLiteral, "1 0")
   err(p.integerLiteral, "1_")
   err(p.integerLiteral, "1__2")
@@ -271,13 +271,17 @@ class ParserSpec extends FunSuite {
     Call(NamedValue("foo"), NamedValue("bar"))
   )
 
-  parse(p.program, "(foo/*comment\n /*  \n // line2*/)")(
-    Block(Seq(NamedValue("foo")))
-  )
+  parse(p.attributes, "@[a b]@[c]")(Seq(Meta("a", Some("b")), Meta("c", None)))
+  parse(p.attributes, "@[a]\n@[c]\n")(Seq(Meta("a", None), Meta("c", None)))
 
   parse(p.valueNamesDef, "a =\u0020\u0020\n\u0020\u0020\n  foo")(
     ValueNamesDef(NamePattern("a"), NamedValue("foo"))
   )
+
+  parse(p.program, "(foo/*comment\n /*  \n // line2*/)")(
+    Block(Seq(NamedValue("foo")))
+  )
+
   // nt("multi-line assignment with extra spaces")(
   //   """|a =\u0020\u0020
   //      |\u0020\u0020

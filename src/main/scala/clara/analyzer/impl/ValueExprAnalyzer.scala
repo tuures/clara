@@ -4,6 +4,7 @@ import clara.asg.{Terms, Types}
 import clara.ast.{Ast, Pos, SourceMessage}
 
 import ai.x.safe._
+import clara.ast.Ast.Method
 
 case class ValueExprAnalyzer(env: Env) {
   def walkValueExpr(valueExpr: Ast.ValueExpr): An[Terms.ValueExpr] = valueExpr match {
@@ -21,8 +22,8 @@ case class ValueExprAnalyzer(env: Env) {
     case Ast.NamedValue(name, pos) => env.useValue(name, pos).map(typ => Terms.NamedValue(name, typ))
     case Ast.MemberSelection(obj, Ast.NamedMember(name, typeArgs, memberPos), pos) =>
       walkValueExpr(obj).flatMap { objectTerm =>
-        walkMemberSelection(objectTerm, name, memberPos).map { typ =>
-          Terms.MemberSelection(objectTerm, name, typ)
+        walkMemberSelection(objectTerm, name, memberPos).map { case (member, typ) =>
+          Terms.MemberSelection(objectTerm, name, member, typ)
         }
       }
     case Ast.Call(callee, argument, pos) =>
@@ -41,12 +42,12 @@ case class ValueExprAnalyzer(env: Env) {
     objectTerm: Terms.ValueExpr,
     name: String,
     memberPos: Pos
-  ): An[Types.Typ] = {
+  ): An[(Terms.Member, Types.Typ)] = {
     lazy val memberNotFound = SourceMessage(memberPos, safe"`$name` is not a member of ${objectTerm.typ.toString}")
 
     val methodType = env.getMethods(objectTerm.typ).flatMap {
-      case declSection: Terms.MethodDeclSection => declSection.methodDecls.get(name).map(_.typ)
-      case defSection: Terms.MethodDefSection => defSection.methodDefs.get(name).map(_.body.typ)
+      case declSection: Terms.MethodDeclSection => declSection.methodDecls.get(name).map(m => (m, m.typ))
+      case defSection: Terms.MethodDefSection => defSection.methodDefs.get(name).map(m => (m, m.body.typ))
     }
 
     An.someOrError(methodType, memberNotFound)

@@ -92,6 +92,8 @@ object Parser {
 
     def commaSeparatedRep[T](min: Int, p: => P[T]) = nl.rep ~ p.rep(min, sep=(comma ~ nl.rep)) ~ comma.? ~ nl.rep
 
+    def anythingBefore[T](end: P[T]) = (!end ~~ AnyChar).repX
+
     val dot = "."
 
     val underscore = "_"
@@ -179,6 +181,7 @@ object Parser {
       def endMarker(hashCount: Int) = P(boundary ~~ hash.repX(min=hashCount, max=hashCount/*exactly=hashCount*/))
       val valueBetweenMarkers = startMarker.flatMap { hashCount =>
         val end = endMarker(hashCount)
+        // FIXME anythingBefore
         val value = (!end ~~ AnyChar).repX.!
 
         (value ~~ end).map(s => Seq(LiteralValue.StringPlainPart(s)))
@@ -332,6 +335,14 @@ object Parser {
     val maybeTypeArgs: P[Seq[TypeExpr]] = typeListSyntax(typeExpr).?.map(_.getOrElse(Nil))
 
     //////
+    // Attributes
+    val at = "@"
+
+    val attribute: P[Attribute] = P(pp(at ~ bracketOpen ~ name ~ anythingBefore(bracketClose).!.?.map(_.filter(_.nonEmpty)) ~ bracketClose)(Attribute.apply _))
+
+    val attributes = P(attribute.rep(sep=nl.rep) ~ nl.rep)
+
+    //////
     // In-block defs
     val equalsSign = "="
     val doubleColon = "::"
@@ -342,13 +353,16 @@ object Parser {
     // TODO
     val typeDef: P[TypeDef] = P(pp(keyword("type") ~ name ~ equalsSign ~ typeExpr)(TypeDef.apply _))
 
-    val methodDecl: P[MethodDecl] = P(pp(name ~ typed)(MethodDecl.apply _))
+    val methodDecl: P[MethodDecl] = P(pp(attributes ~ name ~ typed)(MethodDecl.apply _))
 
-    val methodDef: P[MethodDef] = P(pp(name ~ equalsSign ~ valueExpr)(MethodDef.apply _))
+    val methodDef: P[MethodDef] = P(pp(attributes ~ name ~ typed.? ~ equalsSign ~ valueExpr)(MethodDef.apply _))
 
     val methodsBody: P[Seq[Method]] = P(recordSyntax(methodDecl | methodDef))
 
-    val methodsDef: P[MethodSection] = P(pp(keyword("declare").!.?.map(_.isDefined) ~ keyword("methods") ~/ name ~ equalsSign ~ methodsBody)(MethodSection.apply _))
+    val methodsDef: P[MethodSection] = P(pp(
+      keyword("declare").!.?.map(_.isDefined) ~
+      keyword("methods") ~/ name ~ equalsSign ~ methodsBody
+    )(MethodSection.apply _))
 
     val inBlockDef: P[InBlockDef] = P(valueNamesDef | typeDef | methodsDef)
 
