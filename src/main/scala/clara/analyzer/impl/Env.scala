@@ -12,7 +12,6 @@ case class Env(types: Namespace[Typ], values: Namespace[Typ], methods: TypeInfo[
   // def getType(name: String): Option[Typ] = types.get(name)
   def useType(name: String, pos: Pos): An[Typ] = An.someOrError(types.get(name), SourceMessage(pos, safe"Not found: type `$name`"))
 
-
   // def addValue(binding: (String, Typ), pos: Pos) = addOrShadowValue(binding, Env.empty, pos)
   def addOrShadowValue(binding: (String, Typ), allowShadow: Env, pos: Pos): An[Env] = {
     val ns = values.addOrShadow(binding, allowShadow.values)
@@ -31,7 +30,6 @@ case class Env(types: Namespace[Typ], values: Namespace[Typ], methods: TypeInfo[
     lazy val error = SourceMessage(pos, "Already defined: methods")
     An.someOrError(methods.add(binding), error).map(m => this.copy(methods = m))
   }
-  def getMethods(typ: Typ) = methods.get(typ)
 }
 
 object Env {

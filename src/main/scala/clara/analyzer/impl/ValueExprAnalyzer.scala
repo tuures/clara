@@ -33,7 +33,7 @@ case class ValueExprAnalyzer(env: Env) {
             Checks.expectAssignable(argumentTerm.typ, parameterType, argument.pos).map { _: Unit =>
               Terms.Call(calleeTerm, argumentTerm, resultType)
             }
-          case _ => An.error(SourceMessage(callee.pos, safe"Cannot call type `${calleeTerm.typ.toString}`"))
+          case _ => An.error(SourceMessage(callee.pos, safe"Cannot call type `${Types.toSource(calleeTerm.typ)}`"))
         }
       }
   }
@@ -43,9 +43,9 @@ case class ValueExprAnalyzer(env: Env) {
     name: String,
     memberPos: Pos
   ): An[(Terms.Member, Types.Typ)] = {
-    lazy val memberNotFound = SourceMessage(memberPos, safe"`$name` is not a member of ${objectTerm.typ.toString}")
+    lazy val memberNotFound = SourceMessage(memberPos, safe"`$name` is not a member of type `${Types.toSource(objectTerm.typ)}`")
 
-    val methodType = env.getMethods(objectTerm.typ).flatMap {
+    val methodType = env.methods.get(objectTerm.typ).flatMap {
       case declSection: Terms.MethodDeclSection => declSection.methodDecls.get(name).map(m => (m, m.typ))
       case defSection: Terms.MethodDefSection => defSection.methodDefs.get(name).map(m => (m, m.body.typ))
     }

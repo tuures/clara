@@ -17,8 +17,8 @@ case class Namespace[I](m: ListMap[String, I]) {
       add(binding)
     }
   def get(name: String): Option[I] = m.get(name)
-  /** slow: sequential search */
-  // def getName(item: I): Option[String] = m.find { case (_, i) => i === item } map(_._1)
+  /** NOTE: slow sequential search */
+  // def getNames(item: I): Iterable[String] = m.filter(_._2 === item).map(_._1)
   def length = m.size
   def names = m.keys
   def items = m.values
