@@ -4,7 +4,7 @@ import ai.x.safe._
 import fastparse.all.{P, Parsed}
 import org.scalatest.FunSuite
 
-import clara.ast.{Ast, LiteralValue, Meta}
+import clara.ast.{Ast, LiteralValue}
 
 class ParserSpec extends FunSuite {
 
@@ -271,8 +271,8 @@ class ParserSpec extends FunSuite {
     Call(NamedValue("foo"), NamedValue("bar"))
   )
 
-  parse(p.attributes, "@[a b]@[c]")(Seq(Meta("a", Some("b")), Meta("c", None)))
-  parse(p.attributes, "@[a]\n@[c]\n")(Seq(Meta("a", None), Meta("c", None)))
+  parse(p.attributes, "@[a b]@[c]")(Seq(Attribute("a", Some("b")), Attribute("c", None)))
+  parse(p.attributes, "@[a]\n@[c]\n")(Seq(Attribute("a", None), Attribute("c", None)))
 
   parse(p.valueNamesDef, "a =\u0020\u0020\n\u0020\u0020\n  foo")(
     ValueNamesDef(NamePattern("a"), NamedValue("foo"))

@@ -9,6 +9,7 @@ import impl._
 
 import ai.x.safe._
 import scala.collection.immutable.ListMap
+import clara.asg.Attributes
 
 object JsEmitter {
   def emitProgram(program: Terms.Block): JsAst.Module = {
@@ -25,13 +26,14 @@ object JsEmitter {
   def emitValueExpr(valueExpr: Terms.ValueExpr): JsAst.Expr = valueExpr match {
     case _: Terms.UnitLiteral => JsAst.Undefined
     case Terms.IntegerLiteral(value, _) => emitIntegerLiteral(value)
-    case Terms.FloatLiteral(value, _) => emitFloatLiteral(value)
+    case Terms.FloatLiteral(LiteralValue.Float(whole, fraction), _) => emitFloatLiteral(whole, fraction)
     case Terms.StringLiteral(parts, _) => emitStringLiteral(parts)
     case Terms.Block(bcs, _) => emitBlock(bcs)
     case Terms.NamedValue(name, _) => JsAst.Named(name)
     case Terms.MemberSelection(obj, memberName, member, _) => emitMemberSelection(obj, memberName, member)
-    case Terms.Call(Terms.MemberSelection(obj, memberName, member, _), argument, _) if member.attributes.emitBinaryOperator =>
-      emitBinaryOperation(obj, memberName, member, argument)
+    case Terms.Call(Terms.MemberSelection(obj, memberName, member, _), argument, _)
+      if member.attributes.emitKind.exists(_ === Attributes.BinaryOperator) =>
+        emitBinaryOperation(obj, memberName, member, argument)
     case Terms.Call(callee, argument, _) => emitCall(callee, argument)
   }
 
@@ -41,9 +43,13 @@ object JsEmitter {
     case LiteralValue.IntegerHex(value) => ???
   }
 
-  def emitFloatLiteral(value: LiteralValue.Float) = ???
+  def emitFloatLiteral(whole: String, fraction: String) = JsAst.NumberLiteral(safe"$whole.$fraction")
 
-  def emitStringLiteral(parts: Seq[LiteralValue.StringPart]) = ???
+  def emitStringLiteral(parts: Seq[LiteralValue.StringPart]) = JsAst.StringLiteral((parts.map {
+    case LiteralValue.StringEscapePart(escapes) => ???
+    case LiteralValue.StringExpressionPart(e) => ???
+    case LiteralValue.StringPlainPart(value) => value
+  }).safeMkString(""))
 
   def emitBlock(bcs: Seq[Terms.BlockContent]) = {
     JsAst.NullaryCall(JsAst.NullaryArrowFunc(bcs.flatMap(emitBlockContent)))
@@ -61,17 +67,20 @@ object JsEmitter {
     case Terms.NamePattern(name) => JsAst.Const(name, emitValueExpr(e))
   }
 
+  def emitMethodsCompanionName(typeName: String) = safe"${typeName}$$Methods"
+
   def emitMethodDefSection(typeName: String, targetType: Types.Typ, methodDefs: Namespace[Terms.MethodDef]) = {
-    JsAst.Const(safe"${typeName}$$Methods", JsAst.ObjectLiteral(ListMap(???)))
+    JsAst.Const(emitMethodsCompanionName(typeName), JsAst.ObjectLiteral(ListMap(???)))
   }
 
   def emitMemberName(memberName: String, member: Terms.Member): String = member.attributes.emitName.getOrElse(memberName)
 
   def emitMemberSelection(obj: Terms.ValueExpr, memberName: String, member: Terms.Member) = {
     val name = emitMemberName(memberName, member)
-    member.attributes.emitBinaryOperator match {
-      case false => JsAst.Member(emitValueExpr(obj), name)
-      case true => JsAst.UnaryArrowFunc("_", Seq(JsAst.BinaryOperation(name, emitValueExpr(obj), JsAst.Named("_"))))
+    member.attributes.emitKind match {
+      case Some(Attributes.InstanceProperty) => JsAst.Member(emitValueExpr(obj), name)
+      case Some(Attributes.BinaryOperator) => JsAst.UnaryArrowFunc("_", Seq(JsAst.BinaryOperation(name, emitValueExpr(obj), JsAst.Named("_"))))
+      case None => JsAst.UnaryCall(JsAst.Member(JsAst.Named(emitMethodsCompanionName(???)), name), emitValueExpr(obj))
     }
   }
 

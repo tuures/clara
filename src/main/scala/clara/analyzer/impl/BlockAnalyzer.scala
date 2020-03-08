@@ -1,6 +1,6 @@
 package clara.analyzer.impl
 
-import clara.asg.{Terms, Types, Namespace}
+import clara.asg.{Attributes, Terms, Types, Namespace}
 import clara.ast.{Ast, Pos, SourceMessage}
 
 import ai.x.safe._
@@ -121,12 +121,16 @@ case class BlockAnalyzer(parentEnv: Env) {
     }
   }
 
-  def walkMemberAttributes(attributes: Seq[Ast.Attribute]): An[Terms.MemberAttributes] = {
+  def walkMemberAttributes(attributes: Seq[Ast.Attribute]): An[Attributes.MemberAttributes] = {
     // TODO error for duplicate attributes?
-    An.step(attributes)(Terms.MemberAttributes()) { case (attributes, Ast.Attribute(key, value, pos)) =>
+    An.step(attributes)(Attributes.MemberAttributes()) { case (attributes, Ast.Attribute(key, value, pos)) =>
       (key, value) match {
-        case ("emitKind", Some("binaryOperator")) => An.result(attributes.copy(emitBinaryOperator = true))
-        case ("emitName", Some(emitName)) => An.result(attributes.copy(emitName = Some(emitName)))
+        case ("emitKind", Some("binaryOperator")) =>
+          An.result(attributes.copy(emitKind = Some(Attributes.BinaryOperator)))
+        case ("emitKind", Some("instanceProperty")) =>
+          An.result(attributes.copy(emitKind = Some(Attributes.InstanceProperty)))
+        case ("emitName", Some(emitName)) =>
+          An.result(attributes.copy(emitName = Some(emitName)))
         case _ => An.error(SourceMessage(pos, "Invalid member attribute"))
       }
     }

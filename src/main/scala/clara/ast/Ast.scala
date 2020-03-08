@@ -48,7 +48,7 @@ object Ast {
 
   case class Call(callee: ValueExpr, argument: ValueExpr, pos: Pos = NoPos) extends ValueExpr
 
-  case class Attribute(key: String, value: Option[String], pos: Pos)
+  case class Attribute(key: String, value: Option[String], pos: Pos = NoPos) extends Node
 
   case class ValueNamesDef(target: Pattern, e: ValueExpr, pos: Pos = NoPos) extends InBlockDef
 
