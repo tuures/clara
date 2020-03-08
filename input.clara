@@ -1,23 +1,46 @@
+::type Float = () // = _
+
 ::type Int = () // = _
 
 ::type String = () // = _
 
+::declare ::methods Float = {
+  @[emitKind binaryOperator] @[emitName +]
+  plus: Float => Float
+
+  @[emitKind binaryOperator] @[emitName -]
+  minus: Float => Float
+
+  @[emitKind binaryOperator] @[emitName *]
+  multiply: Float => Float
+
+  @[emitKind binaryOperator] @[emitName /]
+  divideBy: Float => Float
+}
+
 ::declare ::methods Int = {
-  @[emitKind binaryOperator]
-  @[emitName +]
+  @[emitKind binaryOperator] @[emitName +]
   plus: Int => Int
 
-  @[emitKind binaryOperator]
-  @[emitName *]
+  @[emitKind binaryOperator] @[emitName -]
+  minus: Int => Int
+
+  @[emitKind binaryOperator] @[emitName *]
   multiply: Int => Int
+
+  @[emitKind binaryOperator] @[emitName /]
+  divideBy: Int => Float
 }
 
 ::declare ::methods String = {
-  //@[emitKind instanceProperty]
+  @[emitKind instanceProperty]
   length: Int
 }
 
 foo = 1 .plus 2 .multiply 4
 
+bar = "asd".length.plus(1)
+
+zot = 1 .divideBy 2
 
 ()

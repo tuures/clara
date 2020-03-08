@@ -1,10 +1,10 @@
 package clara.asg
 
+import clara.asg.Attributes.MemberAttributes
+import clara.asg.Types.Typ
 import clara.ast.LiteralValue
 
 object Terms {
-  import Types.Typ
-
   // program structure
   sealed trait BlockContent
   sealed trait Pattern
@@ -28,7 +28,6 @@ object Terms {
   case class NamedValue(name: String, typ: Typ) extends ValueExpr
   case class NamePattern(name: String) extends Pattern
 
-  case class MemberAttributes(emitBinaryOperator: Boolean = false, emitName: Option[String] = None)
   case class MemberSelection(obj: ValueExpr, memberName: String, member: Member, typ: Typ) extends ValueExpr
 
   case class Call(callee: ValueExpr, argument: ValueExpr, typ: Typ) extends ValueExpr
@@ -41,5 +40,4 @@ object Terms {
   case class MethodDecl(attributes: MemberAttributes, typ: Typ) extends Member
   case class MethodDefSection(typeName: String, targetType: Typ, methodDefs: Namespace[MethodDef]) extends MethodSection
   case class MethodDef(attributes: MemberAttributes, body: ValueExpr) extends Member
-
 }
