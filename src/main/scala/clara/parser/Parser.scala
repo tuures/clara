@@ -101,6 +101,13 @@ object Parser {
     //////
     // Literals
 
+    val topTypeSyntax = "⊤"
+    val bottomTypeSyntax = "⊥"
+
+    val topType: P[TopType] = P(pp(topTypeSyntax)(TopType.apply _))
+
+    val bottomType: P[BottomType] = P(pp(bottomTypeSyntax)(BottomType.apply _))
+
     val unitSyntax = "()"
 
     val unitLiteral: P[UnitLiteral] = P(pp(unitSyntax)(UnitLiteral.apply _))

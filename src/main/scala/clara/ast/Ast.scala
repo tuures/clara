@@ -13,6 +13,9 @@ object Ast {
   sealed trait InBlockDef extends BlockContent
   sealed trait Method extends Node
 
+  case class TopType(pos: Pos = NoPos) extends TypeExpr
+  case class BottomType(pos: Pos = NoPos) extends TypeExpr
+
   case class UnitLiteral(pos: Pos = NoPos) extends ValueExpr
   case class UnitType(pos: Pos = NoPos) extends TypeExpr
   case class UnitPattern(pos: Pos = NoPos) extends Pattern

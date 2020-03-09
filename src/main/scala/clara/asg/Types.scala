@@ -34,9 +34,8 @@ object Types {
     })
 
   def toSource(t: Typ): String = t match {
-    // TODO: parser rule for Top/Bottom literals
-    case Top => "⊤"
-    case Bottom => "⊥"
+    case Top => "⊤" // Any
+    case Bottom => "⊥" // Nothing
     case Uni => "()"
     case Func(parameter, result) => safe"${toSource(parameter)} => ${toSource(result)}"
     case u: Unique => u.name
