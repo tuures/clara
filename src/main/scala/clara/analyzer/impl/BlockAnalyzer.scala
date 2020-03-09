@@ -49,7 +49,7 @@ case class BlockAnalyzer(parentEnv: Env) {
       case Ast.TypeDef(name, typeExpr, pos) => {
         TypeExprAnalyzer(currentEnv).walkTypeExpr(typeExpr).flatMap {
           case st: Types.StructuralTyp =>
-            currentEnv.addOrShadowType((name, Types.Unique(name, st, pos)), parentEnv, pos).
+            currentEnv.addOrShadowType((name, Types.Unique(name, st)), parentEnv, pos).
               map(nextEnv => (Terms.TypeDef(name), None, nextEnv))
           case _ => An.error(SourceMessage(typeExpr.pos, "Structural type expected"))
         }

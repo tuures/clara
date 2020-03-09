@@ -21,7 +21,7 @@ object Types {
   object Uniq {
     def apply() = new Uniq()
   }
-  case class Unique(name: String, structure: StructuralTyp, definedAt: Pos, uniq: Uniq = new Uniq()) extends Typ
+  case class Unique(name: String, structure: StructuralTyp, uniq: Uniq = new Uniq()) extends Typ
 
   def isAssignable(t1: Typ, t2: Typ): Boolean =
     t1 === t2 ||
