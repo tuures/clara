@@ -48,22 +48,28 @@ case class BlockAnalyzer(parentEnv: Env) {
       }
       case Ast.TypeDef(name, typeExpr, pos) => {
         TypeExprAnalyzer(currentEnv).walkTypeExpr(typeExpr).flatMap {
-          case st: Types.StructuralTyp =>
-            currentEnv.addOrShadowType((name, Types.Unique(name, st)), parentEnv, pos).
-              map(nextEnv => (Terms.TypeDef(name), None, nextEnv))
+          case st: Types.StructuralTyp => An.result(st)
+          case u: Types.Unique => An.result(u.structure)
           case _ => An.error(SourceMessage(typeExpr.pos, "Structural type expected"))
+        }.flatMap { structure =>
+          currentEnv.addOrShadowType((name, Types.Unique(name, structure)), parentEnv, pos).
+            map(nextEnv => (Terms.TypeDef(name), None, nextEnv))
         }
       }
-      case Ast.MethodSection(isDeclSection, targetTypeName, methodAsts, pos) => {
+      case Ast.MethodSection(isDeclSection, targetTypeExpr, methodAsts, pos) => {
         // TODO split into MethodSectionAnalyzer
-        currentEnv.useType(targetTypeName, pos /* FIXME: give more accurate Pos */).flatMap { targetType =>
+        TypeExprAnalyzer(currentEnv).walkTypeExpr(targetTypeExpr).flatMap {
+          case u: Types.Unique => An.result(u)
+          // TODO allow methods also for other kinds of types
+          case t => An.error(SourceMessage(targetTypeExpr.pos, safe"Cannot define methods for type `${Types.toSource(t)}`"))
+        }.flatMap { targetType =>
           (if (isDeclSection) {
             walkMethodDecls(currentEnv, methodAsts).map { methodDeclNs =>
               Terms.MethodDeclSection(targetType, methodDeclNs)
             }
           } else {
             walkMethodDefs(currentEnv, methodAsts).map { methodDefNs =>
-              Terms.MethodDefSection(targetTypeName, targetType, methodDefNs)
+              Terms.MethodDefSection(targetType, methodDefNs)
             }
           }).flatMap { methodSection =>
             currentEnv.addMethods((targetType, methodSection), pos).map { nextEnv =>

@@ -368,7 +368,7 @@ object Parser {
 
     val methodsDef: P[MethodSection] = P(pp(
       keyword("declare").!.?.map(_.isDefined) ~
-      keyword("methods") ~/ name ~ equalsSign ~ methodsBody
+      keyword("methods") ~/ typeExpr ~ equalsSign ~ methodsBody
     )(MethodSection.apply _))
 
     val inBlockDef: P[InBlockDef] = P(valueNamesDef | typeDef | methodsDef)

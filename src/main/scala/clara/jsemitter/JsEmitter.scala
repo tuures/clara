@@ -60,17 +60,15 @@ object JsEmitter {
     case Terms.ValueNamesDef(target, e) => Some(emitValueNamesDef(target, e))
     case _: Terms.TypeDef => None
     case _: Terms.MethodDeclSection => None
-    case Terms.MethodDefSection(typeName, targetType, methodDefs) => Some(emitMethodDefSection(typeName, targetType, methodDefs))
+    case Terms.MethodDefSection(targetType, methodDefs) => Some(emitMethodDefSection(targetType, methodDefs))
   }
 
   def emitValueNamesDef(target: Terms.Pattern, e: Terms.ValueExpr) = target match {
     case Terms.NamePattern(name) => JsAst.Const(name, emitValueExpr(e))
   }
 
-  def emitMethodsCompanionName(typeName: String) = safe"${typeName}$$Methods"
-
-  def emitMethodDefSection(typeName: String, targetType: Types.Typ, methodDefs: Namespace[Terms.MethodDef]) = {
-    JsAst.Const(emitMethodsCompanionName(typeName), JsAst.ObjectLiteral(ListMap(???)))
+  def emitMethodDefSection(targetType: Types.Typ, methodDefs: Namespace[Terms.MethodDef]) = {
+    JsAst.Const(NameMangler.methodsCompanionName(targetType), JsAst.ObjectLiteral(ListMap(???)))
   }
 
   def emitMemberName(memberName: String, member: Terms.Member): String = member.attributes.emitName.getOrElse(memberName)
@@ -80,7 +78,7 @@ object JsEmitter {
     member.attributes.emitKind match {
       case Some(Attributes.InstanceProperty) => JsAst.Member(emitValueExpr(obj), name)
       case Some(Attributes.BinaryOperator) => JsAst.UnaryArrowFunc("_", Seq(JsAst.BinaryOperation(name, emitValueExpr(obj), JsAst.Named("_"))))
-      case None => JsAst.UnaryCall(JsAst.Member(JsAst.Named(emitMethodsCompanionName(???)), name), emitValueExpr(obj))
+      case None => JsAst.UnaryCall(JsAst.Member(JsAst.Named(NameMangler.methodsCompanionName(obj.typ)), name), emitValueExpr(obj))
     }
   }
 
@@ -89,4 +87,13 @@ object JsEmitter {
 
   def emitCall(callee: Terms.ValueExpr, argument: Terms.ValueExpr) =
     JsAst.UnaryCall(emitValueExpr(callee), emitValueExpr(argument))
+}
+
+object NameMangler {
+  def methodsCompanionName(typ: Types.Typ) = safe"${typeName(typ)}$$Methods"
+
+  def typeName(typ: Types.Typ) = typ match {
+    case u: Types.Unique => u.name
+    case _ => ???
+  }
 }
