@@ -18,8 +18,11 @@ case class ValueExprAnalyzer(env: Env) {
     case Ast.StringLiteral(parts, pos) => env.useType("String", pos).map { typ =>
       Terms.StringLiteral(parts, typ)
     }
+    case _: Ast.Tuple => ???
     case Ast.Block(bcs, pos) => BlockAnalyzer(env).walkBlock(bcs, pos)
     case Ast.NamedValue(name, pos) => env.useValue(name, pos).map(typ => Terms.NamedValue(name, typ))
+    case Ast.ValueAs(e, t, pos) => ???
+    case Ast.Lambda(parameter, body, pos) => ???
     case Ast.MemberSelection(obj, Ast.NamedMember(name, typeArgs, memberPos), pos) =>
       walkValueExpr(obj).flatMap { objectTerm =>
         walkMemberSelection(objectTerm, name, memberPos).map { case (member, typ) =>

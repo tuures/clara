@@ -29,6 +29,8 @@ case class JsPrinterImpl(i: String = "  ") {
 
       safe"""${quoteChar}${value.replace(quoteChar, s"\\${quoteChar}")}${quoteChar}"""
     }
+    case ArrayLiteral(values) => ???
+    case ObjectLiteral(entries) => walkObjectLiteral(entries)
     case Named(name) => name
     case NullaryArrowFunc(body) => walkArrowFunc("()", body)
     case UnaryArrowFunc(param, body) => walkArrowFunc(param, body)
@@ -37,6 +39,9 @@ case class JsPrinterImpl(i: String = "  ") {
     case UnaryCall(target, argument) => walkCall(target, walkExpr(argument))
     case BinaryOperation(operator, a, b) => walkBinaryOperation(operator, a, b)
   }
+
+  def walkObjectLiteral(entries: Seq[(String, Expr)]): String =
+    entries.map { case (name, expr) => safe"$name: ${walkExpr(expr)}" }.safeMkString(safe"{\n$i", safe",\n$i", "\n}")
 
   def walkArrowFunc(param: String, body: Seq[Node]): String = body match {
     case Seq((e: JsAst.Expr)) => safe"$param =>$nli" + walkExpr(e) + "\n"

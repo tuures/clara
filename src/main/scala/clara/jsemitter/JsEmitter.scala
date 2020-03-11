@@ -68,7 +68,10 @@ object JsEmitter {
   }
 
   def emitMethodDefSection(targetType: Types.Typ, methodDefs: Namespace[Terms.MethodDef]) = {
-    JsAst.Const(NameMangler.methodsCompanionName(targetType), JsAst.ObjectLiteral(ListMap(???)))
+    val entries = methodDefs.mapValues { case Terms.MethodDef(attributes, body) =>
+      emitValueExpr(body)
+    }.entries
+    JsAst.Const(NameMangler.methodsCompanionName(targetType), JsAst.ObjectLiteral(entries))
   }
 
   def emitMemberName(memberName: String, member: Terms.Member): String = member.attributes.emitName.getOrElse(memberName)

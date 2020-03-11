@@ -12,7 +12,7 @@ object JsAst {
   case class NumberLiteral(value: String) extends Expr
   case class StringLiteral(value: String) extends Expr
   case class ArrayLiteral(values: Seq[Expr]) extends Expr
-  case class ObjectLiteral(props: ListMap[String, Expr]) extends Expr
+  case class ObjectLiteral(entries: Seq[(String, Expr)]) extends Expr
   case class Named(name: String) extends Expr
   sealed trait ArrowFunc extends Expr
   case class NullaryArrowFunc(body: Seq[Node]) extends ArrowFunc

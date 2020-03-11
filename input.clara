@@ -43,4 +43,10 @@ bar = "asd".length.plus(1)
 
 zot = 1 .divideBy 2
 
+::type FooBar = ()
+
+::methods FooBar = {
+  asd = 1
+}
+
 ()
