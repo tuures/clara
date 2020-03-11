@@ -23,7 +23,7 @@ case class ValueExprAnalyzer(env: Env) {
     case Ast.NamedValue(name, pos) => env.useValue(name, pos).map(typ => Terms.NamedValue(name, typ))
     case Ast.ValueAs(e, t, pos) => ???
     case Ast.Lambda(parameter, body, pos) => ???
-    case Ast.MemberSelection(obj, Ast.NamedMember(name, typeArgs, memberPos), pos) =>
+    case Ast.MemberSelection(obj, Ast.NamedMember(name/*, typeArgs*/, memberPos), pos) =>
       walkValueExpr(obj).flatMap { objectTerm =>
         walkMemberSelection(objectTerm, name, memberPos).map { case (member, typ) =>
           Terms.MemberSelection(objectTerm, name, member, typ)

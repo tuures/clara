@@ -257,7 +257,7 @@ object Parser {
 
     val namedValue: P[NamedValue] = P(pp(name)(NamedValue.apply _))
 
-    val namedType: P[NamedType] = P(pp(name ~ maybeTypeArgs)(NamedType.apply _))
+    val namedType: P[NamedType] = P(pp(name /*~ maybeTypeArgs*/)(NamedType.apply _))
 
     val namePattern: P[NamePattern] = P(pp(name)(NamePattern.apply _))
 
@@ -292,7 +292,7 @@ object Parser {
     // Member selection / call
 
     val memberOrCall: P[ValueExpr] = P {
-      type MemberPart = (Int, String, Seq[TypeExpr])
+      type MemberPart = (Int, String/*, Seq[TypeExpr]*/)
       type CallPart = ValueExpr
       type Part = Either[MemberPart, CallPart]
 
@@ -302,14 +302,14 @@ object Parser {
         val pos = posFrom(startIndex)
 
         part match {
-          case Left((dotIndex, name, typeArgs)) =>
-            MemberSelection(e, NamedMember(name, typeArgs, posFrom(dotIndex)), pos)
+          case Left((dotIndex, name/*, typeArgs*/)) =>
+            MemberSelection(e, NamedMember(name/*, typeArgs*/, posFrom(dotIndex)), pos)
           case Right(argument) =>
             Call(e, argument, pos)
         }
       }
 
-      val member = (Index ~ dot ~ nl.rep ~ name ~ maybeTypeArgs).map(Left(_))
+      val member = (Index ~ dot ~ nl.rep ~ name /*~ maybeTypeArgs*/).map(Left(_))
       val call = simple.map(Right(_))
 
       (Index ~ simple ~ ((member | call) ~ Index).rep(1)).map { case (startIndex, base, parts) =>
@@ -325,21 +325,21 @@ object Parser {
 
     def typeListSyntax[T](item: => P[T]): P[Seq[T]] = P(bracketOpen ~ commaSeparatedRep(1, item) ~ bracketClose)
 
-    val typeParam: P[TypeParam] = P {
-      val plusOrMinusVariance: P[Variance] = P(plus.map(_ => Covariant) | minus.map(_ => Contravariant))
-      val variance = P(plusOrMinusVariance.?.map(_.getOrElse(Invariant)))
+    // val typeParam: P[TypeParam] = P {
+    //   val plusOrMinusVariance: P[Variance] = P(plus.map(_ => Covariant) | minus.map(_ => Contravariant))
+    //   val variance = P(plusOrMinusVariance.?.map(_.getOrElse(Invariant)))
 
-      val arity: P[Int] = typeListSyntax(underscore).?.map(_.map(_.length).getOrElse(0))
+    //   val arity: P[Int] = typeListSyntax(underscore).?.map(_.map(_.length).getOrElse(0))
 
-      pp(variance ~ name ~ arity)(TypeParam.apply _)
-    }
+    //   pp(variance ~ name ~ arity)(TypeParam.apply _)
+    // }
 
     val bracketOpen = "["
     val bracketClose = "]"
 
-    val maybeTypeParams: P[Seq[TypeParam]] = typeListSyntax(typeParam).?.map(_.getOrElse(Nil))
+    // val maybeTypeParams: P[Seq[TypeParam]] = typeListSyntax(typeParam).?.map(_.getOrElse(Nil))
 
-    val maybeTypeArgs: P[Seq[TypeExpr]] = typeListSyntax(typeExpr).?.map(_.getOrElse(Nil))
+    // val maybeTypeArgs: P[Seq[TypeExpr]] = typeListSyntax(typeExpr).?.map(_.getOrElse(Nil))
 
     //////
     // Attributes

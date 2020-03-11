@@ -37,7 +37,7 @@ object Ast {
   case class Block(bcs: Seq[BlockContent], pos: Pos = NoPos) extends ValueExpr
 
   case class NamedValue(name: String, pos: Pos = NoPos) extends ValueExpr
-  case class NamedType(name: String, typeArgs: Seq[TypeExpr], pos: Pos = NoPos) extends TypeExpr
+  case class NamedType(name: String/*, typeArgs: Seq[TypeExpr]*/, pos: Pos = NoPos) extends TypeExpr
   case class NamePattern(name: String, pos: Pos = NoPos) extends Pattern
 
   case class ValueAs(e: ValueExpr, t: TypeExpr, pos: Pos = NoPos) extends ValueExpr
@@ -46,7 +46,7 @@ object Ast {
   case class Lambda(parameter: Pattern, body: ValueExpr, pos: Pos = NoPos) extends ValueExpr
   case class FuncType(parameter: TypeExpr, result: TypeExpr, pos: Pos = NoPos) extends TypeExpr
 
-  case class NamedMember(name: String, typeArgs: Seq[TypeExpr], pos: Pos = NoPos) extends Node
+  case class NamedMember(name: String/*, typeArgs: Seq[TypeExpr]*/, pos: Pos = NoPos) extends Node
   case class MemberSelection(obj: ValueExpr, member: NamedMember, pos: Pos = NoPos) extends ValueExpr
 
   case class Call(callee: ValueExpr, argument: ValueExpr, pos: Pos = NoPos) extends ValueExpr
@@ -62,20 +62,9 @@ object Ast {
 
   case class MethodSection(isDecl: Boolean, targetType: TypeExpr, methods: Seq[Method], pos: Pos = NoPos) extends InBlockDef
 
-
-  // case class ValueDecl(name: String, t: TypeExpr, pos: Pos = NoPos) extends MemberDecl
-
-  sealed trait Variance
-  case object Covariant extends Variance
-  case object Contravariant extends Variance
-  case object Invariant extends Variance
-  case class TypeParam(variance: Variance, name: String, arity: Int, pos: Pos = NoPos) extends Node
-
-  // case class MethodDecl(name: String, typeParams: Seq[TypeParam], t: TypeExpr, pos: Pos = NoPos) extends MemberDecl
-  // case class MethodDef(name: String, typeParams: Seq[TypeParam], body: ValueExpr, pos: Pos = NoPos) extends MemberDef
-  //
-  // case class ClassDef(name: String, typeParams: Seq[TypeParam], parent: Option[NamedType], members: Seq[MemberDecl], pos: Pos = NoPos) extends InBlockDef
-  //
-  // // TODO members should probably be narrowed to Seq[ValueDef], requires dedicated parser rule, now Seq[MemberDecl] because classBody rule is reused
-  // case class ClassNew(namedType: NamedType, members: Seq[MemberDecl], pos: Pos = NoPos) extends ValueExpr
+  // sealed trait Variance
+  // case object Covariant extends Variance
+  // case object Contravariant extends Variance
+  // case object Invariant extends Variance
+  // case class TypeParam(variance: Variance, name: String, arity: Int, pos: Pos = NoPos) extends Node
 }

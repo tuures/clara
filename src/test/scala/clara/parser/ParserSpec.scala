@@ -208,21 +208,21 @@ class ParserSpec extends FunSuite {
 
   parse(p.namedValue, "foo")(NamedValue("foo"))
 
-  parse(p.namedType, "Foo")(NamedType("Foo", Nil))
-  parse(p.namedType, "Foo[Bar]")(
-    NamedType("Foo", Seq(NamedType("Bar", Nil)))
-  )
-  parse(p.namedType, "Foo[Bar, Baz[Zot]]")(
-    NamedType("Foo", Seq(
-      NamedType("Bar", Nil),
-      NamedType("Baz", Seq(NamedType("Zot", Nil))))
-    )
-  )
+  parse(p.namedType, "Foo")(NamedType("Foo"/*, Nil*/))
+  // parse(p.namedType, "Foo[Bar]")(
+  //   NamedType("Foo", Seq(NamedType("Bar"/*, Nil*/)))
+  // )
+  // parse(p.namedType, "Foo[Bar, Baz[Zot]]")(
+  //   NamedType("Foo", Seq(
+  //     NamedType("Bar", Nil),
+  //     NamedType("Baz", Seq(NamedType("Zot"/*, Nil*/))))
+  //   )
+  // )
 
   parse(p.namePattern, "foo")(NamePattern("foo"))
 
   parse(p.valueAs, "foo: String")(
-    ValueAs(NamedValue("foo"), NamedType("String", Nil))
+    ValueAs(NamedValue("foo"), NamedType("String"/*, Nil*/))
   )
 
   parse(p.lambda, "() => ()")(
@@ -246,13 +246,13 @@ class ParserSpec extends FunSuite {
   )
 
   parse(p.memberOrCall, "foo.length.toString")(
-    MemberSelection(MemberSelection(NamedValue("foo"), NamedMember("length", Nil)), NamedMember("toString", Nil))
+    MemberSelection(MemberSelection(NamedValue("foo"), NamedMember("length"/*, Nil*/)), NamedMember("toString"/*, Nil*/))
   )
-  parse(p.memberOrCall, "foo.bar[Zot]")(
-    MemberSelection(NamedValue("foo"), NamedMember("bar", Seq(NamedType("Zot", Nil))))
-  )
+  // parse(p.memberOrCall, "foo.bar[Zot]")(
+  //   MemberSelection(NamedValue("foo"), NamedMember("bar", Seq(NamedType("Zot"/*, Nil*/))))
+  // )
   parse(p.memberOrCall, "foo.\n  length.\n  toString")(
-    MemberSelection(MemberSelection(NamedValue("foo"), NamedMember("length", Nil)), NamedMember("toString", Nil))
+    MemberSelection(MemberSelection(NamedValue("foo"), NamedMember("length"/*, Nil*/)), NamedMember("toString"/*, Nil*/))
   )
   // nt("multi-line member")(
   //   """|123.
