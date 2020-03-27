@@ -57,10 +57,11 @@ object Ast {
 
   case class TypeDef(name: String, t: TypeExpr, pos: Pos = NoPos) extends InBlockDef
 
+  case class MethodDeclSection(targetType: TypeExpr, methods: Seq[Method], pos: Pos = NoPos) extends InBlockDef
   case class MethodDecl(attributes: Seq[Attribute], name: String, t: TypeExpr, pos: Pos = NoPos) extends Method
+  case class MethodDefSection(targetPattern: Pattern, methods: Seq[Method], pos: Pos = NoPos) extends InBlockDef
   case class MethodDef(attributes: Seq[Attribute], name: String, t: Option[TypeExpr], body: ValueExpr, pos: Pos = NoPos) extends Method
 
-  case class MethodSection(isDecl: Boolean, targetType: TypeExpr, methods: Seq[Method], pos: Pos = NoPos) extends InBlockDef
 
   // sealed trait Variance
   // case object Covariant extends Variance

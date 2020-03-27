@@ -5,6 +5,7 @@ import clara.ast.{Ast, Pos, SourceMessage}
 
 import ai.x.safe._
 import clara.ast.Ast.Method
+import clara.asg.Types.Unique
 
 case class ValueExprAnalyzer(env: Env) {
   def walkValueExpr(valueExpr: Ast.ValueExpr): An[Terms.ValueExpr] = valueExpr match {
@@ -48,12 +49,17 @@ case class ValueExprAnalyzer(env: Env) {
   ): An[(Terms.Member, Types.Typ)] = {
     lazy val memberNotFound = SourceMessage(memberPos, safe"`$name` is not a member of type `${Types.toSource(objectTerm.typ)}`")
 
-    val methodType = env.methods.get(objectTerm.typ).flatMap {
+    def methodOfType(typ: Types.Typ): Option[(Terms.Member, Types.Typ)] = env.methods.get(typ).flatMap {
       case declSection: Terms.MethodDeclSection => declSection.methodDecls.get(name).map(m => (m, m.typ))
       case defSection: Terms.MethodDefSection => defSection.methodDefs.get(name).map(m => (m, m.body.typ))
+    }.orElse {
+      typ match {
+        case Unique(_, wrappedType, _) => methodOfType(wrappedType)
+        case _ => None
+      }
     }
 
-    An.someOrError(methodType, memberNotFound)
+    An.someOrError(methodOfType(objectTerm.typ), memberNotFound)
   }
 
 }

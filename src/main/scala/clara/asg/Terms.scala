@@ -38,6 +38,6 @@ object Terms {
   sealed trait MethodSection extends InBlockDef
   case class MethodDeclSection(targetType: Typ, methodDecls: Namespace[MethodDecl]) extends MethodSection
   case class MethodDecl(attributes: MemberAttributes, typ: Typ) extends Member
-  case class MethodDefSection(targetType: Typ, methodDefs: Namespace[MethodDef]) extends MethodSection
+  case class MethodDefSection(targetType: Typ, self: Pattern, methodDefs: Namespace[MethodDef]) extends MethodSection
   case class MethodDef(attributes: MemberAttributes, body: ValueExpr) extends Member
 }

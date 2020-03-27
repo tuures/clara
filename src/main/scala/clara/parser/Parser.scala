@@ -366,12 +366,16 @@ object Parser {
 
     val methodsBody: P[Seq[Method]] = P(recordSyntax(methodDecl | methodDef))
 
-    val methodsDef: P[MethodSection] = P(pp(
-      keyword("declare").!.?.map(_.isDefined) ~
-      keyword("methods") ~/ typeExpr ~ equalsSign ~ methodsBody
-    )(MethodSection.apply _))
+    val methodDeclSection: P[MethodDeclSection] = P(pp(
+      keyword("declare") ~
+      keyword("methods") ~/ typeExpr ~ methodsBody
+    )(MethodDeclSection.apply _))
 
-    val inBlockDef: P[InBlockDef] = P(valueNamesDef | typeDef | methodsDef)
+    val methodDefSection: P[MethodDefSection] = P(pp(
+      keyword("methods") ~/ pattern ~ methodsBody
+    )(MethodDefSection.apply _))
+
+    val inBlockDef: P[InBlockDef] = P(valueNamesDef | typeDef | methodDeclSection | methodDefSection)
 
     //
     // val valueDecl: P[ValueDecl] = P(pp(name ~ typed)(ValueDecl.apply _))

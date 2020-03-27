@@ -46,34 +46,51 @@ case class BlockAnalyzer(parentEnv: Env) {
           walkValueNamesDef(currentEnv, target, valueExprTerm)
         }.map { case (namesDef, nextEnv) => (namesDef, None, nextEnv) }
       }
-      case Ast.TypeDef(name, typeExpr, pos) => {
+      case Ast.TypeDef(name, typeExpr, pos) => { // TODO maybe this should be called ::subtype instead
         TypeExprAnalyzer(currentEnv).walkTypeExpr(typeExpr).flatMap {
-          case st: Types.StructuralTyp => An.result(st)
-          case u: Types.Unique => An.result(u.structure)
-          case _ => An.error(SourceMessage(typeExpr.pos, "Structural type expected"))
-        }.flatMap { structure =>
-          currentEnv.addOrShadowType((name, Types.Unique(name, structure)), parentEnv, pos).
+          case t: Types.GoodType => An.result(t)
+          case b @ Types.Bottom => An.error(SourceMessage(typeExpr.pos, safe"Cannot subtype `${Types.toSource(b)}`"))
+        }.flatMap { typ =>
+          currentEnv.addOrShadowType((name, Types.Unique(name, typ)), parentEnv, pos).
             map(nextEnv => (Terms.TypeDef(name), None, nextEnv))
         }
       }
-      case Ast.MethodSection(isDeclSection, targetTypeExpr, methodAsts, pos) => {
+      case Ast.MethodDeclSection(targetTypeExpr, methodAsts, pos) => {
         // TODO split into MethodSectionAnalyzer
         TypeExprAnalyzer(currentEnv).walkTypeExpr(targetTypeExpr).flatMap {
           case u: Types.Unique => An.result(u)
           // TODO allow methods also for other kinds of types
-          case t => An.error(SourceMessage(targetTypeExpr.pos, safe"Cannot define methods for type `${Types.toSource(t)}`"))
+          case t => An.error(SourceMessage(targetTypeExpr.pos, safe"Cannot have methods for type `${Types.toSource(t)}`"))
         }.flatMap { targetType =>
-          (if (isDeclSection) {
-            walkMethodDecls(currentEnv, methodAsts).map { methodDeclNs =>
-              Terms.MethodDeclSection(targetType, methodDeclNs)
-            }
-          } else {
-            walkMethodDefs(currentEnv, methodAsts).map { methodDefNs =>
-              Terms.MethodDefSection(targetType, methodDefNs)
-            }
-          }).flatMap { methodSection =>
+          walkMethodDecls(currentEnv, methodAsts).map { methodDeclNs =>
+            Terms.MethodDeclSection(targetType, methodDeclNs)
+          }.flatMap { methodSection =>
             currentEnv.addMethods((targetType, methodSection), pos).map { nextEnv =>
               (methodSection, None, nextEnv)
+            }
+          }
+        }
+
+      }
+      case Ast.MethodDefSection(targetPattern, methodAsts, pos) => {
+        // TODO split into MethodSectionAnalyzer
+        (targetPattern match {
+          case Ast.PatternAs(p, t, _) => An.result((p, t))
+          case p => An.error(SourceMessage(p.pos, "Expected type assertion on top level"))
+        }).flatMap { case (selfPattern, targetTypeExpr) =>
+          TypeExprAnalyzer(currentEnv).walkTypeExpr(targetTypeExpr).flatMap {
+            case u: Types.Unique => An.result(u)
+            // TODO allow methods also for other kinds of types
+            case t => An.error(SourceMessage(targetTypeExpr.pos, safe"Cannot have methods for type `${Types.toSource(t)}`"))
+          }.flatMap { targetType =>
+            PatternAnalyzer(currentEnv, parentEnv).walkPattern(selfPattern, targetType).map((_, targetType))
+          }.flatMap { case ((selfPatternTerm, selfEnv), targetType) =>
+            walkMethodDefs(selfEnv, methodAsts).map { methodDefNs =>
+              Terms.MethodDefSection(targetType, selfPatternTerm, methodDefNs)
+            }.flatMap { methodSection =>
+              currentEnv.addMethods((targetType, methodSection), pos).map { nextEnv =>
+                (methodSection, None, nextEnv)
+              }
             }
           }
         }
@@ -83,11 +100,10 @@ case class BlockAnalyzer(parentEnv: Env) {
     }
   }
 
-  def walkValueNamesDef(currentEnv: Env, target: Ast.Pattern, valueExprTerm: Terms.ValueExpr): An[(Terms.ValueNamesDef, Env)] = target match {
-    case Ast.NamePattern(name, pos) => currentEnv.addOrShadowValue((name, valueExprTerm.typ), parentEnv, pos).map { nextEnv =>
-      (Terms.ValueNamesDef(Terms.NamePattern(name), valueExprTerm), nextEnv)
+  def walkValueNamesDef(currentEnv: Env, target: Ast.Pattern, valueExprTerm: Terms.ValueExpr): An[(Terms.ValueNamesDef, Env)] = {
+    PatternAnalyzer(currentEnv, parentEnv).walkPattern(target, valueExprTerm.typ).map { case (targetTerm, nextEnv) =>
+      (Terms.ValueNamesDef(targetTerm, valueExprTerm), nextEnv)
     }
-    case _ => ???
   }
 
   def walkMethodDefs(currentEnv: Env, methodAsts: Seq[Ast.Method]): An[Namespace[Terms.MethodDef]] = {
@@ -97,6 +113,7 @@ case class BlockAnalyzer(parentEnv: Env) {
         case Ast.MethodDef(attributes, name, typeOpt, body, pos) =>
           typeOpt.foreach(_ => ???)
 
+          // TODO not all the decl attributes make sense for defs?
           val memberAttributesAn = walkMemberAttributes(attributes)
           val bodyTermAn = ValueExprAnalyzer(currentEnv).walkValueExpr(body)
 

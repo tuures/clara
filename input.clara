@@ -1,10 +1,10 @@
-::type Float = () // = _
+::type Float = () // = _ or should it be Any? but must be unconstructible: is _ unconstructible Any?
 
 ::type Int = () // = _
 
 ::type String = () // = _
 
-::declare ::methods Float = {
+::declare ::methods Float {
   @[emitKind binaryOperator] @[emitName +]
   plus: Float => Float
 
@@ -18,7 +18,7 @@
   divideBy: Float => Float
 }
 
-::declare ::methods Int = {
+::declare ::methods Int {
   @[emitKind binaryOperator] @[emitName +]
   plus: Int => Int
 
@@ -32,7 +32,7 @@
   divideBy: Int => Float
 }
 
-::declare ::methods String = {
+::declare ::methods String {
   @[emitKind instanceProperty]
   length: Int
 }
@@ -43,10 +43,19 @@ bar = "asd".length.plus(1)
 
 zot = 1 .divideBy 2
 
-::type FooBar = ()
 
-::methods FooBar = {
-  asd = 1
+::type UserOrdinal = Int
+
+::methods o: UserOrdinal {
+  next = o .plus 1
 }
 
-()
+// ::type Rect = { x: Int, y: Int }
+
+// ::methods {x, y}: Rect {
+//   area = x .multiply y
+// }
+
+// ::enum Option A = Some A | None
+
+() // TODO program should return Nothing

@@ -60,17 +60,19 @@ object JsEmitter {
     case Terms.ValueNamesDef(target, e) => Some(emitValueNamesDef(target, e))
     case _: Terms.TypeDef => None
     case _: Terms.MethodDeclSection => None
-    case Terms.MethodDefSection(targetType, methodDefs) => Some(emitMethodDefSection(targetType, methodDefs))
+    case Terms.MethodDefSection(targetType, selfPattern, methodDefs) => Some(emitMethodDefSection(targetType, selfPattern, methodDefs))
   }
 
   def emitValueNamesDef(target: Terms.Pattern, e: Terms.ValueExpr) = target match {
     case Terms.NamePattern(name) => JsAst.Const(name, emitValueExpr(e))
   }
 
-  def emitMethodDefSection(targetType: Types.Typ, methodDefs: Namespace[Terms.MethodDef]) = {
+  def emitMethodDefSection(targetType: Types.Typ, selfPattern: Terms.Pattern, methodDefs: Namespace[Terms.MethodDef]) = {
     val entries = methodDefs.mapValues { case Terms.MethodDef(attributes, body) =>
       emitValueExpr(body)
     }.entries
+
+    // FIXME func from self pattern to object
     JsAst.Const(NameMangler.methodsCompanionName(targetType), JsAst.ObjectLiteral(entries))
   }
 
