@@ -1,8 +1,7 @@
 package clara.asg
 
-import clara.ast.Pos
-
 import ai.x.safe._
+
 
 // type lattice
 object Types {
@@ -23,6 +22,8 @@ object Types {
   }
   case class Unique(name: String, wrappedType: GoodType, uniq: Uniq = new Uniq()) extends GoodType
 
+  case class Record(fields: Namespace[Typ]) extends GoodType
+
   def isAssignable(t1: Typ, t2: Typ): Boolean =
     t2 === Top ||
     t1 === Bottom ||
@@ -40,5 +41,8 @@ object Types {
     case Uni => "()"
     case Func(parameter, result) => safe"${toSource(parameter)} => ${toSource(result)}"
     case u: Unique => u.name
+    case Record(fields) => fields.mapValues(toSource).entries.map { case (name, v) =>
+      safe"$name: $v"
+    }.safeMkString("{", ", ", "}")
   }
 }

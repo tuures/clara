@@ -1,11 +1,10 @@
 package clara.analyzer.impl
 
-import clara.asg.{Terms, Types}
+import clara.asg.{Attributes, Terms, Types, Namespace}
 import clara.ast.{Ast, Pos, SourceMessage}
 
 import ai.x.safe._
-import clara.ast.Ast.Method
-import clara.asg.Types.Unique
+
 
 case class ValueExprAnalyzer(env: Env) {
   def walkValueExpr(valueExpr: Ast.ValueExpr): An[Terms.ValueExpr] = valueExpr match {
@@ -23,11 +22,24 @@ case class ValueExprAnalyzer(env: Env) {
     case Ast.Block(bcs, pos) => BlockAnalyzer(env).walkBlock(bcs, pos)
     case Ast.NamedValue(name, pos) => env.useValue(name, pos).map(typ => Terms.NamedValue(name, typ))
     case Ast.ValueAs(e, t, pos) => ???
+    case Ast.Record(fields, _) => {
+      An.step(fields)(Namespace.empty[Terms.Field]){ case (ns, Ast.FieldDef(name, typeOpt, body, pos)) =>
+        lazy val duplicateName = SourceMessage(pos, safe"Duplicate field name `$name`")
+
+        typeOpt.foreach(_ => ???) // FIXME
+
+        walkValueExpr(body).flatMap { bodyTerm =>
+          An.someOrError(ns.add((name, Terms.Field(bodyTerm))), duplicateName)
+        }
+      }.map { fields =>
+        Terms.Record(fields, Types.Record(fields.mapValues(_.body.typ)))
+      }
+    }
     case Ast.Lambda(parameter, body, pos) => ???
     case Ast.MemberSelection(obj, Ast.NamedMember(name/*, typeArgs*/, memberPos), pos) =>
       walkValueExpr(obj).flatMap { objectTerm =>
-        walkMemberSelection(objectTerm, name, memberPos).map { case (member, typ) =>
-          Terms.MemberSelection(objectTerm, name, member, typ)
+        walkMemberSelection(objectTerm, name, memberPos).map { case (selectedMember, typ) =>
+          Terms.MemberSelection(objectTerm, name, selectedMember, typ)
         }
       }
     case Ast.Call(callee, argument, pos) =>
@@ -46,15 +58,18 @@ case class ValueExprAnalyzer(env: Env) {
     objectTerm: Terms.ValueExpr,
     name: String,
     memberPos: Pos
-  ): An[(Terms.Member, Types.Typ)] = {
+  ): An[(Terms.SelectedMember, Types.Typ)] = {
     lazy val memberNotFound = SourceMessage(memberPos, safe"`$name` is not a member of type `${Types.toSource(objectTerm.typ)}`")
 
-    def methodOfType(typ: Types.Typ): Option[(Terms.Member, Types.Typ)] = env.methods.get(typ).flatMap {
-      case declSection: Terms.MethodDeclSection => declSection.methodDecls.get(name).map(m => (m, m.typ))
-      case defSection: Terms.MethodDefSection => defSection.methodDefs.get(name).map(m => (m, m.body.typ))
+    def methodOfType(typ: Types.Typ): Option[(Terms.SelectedMember, Types.Typ)] = (env.methods.get(typ).flatMap {
+      case declSection: Terms.MethodDeclSection => declSection.methodDecls.get(name).map(m => (m.attributes, m.typ))
+      case defSection: Terms.MethodDefSection => defSection.methodDefs.get(name).map(m => (m.attributes, m.body.typ))
+    }).map { case (attributes, typ) =>
+      (Terms.SelectedMethod(attributes), typ)
     }.orElse {
       typ match {
-        case Unique(_, wrappedType, _) => methodOfType(wrappedType)
+        case Types.Unique(_, wrappedType, _) => methodOfType(wrappedType)
+        case Types.Record(fields) => fields.get(name).map(typ => (Terms.SelectedField, typ))
         case _ => None
       }
     }

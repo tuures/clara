@@ -4,6 +4,6 @@ object Attributes {
   sealed trait EmitKind
   case object BinaryOperator extends EmitKind
   case object InstanceProperty extends EmitKind
-  case class MemberAttributes(emitKind: Option[EmitKind] = None, emitName: Option[String] = None)
+  case class MethodAttributes(emitKind: Option[EmitKind] = None, emitName: Option[String] = None)
 }
 

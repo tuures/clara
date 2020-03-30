@@ -2,14 +2,13 @@ package clara.jsemitter
 
 // Asg => JsAst
 
-import clara.asg.{Terms, Types, Namespace}
+import clara.asg.{Attributes, Terms, Types, Namespace}
 import clara.ast.LiteralValue
 
 import impl._
 
 import ai.x.safe._
-import scala.collection.immutable.ListMap
-import clara.asg.Attributes
+
 
 object JsEmitter {
   def emitProgram(program: Terms.Block): JsAst.Module = {
@@ -30,10 +29,18 @@ object JsEmitter {
     case Terms.StringLiteral(parts, _) => emitStringLiteral(parts)
     case Terms.Block(bcs, _) => emitBlock(bcs)
     case Terms.NamedValue(name, _) => JsAst.Named(name)
-    case Terms.MemberSelection(obj, memberName, member, _) => emitMemberSelection(obj, memberName, member)
-    case Terms.Call(Terms.MemberSelection(obj, memberName, member, _), argument, _)
-      if member.attributes.emitKind.exists(_ === Attributes.BinaryOperator) =>
-        emitBinaryOperation(obj, memberName, member, argument)
+    case Terms.Record(fields, _) => JsAst.ObjectLiteral(fields.mapValues { case Terms.Field(body) =>
+        emitValueExpr(body)
+      }.entries)
+    case Terms.MemberSelection(obj, memberName, selectedMember, _) =>
+      emitMemberSelection(obj, memberName, selectedMember)
+    case Terms.Call(callee @ Terms.MemberSelection(obj, memberName, selectedMember, _), argument, _) =>
+      selectedMember match {
+        case Terms.SelectedMethod(attributes) if attributes.emitKind.exists(_ === Attributes.BinaryOperator) =>
+          emitBinaryOperation(obj, memberName, selectedMember, argument)
+        case Terms.SelectedField =>
+          emitCall(callee, argument)
+      }
     case Terms.Call(callee, argument, _) => emitCall(callee, argument)
   }
 
@@ -76,19 +83,32 @@ object JsEmitter {
     JsAst.Const(NameMangler.methodsCompanionName(targetType), JsAst.ObjectLiteral(entries))
   }
 
-  def emitMemberName(memberName: String, member: Terms.Member): String = member.attributes.emitName.getOrElse(memberName)
+  def emitMemberName(memberName: String, selectedMember: Terms.SelectedMember): String = {
+    val nameOverride = selectedMember match {
+      case Terms.SelectedMethod(attributes) => attributes.emitName
+      case Terms.SelectedField => None
+    }
 
-  def emitMemberSelection(obj: Terms.ValueExpr, memberName: String, member: Terms.Member) = {
-    val name = emitMemberName(memberName, member)
-    member.attributes.emitKind match {
-      case Some(Attributes.InstanceProperty) => JsAst.Member(emitValueExpr(obj), name)
-      case Some(Attributes.BinaryOperator) => JsAst.UnaryArrowFunc("_", Seq(JsAst.BinaryOperation(name, emitValueExpr(obj), JsAst.Named("_"))))
-      case None => JsAst.UnaryCall(JsAst.Member(JsAst.Named(NameMangler.methodsCompanionName(obj.typ)), name), emitValueExpr(obj))
+    nameOverride.getOrElse(memberName)
+  }
+
+  def emitMemberSelection(obj: Terms.ValueExpr, memberName: String, selectedMember: Terms.SelectedMember) = {
+    val name = emitMemberName(memberName, selectedMember)
+
+    def selectInstanceProperty = JsAst.Member(emitValueExpr(obj), name)
+
+    selectedMember match {
+      case Terms.SelectedMethod(attributes) => attributes.emitKind match {
+        case Some(Attributes.InstanceProperty) => selectInstanceProperty
+        case Some(Attributes.BinaryOperator) => JsAst.UnaryArrowFunc("_", Seq(JsAst.BinaryOperation(name, emitValueExpr(obj), JsAst.Named("_"))))
+        case None => JsAst.UnaryCall(JsAst.Member(JsAst.Named(NameMangler.methodsCompanionName(obj.typ)), name), emitValueExpr(obj))
+      }
+      case Terms.SelectedField => selectInstanceProperty
     }
   }
 
-  def emitBinaryOperation(obj: Terms.ValueExpr, memberName: String, member: Terms.Member, argument: Terms.ValueExpr) =
-    JsAst.BinaryOperation(emitMemberName(memberName, member), emitValueExpr(obj), emitValueExpr(argument))
+  def emitBinaryOperation(obj: Terms.ValueExpr, memberName: String, selectedMember: Terms.SelectedMember, argument: Terms.ValueExpr) =
+    JsAst.BinaryOperation(emitMemberName(memberName, selectedMember), emitValueExpr(obj), emitValueExpr(argument))
 
   def emitCall(callee: Terms.ValueExpr, argument: Terms.ValueExpr) =
     JsAst.UnaryCall(emitValueExpr(callee), emitValueExpr(argument))

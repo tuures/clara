@@ -30,18 +30,20 @@ object Ast {
   case class TupleType(ts: Seq[TypeExpr], pos: Pos = NoPos) extends TypeExpr
   case class TuplePattern(ps: Seq[Pattern], pos: Pos = NoPos) extends Pattern
 
-  // case class Record(es: Seq[FieldDef], pos: Pos = NoPos) extends ValueExpr
-  // case class RecordType(ts: Seq[FieldDecl], pos: Pos = NoPos) extends TypeExpr
-  // case class RecordPattern(ps: Seq[FieldPattern], pos: Pos = NoPos) extends Pattern
-
   case class Block(bcs: Seq[BlockContent], pos: Pos = NoPos) extends ValueExpr
 
   case class NamedValue(name: String, pos: Pos = NoPos) extends ValueExpr
   case class NamedType(name: String/*, typeArgs: Seq[TypeExpr]*/, pos: Pos = NoPos) extends TypeExpr
-  case class NamePattern(name: String, pos: Pos = NoPos) extends Pattern
+  case class NamePattern(name: String, pos: Pos = NoPos) extends Pattern // rename to CapturePattern?
 
   case class ValueAs(e: ValueExpr, t: TypeExpr, pos: Pos = NoPos) extends ValueExpr
   case class PatternAs(p: Pattern, t: TypeExpr, pos: Pos = NoPos) extends Pattern
+
+  case class Record(fields: Seq[FieldDef], pos: Pos = NoPos) extends ValueExpr
+  case class FieldDef(name: String, t: Option[TypeExpr], body: ValueExpr, pos: Pos = NoPos) extends Node
+  case class RecordType(fields: Seq[FieldDecl], pos: Pos = NoPos) extends TypeExpr
+  case class FieldDecl(name: String, t: TypeExpr, pos: Pos = NoPos) extends Node
+  // case class RecordPattern(ps: Seq[FieldPattern], pos: Pos = NoPos) extends Pattern
 
   case class Lambda(parameter: Pattern, body: ValueExpr, pos: Pos = NoPos) extends ValueExpr
   case class FuncType(parameter: TypeExpr, result: TypeExpr, pos: Pos = NoPos) extends TypeExpr

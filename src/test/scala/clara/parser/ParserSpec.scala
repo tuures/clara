@@ -225,6 +225,18 @@ class ParserSpec extends FunSuite {
     ValueAs(NamedValue("foo"), NamedType("String"/*, Nil*/))
   )
 
+  parse(p.record, "{}")(Record(Nil))
+  parse(p.record, "{ a = foo, b: Bar = bar }")(Record(Seq(
+    FieldDef("a", None, NamedValue("foo")),
+    FieldDef("b", Some(NamedType("Bar")), NamedValue("bar"))
+  )))
+
+  parse(p.recordType, "{}")(RecordType(Nil))
+  parse(p.recordType, "{ a: Foo, b: Bar }")(RecordType(Seq(
+    FieldDecl("a", NamedType("Foo")),
+    FieldDecl("b", NamedType("Bar"))
+  )))
+
   parse(p.lambda, "() => ()")(
     Lambda(UnitPattern(), UnitLiteral())
   )
@@ -276,6 +288,41 @@ class ParserSpec extends FunSuite {
 
   parse(p.valueNamesDef, "a =\u0020\u0020\n\u0020\u0020\n  foo")(
     ValueNamesDef(NamePattern("a"), NamedValue("foo"))
+  )
+
+  parse(p.typeDef, "::type Foo = Bar")(TypeDef("Foo", NamedType("Bar")))
+
+  parse(p.methodDeclSection, "::declare ::methods Bar { foo: Bar }")(
+    MethodDeclSection(NamedType("Bar"), Seq(
+      MethodDecl(Nil, "foo", NamedType("Bar"))
+    ))
+  )
+  parse(p.methodDeclSection, "::declare ::methods Bar { foo: Bar = sic }")(
+    MethodDeclSection(NamedType("Bar"), Seq(
+      MethodDef(Nil, "foo", Some(NamedType("Bar")), NamedValue("sic"))
+    ))
+  )
+  parse(p.methodDeclSection, "::declare ::methods Bar {\n@[a]\nfoo: Bar\nbaz: Baz\n}")(
+    MethodDeclSection(NamedType("Bar"), Seq(
+      MethodDecl(Seq(Attribute("a", None)), "foo", NamedType("Bar")),
+      MethodDecl(Nil, "baz", NamedType("Baz")),
+    ))
+  )
+
+  parse(p.methodDefSection, "::methods b: Bar { foo = b }")(
+    MethodDefSection(PatternAs(NamePattern("b"), NamedType("Bar")), Seq(
+      MethodDef(Nil, "foo", None, NamedValue("b"))
+    ))
+  )
+  parse(p.methodDefSection, "::methods b: Bar {\nfoo: Bar = b\n}")(
+    MethodDefSection(PatternAs(NamePattern("b"), NamedType("Bar")), Seq(
+      MethodDef(Nil, "foo", Some(NamedType("Bar")), NamedValue("b"))
+    ))
+  )
+  parse(p.methodDefSection, "::methods b: Bar { foo: Sic }")(
+    MethodDefSection(PatternAs(NamePattern("b"), NamedType("Bar")), Seq(
+      MethodDecl(Nil, "foo", NamedType("Sic"))
+    ))
   )
 
   parse(p.program, "(foo/*comment\n /*  \n // line2*/)")(

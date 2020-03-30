@@ -46,45 +46,44 @@ case class MethodSectionAnalyzer(env: Env) {
       case t => An.error(SourceMessage(targetTypeExpr.pos, safe"Cannot have methods for type `${Types.toSource(t)}`"))
     }
 
-  def walkMethodDefs(currentEnv: Env, methodAsts: Seq[Ast.Method]): An[Namespace[Terms.MethodDef]] = {
-    An.step(methodAsts)(Namespace.empty[Terms.MethodDef]){ case (ns, methodAst) =>
-      (methodAst match {
-        case _: Ast.MethodDecl => An.error(SourceMessage(methodAst.pos, "Method definition expected"))
-        case Ast.MethodDef(attributes, name, typeOpt, body, pos) =>
-          typeOpt.foreach(_ => ???)
-
-          // TODO not all the decl attributes make sense for defs?
-          val memberAttributesAn = walkMemberAttributes(attributes)
-          val bodyTermAn = ValueExprAnalyzer(currentEnv).walkValueExpr(body)
-
-          memberAttributesAn.zip(bodyTermAn).flatMap { case (memberAttributes, bodyTerm) =>
-            lazy val error = SourceMessage(pos, "Already defined")
-
-            An.someOrError(ns.add((name, Terms.MethodDef(memberAttributes, bodyTerm))), error)
-          }
-      })
-    }
-  }
-
   def walkMethodDecls(currentEnv: Env, methodAsts: Seq[Ast.Method]): An[Namespace[Terms.MethodDecl]] = {
     An.step(methodAsts)(Namespace.empty[Terms.MethodDecl]){ case (ns, methodAst) =>
       (methodAst match {
         case _: Ast.MethodDef => An.error(SourceMessage(methodAst.pos, "Method declaration expected"))
         case Ast.MethodDecl(attributes, name, typeExpr, pos) =>
-          val memberAttributesAn = walkMemberAttributes(attributes)
+          val memberAttributesAn = walkMethodDeclAttributes(attributes)
           val typeAn = TypeExprAnalyzer(currentEnv).walkTypeExpr(typeExpr)
           memberAttributesAn.zip(typeAn).flatMap { case (memberAttributes, typ) =>
-            lazy val error = SourceMessage(pos, "Already declared")
+            lazy val duplicateName = SourceMessage(pos, safe"Duplicate method name `$name`")
 
-            An.someOrError(ns.add((name, Terms.MethodDecl(memberAttributes, typ))), error)
+            An.someOrError(ns.add((name, Terms.MethodDecl(memberAttributes, typ))), duplicateName)
           }
       })
     }
   }
 
-  def walkMemberAttributes(attributes: Seq[Ast.Attribute]): An[Attributes.MemberAttributes] = {
+  def walkMethodDefs(currentEnv: Env, methodAsts: Seq[Ast.Method]): An[Namespace[Terms.MethodDef]] = {
+    An.step(methodAsts)(Namespace.empty[Terms.MethodDef]){ case (ns, methodAst) =>
+      (methodAst match {
+        case _: Ast.MethodDecl => An.error(SourceMessage(methodAst.pos, "Method definition expected"))
+        case Ast.MethodDef(attributes, name, typeOpt, body, pos) =>
+          typeOpt.foreach(_ => ???) // FIXME
+
+          val memberAttributesAn = walkMethodDefAttributes(attributes)
+          val bodyTermAn = ValueExprAnalyzer(currentEnv).walkValueExpr(body)
+
+          memberAttributesAn.zip(bodyTermAn).flatMap { case (memberAttributes, bodyTerm) =>
+            lazy val duplicateName = SourceMessage(pos, safe"Duplicate method name `$name`")
+
+            An.someOrError(ns.add((name, Terms.MethodDef(memberAttributes, bodyTerm))), duplicateName)
+          }
+      })
+    }
+  }
+
+  def walkMethodDeclAttributes(attributes: Seq[Ast.Attribute]): An[Attributes.MethodAttributes] = {
     // TODO error for duplicate attributes?
-    An.step(attributes)(Attributes.MemberAttributes()) { case (attributes, Ast.Attribute(key, value, pos)) =>
+    An.step(attributes)(Attributes.MethodAttributes()) { case (attributes, Ast.Attribute(key, value, pos)) =>
       (key, value) match {
         case ("emitKind", Some("binaryOperator")) =>
           An.result(attributes.copy(emitKind = Some(Attributes.BinaryOperator)))
@@ -92,8 +91,15 @@ case class MethodSectionAnalyzer(env: Env) {
           An.result(attributes.copy(emitKind = Some(Attributes.InstanceProperty)))
         case ("emitName", Some(emitName)) =>
           An.result(attributes.copy(emitName = Some(emitName)))
-        case _ => An.error(SourceMessage(pos, "Invalid member attribute"))
+        case _ => An.error(SourceMessage(pos, "Invalid attribute for a method declaration"))
       }
+    }
+  }
+
+  def walkMethodDefAttributes(attributes: Seq[Ast.Attribute]): An[Attributes.MethodAttributes] = {
+    // TODO error for duplicate attributes?
+    An.step(attributes)(Attributes.MethodAttributes()) { case (_, Ast.Attribute(_, _, pos)) =>
+      An.error(SourceMessage(pos, "Invalid attribute for a method definition"))
     }
   }
 

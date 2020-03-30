@@ -224,21 +224,6 @@ object Parser {
     val patternParens: P[Pattern] = P(parensSyntax(pattern))
 
     //////
-    // Record
-
-    val braceOpen = "{"
-    val braceClose = "}"
-
-    def recordSyntax[T](field: => P[T]) = {
-      val sep = (nl | comma) ~ nl.rep
-      braceOpen ~ nl.rep ~ field.rep(sep=sep) ~ comma.? ~ nl.rep ~ braceClose
-    }
-
-    // val record = recordSyntax
-
-    // val recordType =
-
-    //////
     // Blocks
 
     val semi = ";"
@@ -262,13 +247,6 @@ object Parser {
     val namePattern: P[NamePattern] = P(pp(name)(NamePattern.apply _))
 
     //////
-    // Simple
-
-    val simple: P[ValueExpr] = P(unitLiteral | floatLiteral | integerLiteral | stringLiteral | tuple | block | parens | namedValue)
-
-    val simpleType: P[TypeExpr] = P(unitType | tupleType | typeParens | namedType)
-
-    //////
     // ValueAs
 
     val colon = ":"
@@ -276,6 +254,31 @@ object Parser {
     val typed: P[TypeExpr] = P(colon ~ typeExpr)
 
     val valueAs: P[ValueAs] = P(pp(simple ~ typed)(ValueAs.apply _))
+
+    //////
+    // Record
+
+    val braceOpen = "{"
+    val braceClose = "}"
+    val equalsSign = "="
+
+    def recordSyntax[T](field: => P[T]) = {
+      val sep = (nl | comma) ~ nl.rep
+      braceOpen ~ nl.rep ~ field.rep(sep=sep) ~ comma.? ~ nl.rep ~ braceClose
+    }
+
+    val fieldDef = P(pp(name ~ typed.? ~ equalsSign ~ valueExpr)(FieldDef.apply _))
+    val record = P(pp(recordSyntax(fieldDef))(Record.apply _))
+
+    val fieldDecl = P(pp(name ~ typed)(FieldDecl.apply _))
+    val recordType = P(pp(recordSyntax(fieldDecl))(RecordType.apply _))
+
+    //////
+    // Simple
+
+    val simple: P[ValueExpr] = P(unitLiteral | floatLiteral | integerLiteral | stringLiteral | tuple | block | parens | namedValue | record)
+
+    val simpleType: P[TypeExpr] = P(unitType | tupleType | typeParens | namedType | recordType)
 
     //////
     // Function syntax
@@ -351,20 +354,19 @@ object Parser {
 
     //////
     // In-block defs
-    val equalsSign = "="
     val doubleColon = "::"
     def keyword(word: String) = doubleColon ~~ word
 
     val valueNamesDef: P[ValueNamesDef] = P(pp(pattern ~ equalsSign ~/ nl.rep ~ valueExpr)(ValueNamesDef.apply _))
 
-    // TODO
     val typeDef: P[TypeDef] = P(pp(keyword("type") ~ name ~ equalsSign ~ typeExpr)(TypeDef.apply _))
+    // val classNew: P[ClassNew] = P(pp("::new" ~ namedType ~ classBody)(ClassNew.apply _))
 
     val methodDecl: P[MethodDecl] = P(pp(attributes ~ name ~ typed)(MethodDecl.apply _))
 
     val methodDef: P[MethodDef] = P(pp(attributes ~ name ~ typed.? ~ equalsSign ~ valueExpr)(MethodDef.apply _))
 
-    val methodsBody: P[Seq[Method]] = P(recordSyntax(methodDecl | methodDef))
+    val methodsBody: P[Seq[Method]] = P(recordSyntax(methodDef | methodDecl))
 
     val methodDeclSection: P[MethodDeclSection] = P(pp(
       keyword("declare") ~
@@ -376,24 +378,6 @@ object Parser {
     )(MethodDefSection.apply _))
 
     val inBlockDef: P[InBlockDef] = P(valueNamesDef | typeDef | methodDeclSection | methodDefSection)
-
-    //
-    // val valueDecl: P[ValueDecl] = P(pp(name ~ typed)(ValueDecl.apply _))
-    //
-    // val methodDecl: P[MethodDecl] = P(pp("::method" ~ name ~ maybeTypeParams ~ typed)(MethodDecl.apply _))
-    //
-    // val methodDef: P[MethodDef] = P(pp("::method" ~ name ~ maybeTypeParams ~ equalsSign ~/ valueExpr)(MethodDef.apply _))
-    //
-    // val memberDecl: P[MemberDecl] = P(valueDef | methodDef | valueDecl | methodDecl)
-    //
-    // val classBody: P[Seq[MemberDecl]] = {
-    //   val sep = (nl | comma)
-    //   P("{" ~ sep.rep ~ memberDecl.rep(0, sep=sep.rep(1)) ~ sep.rep ~ "}")
-    // }
-    //
-    // val classDef: P[ClassDef] = P(pp("::class" ~ name ~ maybeTypeParams ~ ("<<" ~ namedType).? ~ classBody)(ClassDef.apply _))
-
-    // val classNew: P[ClassNew] = P(pp("::new" ~ namedType ~ classBody)(ClassNew.apply _))
 
     //////
     // Top level rules

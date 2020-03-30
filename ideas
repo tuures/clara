@@ -70,3 +70,14 @@ Nullary methods:
 ::methods Boolean {
   not: => Boolean
 }
+
+---
+
+default type for any type (in pattern)
+might only make sense for records
+
+(a = 1, b = 1) = fooTuple2
+
+{ a = 1, b = 2 } = fooRecord
+
+(a = 1) = ()
