@@ -52,6 +52,10 @@ case class ValueExprAnalyzer(env: Env) {
           case _ => An.error(SourceMessage(callee.pos, safe"Cannot call type `${Types.toSource(calleeTerm.typ)}`"))
         }
       }
+    case Ast.NewExpr(namedType, _) => TypeExprAnalyzer(env).walkTypeExpr(namedType).flatMap {
+      case typ @ Types.Unique(_, wrappedType, _) => An.result(Terms.NewExpr(Types.Func(wrappedType, typ)))
+      case typ => An.error(SourceMessage(namedType.pos, safe"Cannot construct instances of type `${Types.toSource(typ)}`"))
+    }
   }
 
   def walkMemberSelection(

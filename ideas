@@ -81,3 +81,18 @@ might only make sense for records
 { a = 1, b = 2 } = fooRecord
 
 (a = 1) = ()
+
+
+---
+
+Constructor is a first class function
+
+- `::new T` expression returns the function
+
+---
+
+List of languages to look at for inspiration
+
+Scala 2, Dotty (Scala 3), TS, Ocaml, Rust, Swift, Nim
+
+---

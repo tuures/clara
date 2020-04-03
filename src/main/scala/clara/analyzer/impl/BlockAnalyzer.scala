@@ -46,7 +46,7 @@ case class BlockAnalyzer(parentEnv: Env) {
           walkValueNamesDef(currentEnv, target, valueExprTerm)
         }.map { case (namesDef, nextEnv) => (namesDef, None, nextEnv) }
       }
-      case Ast.TypeDef(name, typeExpr, pos) => { // TODO maybe this should be called ::subtype instead
+      case Ast.TypeDef(name, typeExpr, pos) => { // TODO maybe this should be called ::subtype instead, or ::uniq
         TypeExprAnalyzer(currentEnv).walkTypeExpr(typeExpr).flatMap {
           case t: Types.GoodType => An.result(t)
           case b @ Types.Bottom => An.error(SourceMessage(typeExpr.pos, safe"Cannot subtype `${Types.toSource(b)}`"))

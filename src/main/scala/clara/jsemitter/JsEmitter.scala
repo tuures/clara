@@ -41,7 +41,9 @@ object JsEmitter {
         case Terms.SelectedField =>
           emitCall(callee, argument)
       }
+    case Terms.Call(_: Terms.NewExpr, argument, _) => emitValueExpr(argument)
     case Terms.Call(callee, argument, _) => emitCall(callee, argument)
+    case Terms.NewExpr(_) => JsAst.UnaryArrowFunc("_", Seq(JsAst.Named("_"))) // TODO JsAst.Iife
   }
 
   def emitIntegerLiteral(value: LiteralValue.Integer) = value match {
@@ -59,6 +61,7 @@ object JsEmitter {
   }).safeMkString(""))
 
   def emitBlock(bcs: Seq[Terms.BlockContent]) = {
+    // TODO: JsAst.Iife so that we can automatically optimise unintentional iifes away
     JsAst.NullaryCall(JsAst.NullaryArrowFunc(bcs.flatMap(emitBlockContent)))
   }
 

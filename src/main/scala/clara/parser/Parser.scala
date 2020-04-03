@@ -276,7 +276,7 @@ object Parser {
     //////
     // Simple
 
-    val simple: P[ValueExpr] = P(unitLiteral | floatLiteral | integerLiteral | stringLiteral | tuple | block | parens | namedValue | record)
+    val simple: P[ValueExpr] = P(unitLiteral | floatLiteral | integerLiteral | stringLiteral | tuple | block | parens | namedValue | record | newExpr)
 
     val simpleType: P[TypeExpr] = P(unitType | tupleType | typeParens | namedType | recordType)
 
@@ -360,7 +360,8 @@ object Parser {
     val valueNamesDef: P[ValueNamesDef] = P(pp(pattern ~ equalsSign ~/ nl.rep ~ valueExpr)(ValueNamesDef.apply _))
 
     val typeDef: P[TypeDef] = P(pp(keyword("type") ~ name ~ equalsSign ~ typeExpr)(TypeDef.apply _))
-    // val classNew: P[ClassNew] = P(pp("::new" ~ namedType ~ classBody)(ClassNew.apply _))
+
+    val newExpr: P[NewExpr] = P(pp("::new" ~ namedType)(NewExpr.apply _))
 
     val methodDecl: P[MethodDecl] = P(pp(attributes ~ name ~ typed)(MethodDecl.apply _))
 

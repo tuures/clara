@@ -62,11 +62,15 @@ r = {
 
 ::type Rect = { x: Int, y: Int }
 
-
 // ::methods {x, y}: Rect {
-//   area = x .multiply y
+//   area = x .* y
 // }
+::methods r: Rect {
+  area = r.x.multiply(r.y)
+}
 
+makeRect = ::new Rect
+fooRect = ::new Rect { x = 2, y = 3 }
 // ::enum Option A = Some A | None
 
 () // TODO program should return Nothing

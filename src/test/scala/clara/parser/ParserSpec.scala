@@ -292,6 +292,8 @@ class ParserSpec extends FunSuite {
 
   parse(p.typeDef, "::type Foo = Bar")(TypeDef("Foo", NamedType("Bar")))
 
+  parse(p.newExpr, "::new Foo")(NewExpr(NamedType("Foo")))
+
   parse(p.methodDeclSection, "::declare ::methods Bar { foo: Bar }")(
     MethodDeclSection(NamedType("Bar"), Seq(
       MethodDecl(Nil, "foo", NamedType("Bar"))

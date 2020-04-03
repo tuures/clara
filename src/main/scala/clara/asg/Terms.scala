@@ -40,6 +40,7 @@ object Terms {
 
   case class ValueNamesDef(target: Pattern, e: ValueExpr) extends InBlockDef
   case class TypeDef(name: String) extends InBlockDef
+  case class NewExpr(typ: Typ) extends ValueExpr
 
   sealed trait MethodSection extends InBlockDef
   case class MethodDeclSection(targetType: Typ, methodDecls: Namespace[MethodDecl]) extends MethodSection
