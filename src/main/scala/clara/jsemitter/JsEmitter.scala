@@ -43,7 +43,7 @@ object JsEmitter {
       }
     case Terms.Call(_: Terms.NewExpr, argument, _) => emitValueExpr(argument)
     case Terms.Call(callee, argument, _) => emitCall(callee, argument)
-    case Terms.NewExpr(_) => JsAst.UnaryArrowFunc("_", Seq(JsAst.Named("_"))) // TODO JsAst.Iife
+    case Terms.NewExpr(_) => JsAst.UnaryArrowFunc(JsAst.NamePattern("_"), Seq(JsAst.Named("_"))) // TODO JsAst.Iife
   }
 
   def emitIntegerLiteral(value: LiteralValue.Integer) = value match {
@@ -65,7 +65,7 @@ object JsEmitter {
     JsAst.NullaryCall(JsAst.NullaryArrowFunc(bcs.flatMap(emitBlockContent)))
   }
 
-  def emitBlockContent(blockContent: Terms.BlockContent): Option[JsAst.Node] = blockContent match {
+  def emitBlockContent(blockContent: Terms.BlockContent): Option[JsAst.Content] = blockContent match {
     case e: Terms.ValueExpr => Some(emitValueExpr(e))
     case Terms.ValueNamesDef(target, e) => Some(emitValueNamesDef(target, e))
     case _: Terms.TypeDef => None
@@ -74,16 +74,18 @@ object JsEmitter {
   }
 
   def emitValueNamesDef(target: Terms.Pattern, e: Terms.ValueExpr) = target match {
-    case Terms.NamePattern(name) => JsAst.Const(name, emitValueExpr(e))
+    case Terms.NamePattern(name) => JsAst.Const(JsAst.NamePattern(name), emitValueExpr(e))
   }
 
   def emitMethodDefSection(targetType: Types.Typ, selfPattern: Terms.Pattern, methodDefs: Namespace[Terms.MethodDef]) = {
     val entries = methodDefs.mapValues { case Terms.MethodDef(attributes, body) =>
-      emitValueExpr(body)
+      JsAst.UnaryArrowFunc(emitPattern(selfPattern), Seq(emitValueExpr(body)))
     }.entries
 
-    // FIXME func from self pattern to object
-    JsAst.Const(NameMangler.methodsCompanionName(targetType), JsAst.ObjectLiteral(entries))
+    JsAst.Const(
+      JsAst.NamePattern(NameMangler.methodsCompanionName(targetType)),
+      JsAst.ObjectLiteral(entries)
+    )
   }
 
   def emitMemberName(memberName: String, selectedMember: Terms.SelectedMember): String = {
@@ -103,7 +105,7 @@ object JsEmitter {
     selectedMember match {
       case Terms.SelectedMethod(attributes) => attributes.emitKind match {
         case Some(Attributes.InstanceProperty) => selectInstanceProperty
-        case Some(Attributes.BinaryOperator) => JsAst.UnaryArrowFunc("_", Seq(JsAst.BinaryOperation(name, emitValueExpr(obj), JsAst.Named("_"))))
+        case Some(Attributes.BinaryOperator) => JsAst.UnaryArrowFunc(JsAst.NamePattern("_"), Seq(JsAst.BinaryOperation(name, emitValueExpr(obj), JsAst.Named("_"))))
         case None => JsAst.UnaryCall(JsAst.Member(JsAst.Named(NameMangler.methodsCompanionName(obj.typ)), name), emitValueExpr(obj))
       }
       case Terms.SelectedField => selectInstanceProperty
@@ -115,6 +117,10 @@ object JsEmitter {
 
   def emitCall(callee: Terms.ValueExpr, argument: Terms.ValueExpr) =
     JsAst.UnaryCall(emitValueExpr(callee), emitValueExpr(argument))
+
+  def emitPattern(pattern: Terms.Pattern) = pattern match {
+    case Terms.NamePattern(name) => JsAst.NamePattern(name)
+  }
 }
 
 object NameMangler {

@@ -1,12 +1,12 @@
 package clara.jsemitter.impl
 
-import scala.collection.immutable.ListMap
-
 object JsAst {
   sealed trait Node
-  sealed trait Expr extends Node
-  sealed trait Stmt extends Node
-  sealed trait Defi extends Node
+  sealed trait Content extends Node
+  sealed trait Expr extends Content
+  sealed trait Stmt extends Content
+  sealed trait Defi extends Content
+  sealed trait Pattern extends Node
 
   case object Undefined extends Expr
   case class NumberLiteral(value: String) extends Expr
@@ -14,9 +14,10 @@ object JsAst {
   case class ArrayLiteral(values: Seq[Expr]) extends Expr
   case class ObjectLiteral(entries: Seq[(String, Expr)]) extends Expr
   case class Named(name: String) extends Expr
+  case class NamePattern(name: String) extends Pattern
   sealed trait ArrowFunc extends Expr
-  case class NullaryArrowFunc(body: Seq[Node]) extends ArrowFunc
-  case class UnaryArrowFunc(param: String, body: Seq[Node]) extends ArrowFunc
+  case class NullaryArrowFunc(body: Seq[Content]) extends ArrowFunc
+  case class UnaryArrowFunc(param: Pattern, body: Seq[Content]) extends ArrowFunc
   case class Member(obj: Expr, memberName: String) extends Expr
   case class NullaryCall(target: Expr) extends Expr
   case class UnaryCall(target: Expr, argument: Expr) extends Expr
@@ -24,7 +25,7 @@ object JsAst {
 
   case class Return(expr: Expr) extends Stmt
 
-  case class Const(name: String, e: Expr) extends Defi
+  case class Const(target: Pattern, e: Expr) extends Defi
 
-  case class Module(nodes: Seq[Node])
+  case class Module(nodes: Seq[Content]) extends Node
 }

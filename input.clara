@@ -73,4 +73,6 @@ makeRect = ::new Rect
 fooRect = ::new Rect { x = 2, y = 3 }
 // ::enum Option A = Some A | None
 
+area = fooRect.area
+
 () // TODO program should return Nothing

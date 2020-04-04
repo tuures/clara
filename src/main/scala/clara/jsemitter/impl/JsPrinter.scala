@@ -8,10 +8,11 @@ object JsPrinter {
   def emitString(module: JsAst.Module): String = JsPrinterImpl().walkModule(module)
 }
 
-case class JsPrinterImpl(i: String = "  ") {
-  import JsAst._
+case class JsPrinterImpl() {
 
-  val nli = safe"\n$i"
+  def indented(s: String) = s.replaceAll("(^|\n)", "$1  ")
+
+  import JsAst._
 
   def walkModule(module: Module) = module.nodes.map(walkNode).safeMkString("\n\n")
 
@@ -32,8 +33,8 @@ case class JsPrinterImpl(i: String = "  ") {
     case ArrayLiteral(values) => ???
     case ObjectLiteral(entries) => walkObjectLiteral(entries)
     case Named(name) => name
-    case NullaryArrowFunc(body) => walkArrowFunc("()", body)
-    case UnaryArrowFunc(param, body) => walkArrowFunc(param, body)
+    case NullaryArrowFunc(body) => walkArrowFunc(None, body)
+    case UnaryArrowFunc(param, body) => walkArrowFunc(Some(param), body)
     case Member(obj, memberName) => safe"${walkExpr(obj)}.$memberName"
     case NullaryCall(target) => walkCall(target, "")
     case UnaryCall(target, argument) => walkCall(target, walkExpr(argument))
@@ -41,12 +42,16 @@ case class JsPrinterImpl(i: String = "  ") {
   }
 
   def walkObjectLiteral(entries: Seq[(String, Expr)]): String =
-    entries.map { case (name, expr) => safe"$name: ${walkExpr(expr)}" }.safeMkString(safe"{\n$i", safe",\n$i", "\n}")
+    entries.map { case (name, expr) => indented(safe"$name: ${walkExpr(expr)}") }.safeMkString("{\n", ",\n", "\n}")
 
-  def walkArrowFunc(param: String, body: Seq[Node]): String = body match {
-    case Seq((e: JsAst.Expr)) => safe"$param =>$nli" + walkExpr(e) + "\n"
-    case _ => {
-      safe"$param => {" + body.map(walkNode).safeMkString(nli, nli, "") + "\n}"
+  def walkArrowFunc(param: Option[Pattern], body: Seq[Node]): String = {
+    val paramPrinted = param.map(walkPattern).getOrElse("()")
+
+    body match {
+      case Seq((e: JsAst.Expr)) => safe"$paramPrinted =>\n" + indented(walkExpr(e))
+      case _ => {
+        safe"$paramPrinted => {\n" + indented(body.map(walkNode).safeMkString("\n")) + "\n}"
+      }
     }
   }
 
@@ -75,7 +80,11 @@ case class JsPrinterImpl(i: String = "  ") {
   }
 
   def walkDefi(defi: Defi): String = defi match {
-    case Const(name, expr) => safe"const $name = ${walkExpr(expr)}"
+    case Const(target, expr) => safe"const ${walkPattern(target)} = ${walkExpr(expr)}"
+  }
+
+  def walkPattern(pattern: Pattern): String = pattern match {
+    case NamePattern(name) => name
   }
 
 }
