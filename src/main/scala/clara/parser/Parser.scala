@@ -34,7 +34,7 @@ object Parser {
     val White = fastparse.WhitespaceApi.Wrapper {
       import fastparse.all._
 
-      val lineComment = P("//" ~ CharsWhile(!nlPred(_)))
+      val lineComment = P("//" ~ (End | CharPred(nlPred) | CharsWhile(!nlPred(_))))
 
       val blockComment = {
         val (start, end) = ("/*", "*/")
@@ -278,7 +278,7 @@ object Parser {
 
     val simple: P[ValueExpr] = P(unitLiteral | floatLiteral | integerLiteral | stringLiteral | tuple | block | parens | namedValue | record | newExpr)
 
-    val simpleType: P[TypeExpr] = P(unitType | tupleType | typeParens | namedType | recordType)
+    val simpleType: P[TypeExpr] = P(topType | bottomType | unitType | tupleType | typeParens | namedType | recordType)
 
     //////
     // Function syntax
@@ -359,6 +359,8 @@ object Parser {
 
     val valueNamesDef: P[ValueNamesDef] = P(pp(pattern ~ equalsSign ~/ nl.rep ~ valueExpr)(ValueNamesDef.apply _))
 
+    val aliasTypeDef: P[AliasTypeDef] = P(pp(keyword("alias") ~ name ~ equalsSign ~ typeExpr)(AliasTypeDef.apply _))
+
     val typeDef: P[TypeDef] = P(pp(keyword("type") ~ name ~ equalsSign ~ typeExpr)(TypeDef.apply _))
 
     val newExpr: P[NewExpr] = P(pp("::new" ~ namedType)(NewExpr.apply _))
@@ -378,7 +380,7 @@ object Parser {
       keyword("methods") ~/ pattern ~ methodsBody
     )(MethodDefSection.apply _))
 
-    val inBlockDef: P[InBlockDef] = P(valueNamesDef | typeDef | methodDeclSection | methodDefSection)
+    val inBlockDef: P[InBlockDef] = P(valueNamesDef | aliasTypeDef | typeDef | methodDeclSection | methodDefSection)
 
     //////
     // Top level rules

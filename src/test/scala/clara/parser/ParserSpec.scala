@@ -290,6 +290,8 @@ class ParserSpec extends FunSuite {
     ValueNamesDef(NamePattern("a"), NamedValue("foo"))
   )
 
+  parse(p.aliasTypeDef, "::alias Foo = Bar")(AliasTypeDef("Foo", NamedType("Bar")))
+
   parse(p.typeDef, "::type Foo = Bar")(TypeDef("Foo", NamedType("Bar")))
 
   parse(p.newExpr, "::new Foo")(NewExpr(NamedType("Foo")))
@@ -328,6 +330,12 @@ class ParserSpec extends FunSuite {
   )
 
   parse(p.program, "(foo/*comment\n /*  \n // line2*/)")(
+    Block(Seq(NamedValue("foo")))
+  )
+  parse(p.program, "foo//\n")(
+    Block(Seq(NamedValue("foo")))
+  )
+  parse(p.program, "foo//")(
     Block(Seq(NamedValue("foo")))
   )
 

@@ -46,12 +46,21 @@ case class BlockAnalyzer(parentEnv: Env) {
           walkValueNamesDef(currentEnv, target, valueExprTerm)
         }.map { case (namesDef, nextEnv) => (namesDef, None, nextEnv) }
       }
+      case Ast.AliasTypeDef(name, typeExpr, pos) => {
+        TypeExprAnalyzer(currentEnv).walkTypeExpr(typeExpr).map {
+          case t: Types.Populated => Types.PopulatedAlias(name, t)
+          case t: Types.Empty => Types.BottomAlias(name)
+        }.flatMap { typ =>
+          currentEnv.addOrShadowType((name, typ), parentEnv, pos).
+            map(nextEnv => (Terms.AliasTypeDef(name), None, nextEnv))
+        }
+      }
       case Ast.TypeDef(name, typeExpr, pos) => { // TODO maybe this should be called ::subtype instead, or ::uniq
         TypeExprAnalyzer(currentEnv).walkTypeExpr(typeExpr).flatMap {
-          case t: Types.GoodType => An.result(t)
-          case b @ Types.Bottom => An.error(SourceMessage(typeExpr.pos, safe"Cannot subtype `${Types.toSource(b)}`"))
+          case t: Types.Populated => An.result(Types.Unique(name, t))
+          case t: Types.Empty => An.error(SourceMessage(typeExpr.pos, safe"Cannot subtype `${Types.toSource(t)}`"))
         }.flatMap { typ =>
-          currentEnv.addOrShadowType((name, Types.Unique(name, typ)), parentEnv, pos).
+          currentEnv.addOrShadowType((name, typ), parentEnv, pos).
             map(nextEnv => (Terms.TypeDef(name), None, nextEnv))
         }
       }

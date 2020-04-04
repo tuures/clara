@@ -1,8 +1,17 @@
-::type Float = () // = _ or should it be Any? but must be unconstructible: is _ unconstructible Any?
+// MVP TODO
+// - List/Array type (Parametric polymorphism / Generics)
+// - declare value
 
-::type Int = () // = _
+::alias Any = ⊤
 
-::type String = () // = _
+::alias Nothing = ⊥
+
+// TODO declare = unconstructible
+/*::declare */::type Float = Any
+
+/*::declare */::type Int = Any
+
+/*::declare */::type String = Any
 
 ::declare ::methods Float {
   @[emitKind binaryOperator] @[emitName +]

@@ -93,6 +93,8 @@ Constructor is a first class function
 
 List of languages to look at for inspiration
 
-Scala, Dotty, TypeScript, Reason/Ocaml, Rust, Swift, Nim
+Scala, Dotty, TypeScript, Reason/Ocaml, Rust, Swift, Nim, Python
 
 ---
+
+Warn about unused values (and types?)
