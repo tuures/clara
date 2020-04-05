@@ -1,39 +1,55 @@
 {
-	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
-	"name": "Clara",
-	"patterns": [
-		{
-			"include": "#keywords"
-		},
-		{
-			"include": "#strings"
-		},
-		{
-			"include": "#comments"
-		}
-	],
-	"repository": {
-		"keywords": {
-			"patterns": [{
-				"name": "keyword.control.clara",
-				"match": "::(declare|type|methods)\\b"
-			}]
-		},
-		"strings": {
-			"name": "string.quoted.double.clara",
-			"begin": "\"",
-			"end": "\"",
-			"patterns": [
-				{
-					"name": "constant.character.escape.clara",
-					"match": "\\\\."
-				}
-			]
-		},
-		"comments": {
-			"name": "comment.line.double-slash",
-			"match": "//.*$"
-		}
-	},
-	"scopeName": "source.clara"
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Clara",
+  "patterns": [
+    {
+      "include": "#keywords"
+    },
+    {
+      "name": "string.quoted.double.clara",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.clara",
+          "match": "\\\\."
+        }
+      ]
+    },
+    {
+      "name": "constant.numeric",
+      "match": "\\d+(\\.\\d+)?"
+    },
+    {
+      "name": "comment.line.double-slash.clara",
+      "match": "//.*$"
+    },
+    {
+      "name": "comment.block.clara",
+      "match": "/\\*.*?\\*/"
+    },
+    {
+      "name": "keyword.other",
+      "match": "@\\[.*?\\]"
+    }
+  ],
+  "repository": {
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.declaration.clara",
+          "match": "::(alias|declare|type|methods)\\b"
+        },
+        {
+          "name": "keyword.operator.new",
+          "match": "::new\\b"
+        },
+        {
+          "name": "keyword.operator",
+          "match": "=>"
+        }
+      ]
+    }
+  },
+  "scopeName": "source.clara"
 }
