@@ -361,9 +361,13 @@ object Parser {
 
     val aliasTypeDef: P[AliasTypeDef] = P(pp(keyword("alias") ~ name ~ equalsSign ~ typeExpr)(AliasTypeDef.apply _))
 
-    val typeDef: P[TypeDef] = P(pp(keyword("type") ~ name ~ equalsSign ~ typeExpr)(TypeDef.apply _))
+    val typeDef: P[TypeDef] = P(pp(
+      keyword("declare").!.?.map(_.isDefined) ~
+      keyword("type") ~
+      name ~ equalsSign ~ typeExpr
+    )(TypeDef.apply _))
 
-    val newExpr: P[NewExpr] = P(pp("::new" ~ namedType)(NewExpr.apply _))
+    val newExpr: P[NewExpr] = P(pp(keyword("new") ~ namedType)(NewExpr.apply _))
 
     val methodDecl: P[MethodDecl] = P(pp(attributes ~ name ~ typed)(MethodDecl.apply _))
 

@@ -6,12 +6,11 @@
 
 ::alias Nothing = ⊥
 
-// TODO declare = unconstructible
-/*::declare */::type Float = Any
+::declare ::type Float = Any
 
-/*::declare */::type Int = Any
+::declare ::type Int = Any
 
-/*::declare */::type String = Any
+::declare ::type String = Any
 
 ::declare ::methods Float {
   @[emitKind binaryOperator] @[emitName +]

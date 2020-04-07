@@ -58,7 +58,7 @@ object Ast {
   case class ValueNamesDef(target: Pattern, e: ValueExpr, pos: Pos = NoPos) extends InBlockDef
 
   case class AliasTypeDef(name: String, t: TypeExpr, pos: Pos = NoPos) extends InBlockDef
-  case class TypeDef(name: String, t: TypeExpr, pos: Pos = NoPos) extends InBlockDef
+  case class TypeDef(isDecl: Boolean, name: String, t: TypeExpr, pos: Pos = NoPos) extends InBlockDef
   case class NewExpr(t: NamedType, pos: Pos = NoPos) extends ValueExpr
 
   case class MethodDeclSection(targetType: TypeExpr, methods: Seq[Method], pos: Pos = NoPos) extends InBlockDef

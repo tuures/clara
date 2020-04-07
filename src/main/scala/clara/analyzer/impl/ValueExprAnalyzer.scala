@@ -53,8 +53,10 @@ case class ValueExprAnalyzer(env: Env) {
         }
       }
     case Ast.NewExpr(namedType, _) => TypeExprAnalyzer(env).walkTypeExpr(namedType).flatMap {
-      case typ @ Types.Unique(_, wrappedType, _) => An.result(Terms.NewExpr(Types.Func(wrappedType, typ)))
-      case typ => An.error(SourceMessage(namedType.pos, safe"Cannot construct instances of type `${Types.toSource(typ)}`"))
+      case typ @ Types.Unique(_, constructible, wrappedType, _) if constructible =>
+        An.result(Terms.NewExpr(Types.Func(wrappedType, typ)))
+      case typ =>
+        An.error(SourceMessage(namedType.pos, safe"Cannot construct instances of type `${Types.toSource(typ)}`"))
     }
   }
 
@@ -72,7 +74,7 @@ case class ValueExprAnalyzer(env: Env) {
       (Terms.SelectedMethod(attributes), typ)
     }.orElse {
       typ match {
-        case Types.Unique(_, wrappedType, _) => methodOfType(wrappedType)
+        case Types.Unique(_, _, wrappedType, _) => methodOfType(wrappedType)
         case Types.Record(fields) => fields.get(name).map(typ => (Terms.SelectedField, typ))
         case _ => None
       }

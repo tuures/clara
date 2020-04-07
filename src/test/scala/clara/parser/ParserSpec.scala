@@ -292,7 +292,9 @@ class ParserSpec extends FunSuite {
 
   parse(p.aliasTypeDef, "::alias Foo = Bar")(AliasTypeDef("Foo", NamedType("Bar")))
 
-  parse(p.typeDef, "::type Foo = Bar")(TypeDef("Foo", NamedType("Bar")))
+  parse(p.typeDef, "::declare ::type Foo = Bar")(TypeDef(true, "Foo", NamedType("Bar")))
+
+  parse(p.typeDef, "::type Foo = Bar")(TypeDef(false, "Foo", NamedType("Bar")))
 
   parse(p.newExpr, "::new Foo")(NewExpr(NamedType("Foo")))
 

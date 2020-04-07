@@ -25,7 +25,7 @@ object Types {
   object Uniq {
     def apply() = new Uniq()
   }
-  case class Unique(name: String, wrappedType: Populated, uniq: Uniq = new Uniq()) extends Populated
+  case class Unique(name: String, constructible: Boolean, wrappedType: Populated, uniq: Uniq = new Uniq()) extends Populated
 
   case class Record(fields: Namespace[Typ]) extends Populated
 
@@ -39,7 +39,7 @@ object Types {
       case (t1: BottomAlias, _) => true
       case (Func(p1, r1), Func(p2, r2)) => isAssignable(r1, r2) && isAssignable(p2, p1)
       case (t1: Unique, t2: Unique) => t1.uniq === t2.uniq // optimisation
-      case (Unique(_, wrappedType, _), t2) => isAssignable(wrappedType, t2)
+      case (Unique(_, _, wrappedType, _), t2) => isAssignable(wrappedType, t2)
       case _ => false
     }) ||
     t1 === t2 // deep equality
