@@ -38,7 +38,7 @@
       "patterns": [
         {
           "name": "keyword.declaration.clara",
-          "match": "::(alias|declare|type|methods)\\b"
+          "match": "::(alias|declare|type|methods|val)\\b"
         },
         {
           "name": "keyword.operator.new",

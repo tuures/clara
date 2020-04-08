@@ -25,6 +25,8 @@ case class Parser(sourceName: String, input: String) {
   }
 }
 
+// TODO add more cuts to optimise and improve the error messages
+// https://www.lihaoyi.com/fastparse/#Cuts
 object Parser {
   case class Impl(sourceInfo: Option[SourceInfo]) {
     import fastparse.noApi._
@@ -253,7 +255,7 @@ object Parser {
 
     val typed: P[TypeExpr] = P(colon ~ typeExpr)
 
-    val valueAs: P[ValueAs] = P(pp(simple ~ typed)(ValueAs.apply _))
+    val valueAs: P[ValueAs] = P(pp(NoCut(simple ~ typed))(ValueAs.apply _))
 
     //////
     // Record
@@ -312,10 +314,10 @@ object Parser {
         }
       }
 
-      val member = (Index ~ dot ~ nl.rep ~ name /*~ maybeTypeArgs*/).map(Left(_))
+      val member = P(Index ~ dot ~ nl.rep ~ name /*~ maybeTypeArgs*/).map(Left(_))
       val call = simple.map(Right(_))
 
-      (Index ~ simple ~ ((member | call) ~ Index).rep(1)).map { case (startIndex, base, parts) =>
+      NoCut(Index ~ simple ~ ((member | call) ~ Index).rep(1)).map { case (startIndex, base, parts) =>
         val mk = makeNode(startIndex) _
         parts.tail.foldLeft(mk(base, parts.head))(mk)
       }
@@ -357,17 +359,19 @@ object Parser {
     val doubleColon = "::"
     def keyword(word: String) = doubleColon ~~ word
 
+    val valueDecl: P[ValueDecl] = P(pp(keyword("declare") ~ keyword("val") ~/ name ~ typed)(ValueDecl.apply _))
+
     val valueNamesDef: P[ValueNamesDef] = P(pp(pattern ~ equalsSign ~/ nl.rep ~ valueExpr)(ValueNamesDef.apply _))
 
-    val aliasTypeDef: P[AliasTypeDef] = P(pp(keyword("alias") ~ name ~ equalsSign ~ typeExpr)(AliasTypeDef.apply _))
+    val aliasTypeDef: P[AliasTypeDef] = P(pp(keyword("alias") ~/ name ~ equalsSign ~ typeExpr)(AliasTypeDef.apply _))
 
     val typeDef: P[TypeDef] = P(pp(
       keyword("declare").!.?.map(_.isDefined) ~
-      keyword("type") ~
+      keyword("type") ~/
       name ~ equalsSign ~ typeExpr
     )(TypeDef.apply _))
 
-    val newExpr: P[NewExpr] = P(pp(keyword("new") ~ namedType)(NewExpr.apply _))
+    val newExpr: P[NewExpr] = P(pp(keyword("new") ~/ namedType)(NewExpr.apply _))
 
     val methodDecl: P[MethodDecl] = P(pp(attributes ~ name ~ typed)(MethodDecl.apply _))
 
@@ -384,12 +388,12 @@ object Parser {
       keyword("methods") ~/ pattern ~ methodsBody
     )(MethodDefSection.apply _))
 
-    val inBlockDef: P[InBlockDef] = P(valueNamesDef | aliasTypeDef | typeDef | methodDeclSection | methodDefSection)
+    val inBlockDef: P[InBlockDef] = P(valueDecl | valueNamesDef | aliasTypeDef | typeDef | methodDeclSection | methodDefSection)
 
     //////
     // Top level rules
 
-    val valueExpr: P[ValueExpr] = P(/*classNew | */memberOrCall | lambda | valueAs | simple).opaque("expression")
+    val valueExpr: P[ValueExpr] = P(memberOrCall | lambda | valueAs | simple).opaque("expression")
 
     val typeExpr: P[TypeExpr] = P(funcType | simpleType)
 

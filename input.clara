@@ -1,6 +1,7 @@
 // MVP TODO
-// - List/Array type (Parametric polymorphism / Generics)
 // - declare value
+// - List/Array type (Parametric polymorphism / Generics)
+// - Module system (extracting standard library into a separate file)
 
 ::alias Any = ⊤
 
@@ -45,11 +46,19 @@
   length: Int
 }
 
+::declare ::type BrowserConsole = {
+  log: String => ()
+}
+
+::declare ::val console: BrowserConsole
+
 foo = 1 .plus 2 .multiply 4
 
 bar = "asd".length.plus(1)
 
 zot = 1 .divideBy 2
+
+console.log("Hello World!")
 
 
 ::type UserOrdinal = Int

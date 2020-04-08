@@ -38,6 +38,7 @@ object Terms {
 
   case class Call(callee: ValueExpr, argument: ValueExpr, typ: Typ) extends ValueExpr
 
+  case class ValueDecl(name: String) extends InBlockDef
   case class ValueNamesDef(target: Pattern, e: ValueExpr) extends InBlockDef
   case class AliasTypeDef(name: String) extends InBlockDef
   case class TypeDef(name: String) extends InBlockDef

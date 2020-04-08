@@ -67,6 +67,7 @@ object JsEmitter {
 
   def emitBlockContent(blockContent: Terms.BlockContent): Option[JsAst.Content] = blockContent match {
     case e: Terms.ValueExpr => Some(emitValueExpr(e))
+    case _: Terms.ValueDecl => None
     case Terms.ValueNamesDef(target, e) => Some(emitValueNamesDef(target, e))
     case _: Terms.AliasTypeDef => None
     case _: Terms.TypeDef => None

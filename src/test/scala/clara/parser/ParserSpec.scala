@@ -286,6 +286,8 @@ class ParserSpec extends FunSuite {
   parse(p.attributes, "@[a b]@[c]")(Seq(Attribute("a", Some("b")), Attribute("c", None)))
   parse(p.attributes, "@[a]\n@[c]\n")(Seq(Attribute("a", None), Attribute("c", None)))
 
+  parse(p.valueDecl, "::declare ::val foo: ()")(ValueDecl("foo", UnitType()))
+
   parse(p.valueNamesDef, "a =\u0020\u0020\n\u0020\u0020\n  foo")(
     ValueNamesDef(NamePattern("a"), NamedValue("foo"))
   )

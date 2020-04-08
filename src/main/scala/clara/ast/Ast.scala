@@ -55,6 +55,7 @@ object Ast {
 
   case class Attribute(key: String, value: Option[String], pos: Pos = NoPos) extends Node
 
+  case class ValueDecl(name: String, t: TypeExpr, pos: Pos = NoPos) extends InBlockDef
   case class ValueNamesDef(target: Pattern, e: ValueExpr, pos: Pos = NoPos) extends InBlockDef
 
   case class AliasTypeDef(name: String, t: TypeExpr, pos: Pos = NoPos) extends InBlockDef

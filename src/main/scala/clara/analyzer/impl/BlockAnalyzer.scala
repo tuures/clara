@@ -4,6 +4,7 @@ import clara.asg.{Terms, Types}
 import clara.ast.{Ast, Pos, SourceMessage}
 
 import ai.x.safe._
+import clara.ast.Ast.ValueDecl
 
 
 case class BlockAnalyzer(parentEnv: Env) {
@@ -41,6 +42,12 @@ case class BlockAnalyzer(parentEnv: Env) {
           An.result((valueExprTerm, Some(valueExprTerm.typ), currentEnv)).tell(maybeDiscardWarning)
         }
       }
+      case ValueDecl(name, t, pos) =>
+        TypeExprAnalyzer(currentEnv).walkTypeExpr(t).flatMap { typ =>
+          currentEnv.addOrShadowValue((name, typ), parentEnv, pos)
+        }.map { nextEnv =>
+          (Terms.ValueDecl(name), None, nextEnv)
+        }
       case Ast.ValueNamesDef(target, e, _) => {
         ValueExprAnalyzer(currentEnv).walkValueExpr(e).flatMap { valueExprTerm =>
           walkValueNamesDef(currentEnv, target, valueExprTerm)
