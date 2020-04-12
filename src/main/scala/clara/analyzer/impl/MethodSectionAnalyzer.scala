@@ -43,6 +43,7 @@ case class MethodSectionAnalyzer(env: Env) {
     TypeExprAnalyzer(env).walkTypeExpr(targetTypeExpr).flatMap {
       case u: Types.Unique => An.result(u)
       // TODO allow methods also for other kinds of types
+      // (record should not have method if field with same name exists)
       case t => An.error(SourceMessage(targetTypeExpr.pos, safe"Cannot have methods for type `${Types.toSource(t)}`"))
     }
 

@@ -1,5 +1,0 @@
-::trait Salary {
-  hourly: Int
-  workingDays: Int
-  monthlySalary = 8 * hourly * workingDays
-}

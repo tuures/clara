@@ -16,6 +16,12 @@ imports can appear any level of the code
 ### operators
 
 operators are methods with non-letter name
+// a b c
+// if b = foo (letters)
+// (a foo) c <=> a.apply(foo).apply(c)
+// if b = * (non-letters)
+// (a.*(c))
+
 examples:
 `foo.bar` -> member (foo, member `bar`)
 `foo .bar` -> member (foo, member `bar`)
@@ -98,3 +104,163 @@ Scala, Dotty, TypeScript, Reason/Ocaml, Rust, Swift, Nim, Python
 ---
 
 Warn about unused values (and types?)
+
+---
+
+implicit ::new
+
+`A` means
+
+1) value `A`
+2) if value `A` is not found but there is type `A`, then `::new A`
+
+this is better than:
+
+`f x` means
+1) if there's a function value named f in scope -> call f with x
+2) else if there's value f in scope with member (property or method) `apply` -> call f.apply with x
+3) else if there's type f -> construct new f from x
+
+because if the logic is bound to call, then it would not simply work in something like `.map(A)`
+
+but the apply rule is also useful (points 1, 2, but not 3)
+
+---
+
+replace ::declare ::type / ::declare ::methods with ::trait (determines how methods should be implement elsewhere)
+
+::trait Seq<T> {
+  headOption: Maybe<T>
+  length: Int
+  // should we allow also method implementations?:
+  headUnsafe: T = headOption.unwrapUnsafe
+}
+
+::type FooSeq<T> = Any // TODO should it be : or := instead of =
+
+::methods FooSeq<T> : Seq<T>, SomeOtherTrait {
+  // must implement head here
+}
+
+when value is assigned to a trait type, the methods of the actual type is injected into the runtime value for dynamic dispatch
+
+how to define static methods? how to declare them in traits
+
+::comp Boolean {
+  parse = (s: String) => ::match {
+    "True" => True
+  }
+}
+
+---
+
+tuples are nested pairs
+
+a <=> (a, ())
+(a, b) => (a, (b, ()))
+(a, b, c) <=> (a, (b, (c, ())))
+etc.
+
+this should simply implementation as analyzer only has to deal with pairs/2-tuples
+
+---
+
+{} vs ()
+
+mathemathically it would be fair to consider empty record and 0-tuple the same but in order to prevent accidents,
+they are not assignable to each other
+
+---
+
+things that are written often should have terse syntax
+
+---
+
+http://www.inquisition.ca/en/info/gepsypl/rules.htm
+https://proglangdesign.net/
+
+---
+
+MVP usefulness check:
+
+can we implement Option monad like this:
+
+::data Maybe[A] {
+  map[B] = (f: A => B) => ::match {
+    ::case Just(value) => Just(f(value))
+    ::case None => None
+  } ::this
+} = Just(value: A) | None
+
+---
+
+deep copy
+how to make this composable? function returning keyword?
+
+::type Address = {
+  country: String
+  zipCode: String
+}
+::type User = {
+  email: String
+  address: Address
+}
+user = ::new User {
+  email = ''
+  address = ::new Address {
+    country = 'FI'
+    zipCode = '00100'
+  }
+}
+updatedUser = ::copy user {
+  address.zipCode = 12345
+  email = 'foo@bar.invalid'
+}
+// property list notation:
+// {
+//   address.zipCode = 12345
+//   email = 'foo@bar.invalid'
+// }
+
+---
+
+TypeScript output
+
+interface Foo {
+  x: number
+  y: number
+}
+
+const Foo$Methods = {
+  area: (a: Foo) => a.x * a.y
+}
+
+const foo1: Foo = {
+  x: 1,
+  y: 2,
+}
+
+// const $claraType = Symbol('$claraType')
+
+// interface $ClaraObject {
+//     [$claraType]: Symbol
+// }
+
+// interface Foo extends $ClaraObject {
+//   x: number
+//   y: number
+// }
+
+// const Foo$Type = Symbol('Foo')
+
+// const Foo$Methods = {
+//   area: (a: Foo) => a.x * a.y
+// }
+
+// const foo1: Foo = {
+//   [$claraType]: Foo$Type,
+//   x: 1,
+//   y: 2,
+// }
+
+---

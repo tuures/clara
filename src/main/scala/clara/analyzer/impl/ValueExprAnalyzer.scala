@@ -67,20 +67,20 @@ case class ValueExprAnalyzer(env: Env) {
   ): An[(Terms.SelectedMember, Types.Typ)] = {
     lazy val memberNotFound = SourceMessage(memberPos, safe"`$name` is not a member of type `${Types.toSource(objectTerm.typ)}`")
 
-    def methodOfType(typ: Types.Typ): Option[(Terms.SelectedMember, Types.Typ)] = (env.methods.get(typ).flatMap {
+    def memberOfType(typ: Types.Typ): Option[(Terms.SelectedMember, Types.Typ)] = (env.methods.get(typ).flatMap {
       case declSection: Terms.MethodDeclSection => declSection.methodDecls.get(name).map(m => (m.attributes, m.typ))
       case defSection: Terms.MethodDefSection => defSection.methodDefs.get(name).map(m => (m.attributes, m.body.typ))
     }).map { case (attributes, typ) =>
       (Terms.SelectedMethod(attributes), typ)
     }.orElse {
       typ match {
-        case Types.Unique(_, _, wrappedType, _) => methodOfType(wrappedType)
+        case Types.Unique(_, _, wrappedType, _) => memberOfType(wrappedType)
         case Types.Record(fields) => fields.get(name).map(typ => (Terms.SelectedField, typ))
         case _ => None
       }
     }
 
-    An.someOrError(methodOfType(objectTerm.typ), memberNotFound)
+    An.someOrError(memberOfType(objectTerm.typ), memberNotFound)
   }
 
 }

@@ -1,4 +1,7 @@
 ## Clara
+
+DOCUMENT OUTDATED
+
 Clara is an experimental/WIP statically-typed FP/OO programming language that compiles to JavaScript.
 
 **Features currently implemented/WIP:**
@@ -31,7 +34,8 @@ Features should be orthogonal. There should be only one obvious way to do someth
   - Keep syntax to the minimal, do not reserve words from being used as identifier.
 
 - Semantics: Be safe but practical
-  - Prefer immutability but provide unsafe escapes with warning labels.
+  - Prefer immutability
+  - Provide unsafe escapes with warning labels.
   - When unsure, default to safety.
 
 ## Design decisions
