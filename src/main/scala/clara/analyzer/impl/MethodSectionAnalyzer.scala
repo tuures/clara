@@ -26,7 +26,7 @@ case class MethodSectionAnalyzer(env: Env) {
       case p => An.error(SourceMessage(p.pos, "Expected type assertion on top level"))
     }).flatMap { case (selfPattern, targetTypeExpr) =>
       walkTargetType(targetTypeExpr).flatMap { targetType =>
-        PatternAnalyzer(env, env).walkPattern(selfPattern, targetType).map((_, targetType))
+        PatternAnalyzer(env, env).walkAssignment(selfPattern, targetType).map((_, targetType))
       }.flatMap { case ((selfPatternTerm, selfEnv), targetType) =>
         walkMethodDefs(selfEnv, methodAsts).map { methodDefNs =>
           Terms.MethodDefSection(targetType, selfPatternTerm, methodDefNs)

@@ -81,7 +81,7 @@ case class BlockAnalyzer(parentEnv: Env) {
   }
 
   def walkValueNamesDef(currentEnv: Env, target: Ast.Pattern, valueExprTerm: Terms.ValueExpr): An[(Terms.ValueNamesDef, Env)] = {
-    PatternAnalyzer(currentEnv, parentEnv).walkPattern(target, valueExprTerm.typ).map { case (targetTerm, nextEnv) =>
+    PatternAnalyzer(currentEnv, parentEnv).walkAssignment(target, valueExprTerm.typ).map { case (targetTerm, nextEnv) =>
       (Terms.ValueNamesDef(targetTerm, valueExprTerm), nextEnv)
     }
   }

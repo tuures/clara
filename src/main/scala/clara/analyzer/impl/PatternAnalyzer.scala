@@ -4,10 +4,17 @@ import clara.asg.{Terms, Types}
 import clara.ast.Ast
 
 case class PatternAnalyzer(env: Env, allowShadow: Env) {
-  def walkPattern(pattern: Ast.Pattern, againstType: Types.Typ): An[(Terms.Pattern, Env)] = pattern match {
-    case Ast.NamePattern(name, pos) => env.addOrShadowValue((name, againstType), allowShadow, pos).map { nextEnv =>
+  def walkAssignment(targetPattern: Ast.Pattern, fromType: Types.Typ): An[(Terms.Pattern, Env)] = targetPattern match {
+    // case Ast.UnitPattern(pos) => An.result((Terms.UnitPattern, env))
+    // case Ast.TuplePattern
+    case Ast.NamePattern(name, pos) => env.addOrShadowValue((name, fromType), allowShadow, pos).map { nextEnv =>
       (Terms.NamePattern(name), nextEnv)
     }
-    case _ => ???
+    case Ast.PatternAs(p, t, pos) =>
+      TypeExprAnalyzer(env).walkTypeExpr(t).flatMap { typ =>
+        Checks.expectAssignable(fromType, typ, pos).flatMap { _: Unit =>
+          walkAssignment(p, typ)
+        }
+      }
   }
 }
