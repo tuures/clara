@@ -21,7 +21,10 @@ case class ValueExprAnalyzer(env: Env) {
     case _: Ast.Tuple => ???
     case Ast.Block(bcs, pos) => BlockAnalyzer(env).walkBlock(bcs, pos)
     case Ast.NamedValue(name, pos) => env.useValue(name, pos).map(typ => Terms.NamedValue(name, typ))
-    case Ast.ValueAs(e, t, pos) => ???
+    case Ast.ValueAs(e, t, pos) =>
+      walkValueExpr(e).zip(TypeExprAnalyzer(env).walkTypeExpr(t)).flatMap { case (term, typ) =>
+        Checks.expectAssignable(term.typ, typ, pos).map((_: Unit) => term)
+      }
     case Ast.Record(fields, _) => {
       An.step(fields)(Namespace.empty[Terms.Field]){ case (ns, Ast.FieldDef(name, typeOpt, body, pos)) =>
         lazy val duplicateName = SourceMessage(pos, safe"Duplicate field name `$name`")
