@@ -91,4 +91,8 @@ fooRect: Rect = ::new Rect { x = 2, y = 3 }
 
 area = fooRect.area
 
+::alias Foo<T> = { foo: T }
+
+asd: Foo<String> = { foo = 1 }
+
 () // TODO program should return Nothing

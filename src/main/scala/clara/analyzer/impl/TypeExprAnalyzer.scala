@@ -12,7 +12,10 @@ case class TypeExprAnalyzer(env: Env) {
     case Ast.BottomType(_) => An.result(Types.Bottom)
     case Ast.UnitType(_) => An.result(Types.Uni)
     case Ast.TupleType(ts, pos) => ???
-    case Ast.NamedType(name/*, typeArgs*/, pos) => env.useType(name, pos)
+    case Ast.NamedType(name, typeArgs, pos) =>
+      An.seq(typeArgs.map(walkTypeExpr)).flatMap { args =>
+        env.useType(name, args, pos)
+      }
     case Ast.RecordType(fields, _) =>
       An.step(fields)(Namespace.empty[Types.Typ]){ case (ns, Ast.FieldDecl(name, typeExpr, pos)) =>
         lazy val duplicateName = SourceMessage(pos, safe"Duplicate field name `$name`")
@@ -28,4 +31,5 @@ case class TypeExprAnalyzer(env: Env) {
       }
     }
   }
+
 }

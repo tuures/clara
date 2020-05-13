@@ -33,7 +33,7 @@ object Ast {
   case class Block(bcs: Seq[BlockContent], pos: Pos = NoPos) extends ValueExpr
 
   case class NamedValue(name: String, pos: Pos = NoPos) extends ValueExpr
-  case class NamedType(name: String/*, typeArgs: Seq[TypeExpr]*/, pos: Pos = NoPos) extends TypeExpr
+  case class NamedType(name: String, typeArgs: Seq[TypeExpr], pos: Pos = NoPos) extends TypeExpr
   case class NamePattern(name: String, pos: Pos = NoPos) extends Pattern // rename to CapturePattern?
 
   case class ValueAs(e: ValueExpr, t: TypeExpr, pos: Pos = NoPos) extends ValueExpr
@@ -58,8 +58,9 @@ object Ast {
   case class ValueDecl(name: String, t: TypeExpr, pos: Pos = NoPos) extends InBlockDef
   case class ValueNamesDef(target: Pattern, e: ValueExpr, pos: Pos = NoPos) extends InBlockDef
 
-  case class AliasTypeDef(name: String, t: TypeExpr, pos: Pos = NoPos) extends InBlockDef
-  case class TypeDef(isDecl: Boolean, name: String, t: TypeExpr, pos: Pos = NoPos) extends InBlockDef
+  // TODO remove duplication between alias and typedef
+  case class AliasTypeDef(name: String, params: Seq[TypeParam], t: TypeExpr, pos: Pos = NoPos) extends InBlockDef
+  case class TypeDef(isDecl: Boolean, name: String, params: Seq[TypeParam], t: TypeExpr, pos: Pos = NoPos) extends InBlockDef
   case class NewExpr(t: NamedType, pos: Pos = NoPos) extends ValueExpr
 
   case class MethodDeclSection(targetType: TypeExpr, methods: Seq[Method], pos: Pos = NoPos) extends InBlockDef
@@ -67,10 +68,10 @@ object Ast {
   case class MethodDefSection(targetPattern: Pattern, methods: Seq[Method], pos: Pos = NoPos) extends InBlockDef
   case class MethodDef(attributes: Seq[Attribute], name: String, t: Option[TypeExpr], body: ValueExpr, pos: Pos = NoPos) extends Method
 
-
   // sealed trait Variance
   // case object Covariant extends Variance
   // case object Contravariant extends Variance
   // case object Invariant extends Variance
   // case class TypeParam(variance: Variance, name: String, arity: Int, pos: Pos = NoPos) extends Node
+  case class TypeParam(name: String, pos: Pos = NoPos) extends Node
 }

@@ -54,7 +54,7 @@ object An {
   /** builds a Failure with the error and no log */
   def error(e: Message): An[Nothing] = Failure(Vector(e), Vector())
 
-  def seq[A](ans: Seq[An[A]]) = {
+  def seq[A](ans: Seq[An[A]]): An[Seq[A]] = {
     val Writer(values, log) = Writer.seq(ans.map(_.w))
     val (allErrors, allResults) = values.foldLeft((Vector.empty: Errors, Vector.empty[A])) { case ((errorsAcc, resultsAcc), value) =>
       value match {

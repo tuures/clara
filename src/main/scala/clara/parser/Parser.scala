@@ -244,7 +244,7 @@ object Parser {
 
     val namedValue: P[NamedValue] = P(pp(name)(NamedValue.apply _))
 
-    val namedType: P[NamedType] = P(pp(name /*~ maybeTypeArgs*/)(NamedType.apply _))
+    val namedType: P[NamedType] = P(pp(name ~ maybeTypeArgs)(NamedType.apply _))
 
     val namePattern: P[NamePattern] = P(pp(name)(NamePattern.apply _))
 
@@ -325,30 +325,32 @@ object Parser {
 
     //////
     // Type parameters
-    val plus = P("+")
-    val minus = P("-")
+    // val plus = P("+")
+    // val minus = P("-")
 
-    def typeListSyntax[T](item: => P[T]): P[Seq[T]] = P(bracketOpen ~ commaSeparatedRep(1, item) ~ bracketClose)
+    val angleOpen = "<"
+    val angleClose = ">"
 
-    // val typeParam: P[TypeParam] = P {
-    //   val plusOrMinusVariance: P[Variance] = P(plus.map(_ => Covariant) | minus.map(_ => Contravariant))
-    //   val variance = P(plusOrMinusVariance.?.map(_.getOrElse(Invariant)))
+    def typeListSyntax[T](item: => P[T]): P[Seq[T]] = P(angleOpen ~ commaSeparatedRep(1, item) ~ angleClose)
 
-    //   val arity: P[Int] = typeListSyntax(underscore).?.map(_.map(_.length).getOrElse(0))
+    val typeParam: P[TypeParam] = P{
+      // val plusOrMinusVariance: P[Variance] = P(plus.map(_ => Covariant) | minus.map(_ => Contravariant))
+      // val variance = P(plusOrMinusVariance.?.map(_.getOrElse(Invariant)))
 
-    //   pp(variance ~ name ~ arity)(TypeParam.apply _)
-    // }
+      // val arity: P[Int] = typeListSyntax(underscore).?.map(_.map(_.length).getOrElse(0))
 
-    val bracketOpen = "["
-    val bracketClose = "]"
+      pp(/*variance ~ */name/* ~ arity*/)(TypeParam.apply _)
+    }
 
-    // val maybeTypeParams: P[Seq[TypeParam]] = typeListSyntax(typeParam).?.map(_.getOrElse(Nil))
+    val maybeTypeParams: P[Seq[TypeParam]] = typeListSyntax(typeParam).?.map(_.getOrElse(Nil))
 
-    // val maybeTypeArgs: P[Seq[TypeExpr]] = typeListSyntax(typeExpr).?.map(_.getOrElse(Nil))
+    val maybeTypeArgs: P[Seq[TypeExpr]] = typeListSyntax(typeExpr).?.map(_.getOrElse(Nil))
 
     //////
     // Attributes
     val at = "@"
+    val bracketOpen = "["
+    val bracketClose = "]"
 
     val attribute: P[Attribute] = P(pp(at ~ bracketOpen ~ name ~ anythingBefore(bracketClose).!.?.map(_.filter(_.nonEmpty)) ~ bracketClose)(Attribute.apply _))
 
@@ -363,12 +365,13 @@ object Parser {
 
     val valueNamesDef: P[ValueNamesDef] = P(pp(pattern ~ equalsSign ~/ nl.rep ~ valueExpr)(ValueNamesDef.apply _))
 
-    val aliasTypeDef: P[AliasTypeDef] = P(pp(keyword("alias") ~/ name ~ equalsSign ~ typeExpr)(AliasTypeDef.apply _))
+    // TODO remove duplication between alias and typedef
+    val aliasTypeDef: P[AliasTypeDef] = P(pp(keyword("alias") ~/ name ~ maybeTypeParams ~ equalsSign ~ typeExpr)(AliasTypeDef.apply _))
 
     val typeDef: P[TypeDef] = P(pp(
       keyword("declare").!.?.map(_.isDefined) ~
       keyword("type") ~/
-      name ~ equalsSign ~ typeExpr
+      name ~ maybeTypeParams ~ equalsSign ~ typeExpr
     )(TypeDef.apply _))
 
     val newExpr: P[NewExpr] = P(pp(keyword("new") ~/ namedType)(NewExpr.apply _))

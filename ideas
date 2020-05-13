@@ -29,12 +29,6 @@ examples:
 `foo asd bar` -> apply (foo, apply asd, apply bar)
 
 
-### equality and friends
-=~ (equivalence, for example rational numbers 2/4 =~ 1/2)
-== equality (structural equality)
-=_= identity (reference equality)
-
-
 -------------------
 functional type system, case class keyword implemented as macro that is a "template" for making new types
 macro is a function in type level
@@ -99,7 +93,7 @@ Constructor is a first class function
 
 List of languages to look at for inspiration
 
-Scala, Dotty, TypeScript, Reason/Ocaml, Rust, Swift, Nim, Python
+Scala, Dotty, TypeScript, Reason/Ocaml, Rust, Swift, Nim, Python, PureScript, JS++
 
 ---
 
@@ -146,10 +140,20 @@ when value is assigned to a trait type, the methods of the actual type is inject
 
 how to define static methods? how to declare them in traits
 
+Rust's supertraits seem useful
+
 ::comp Boolean {
   parse = (s: String) => ::match {
     "True" => True
   }
+}
+
+how it should look like for user:
+
+foo: Foo = Foo.from(bar) // Foo is type, accessing static method
+
+Bar = {
+  ... // akin to Scala's object
 }
 
 ---
@@ -262,5 +266,52 @@ const foo1: Foo = {
 //   x: 1,
 //   y: 2,
 // }
+
+---
+
+### equality and friends
+=~ (equivalence, for example rational numbers 2/4 =~ 1/2)
+== equality (structural equality)
+=_= identity (reference equality)
+
+- Do not define equality for floats
+- How to define equality for structural types if not all values have equality?
+
+---
+
+tail call elimination using @[tailCall]
+
+---
+
+pattern matching block
+https://github.com/topshell-language/topshell#sum-types-and-pattern-matching
+
+{| <pat1> => expr1 | <pat2> => expr2 | ...}
+
+
+---
+
+potentially useful resources
+
+https://www.cl.cam.ac.uk/~jdy22/papers/lightweight-higher-kinded-polymorphism.pdf
+Jeremy Yallop and Leo White University of Cambridge
+
+https://www.cl.cam.ac.uk/~sd601/thesis.pdf
+Algebraic subtyping
+
+http://nischalshrestha.me/docs/cross_language_interference.pdf
+
+---
+
+pipe syntax
+
+1 | repeat 3 | _.length
+
+---
+
+no-space call precedence?
+
+a b(c)  <=>  a (b c)  not: (a b) c
+a(b) c  <=>  (a b) c
 
 ---

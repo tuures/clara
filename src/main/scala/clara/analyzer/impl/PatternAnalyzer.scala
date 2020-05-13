@@ -12,7 +12,7 @@ case class PatternAnalyzer(env: Env, allowShadow: Env) {
     }
     case Ast.PatternAs(p, t, pos) =>
       TypeExprAnalyzer(env).walkTypeExpr(t).flatMap { typ =>
-        Checks.expectAssignable(fromType, typ, pos).flatMap { _: Unit =>
+        TypeAnalyzer.expectAssignable(fromType, typ, pos).flatMap { _: Unit =>
           walkAssignment(p, typ)
         }
       }

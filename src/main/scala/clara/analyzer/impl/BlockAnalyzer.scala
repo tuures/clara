@@ -53,21 +53,24 @@ case class BlockAnalyzer(parentEnv: Env) {
           walkValueNamesDef(currentEnv, target, valueExprTerm)
         }.map { case (namesDef, nextEnv) => (namesDef, None, nextEnv) }
       }
-      case Ast.AliasTypeDef(name, typeExpr, pos) => {
-        TypeExprAnalyzer(currentEnv).walkTypeExpr(typeExpr).map {
-          case t: Types.Populated => Types.PopulatedAlias(name, t)
-          case _: Types.Empty => Types.BottomAlias(name)
-        }.flatMap { typ =>
-          currentEnv.addOrShadowType((name, typ), parentEnv, pos).
+      // TODO remove duplication between alias and typedef
+      case Ast.AliasTypeDef(name, typeParams, typeExpr, pos) => {
+        TypeParamAnalyzer(currentEnv).walkTypeParams(typeParams).flatMap { case (paramTypes, withParamsEnv) =>
+          TypeExprAnalyzer(withParamsEnv).walkTypeExpr(typeExpr).map { typ =>
+            Types.AliasCon(name, paramTypes, typ)
+          }
+        }.flatMap { aliasTypeCon =>
+          currentEnv.addOrShadowType((name, aliasTypeCon), parentEnv, pos).
             map(nextEnv => (Terms.AliasTypeDef(name), None, nextEnv))
         }
       }
-      case Ast.TypeDef(isDecl, name, typeExpr, pos) => { // TODO maybe this should be called ::subtype instead, or ::uniq
-        TypeExprAnalyzer(currentEnv).walkTypeExpr(typeExpr).flatMap {
-          case t: Types.Populated => An.result(Types.Unique(name, constructible = !isDecl, t))
-          case t: Types.Empty => An.error(SourceMessage(typeExpr.pos, safe"Cannot subtype `${Types.toSource(t)}`"))
-        }.flatMap { typ =>
-          currentEnv.addOrShadowType((name, typ), parentEnv, pos).
+      case Ast.TypeDef(isDecl, name, typeParams, typeExpr, pos) => { // TODO maybe this should be called ::subtype or ::tagged instead, or ::uniq
+        TypeParamAnalyzer(currentEnv).walkTypeParams(typeParams).flatMap { case (paramTypes, withParamsEnv) =>
+          TypeExprAnalyzer(withParamsEnv).walkTypeExpr(typeExpr).map { typ =>
+            Types.UniqueCon(name, paramTypes, constructible = !isDecl, typ)
+          }
+        }.flatMap { uniqueTypeCon =>
+          currentEnv.addOrShadowType((name, uniqueTypeCon), parentEnv, pos).
             map(nextEnv => (Terms.TypeDef(name), None, nextEnv))
         }
       }
@@ -86,4 +89,19 @@ case class BlockAnalyzer(parentEnv: Env) {
     }
   }
 
+}
+
+// FIXME move
+case class TypeParamAnalyzer(env: Env) {
+  def walkTypeParams(typeParams: Seq[Ast.TypeParam]): An[(Seq[Types.Param], Env)] =
+    An.step(typeParams)((Vector[Types.Param](), env)) { case ((currentParams, currentEnv), param) =>
+      val Ast.TypeParam(name, pos) = param
+      val paramTypeCon @ Types.ParamCon(_, uniq) = Types.ParamCon(name)
+      // FIXME instantiated in two places, another in TypeAnalyzer.instantiate
+      val paramType = Types.Param(name, uniq)
+
+      currentEnv.addOrShadowType((name, paramTypeCon), env, pos).map { nextEnv =>
+        (currentParams :+ paramType, nextEnv)
+      }
+    }
 }
