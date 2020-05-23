@@ -11,55 +11,64 @@ object Uniq {
 // type lattice
 object Types {
   sealed trait Typ
+  sealed trait MonoType extends Typ
 
   // primitive types
   // each object corresponds directly to the type
-  case object Top extends Typ
-  case object Bottom extends Typ
-  case object Uni extends Typ // Unit
+  case object Top extends MonoType
+  case object Bottom extends MonoType
+  case object Uni extends MonoType // Unit
 
   // primitive structural composite types
   // every instance of case class corresponds to a type
-  case class Func(parameter: Typ, result: Typ) extends Typ
-  case class Record(fields: Namespace[Typ]) extends Typ
+  case class Func(parameter: MonoType, result: MonoType) extends MonoType
+  case class Record(fields: Namespace[MonoType]) extends MonoType
 
   // user defined nominal types
   // TODO: drop names and lazily get name from Env?
-  // TODO: instead of FooCon(), Foo() have: Con<Foo>(Foo(), params) and Inst<Foo>(Foo(), args) ?
-  sealed trait TypeCon
-  case class ParamCon(name: String, uniq: Uniq = new Uniq()) extends TypeCon
-  case class Param(name: String, uniq: Uniq) extends Typ
-  // TODO remove duplication between alias and typedef
-  case class AliasCon(name: String, params: Seq[Param], typeTemplate: Typ) extends TypeCon
-  case class Alias(name: String, args: Seq[Typ], wrappedType: Typ) extends Typ
-  case class UniqueCon(name: String, params: Seq[Param], constructible: Boolean, typeTemplate: Typ, uniq: Uniq = new Uniq()) extends TypeCon
-  case class Unique(name: String, args: Seq[Typ], constructible: Boolean, wrappedType: Typ, uniq: Uniq) extends Typ
+  case class Alias(name: String, wrappedType: MonoType) extends MonoType
+  case class Unique(constructible: Boolean, wrappedType: MonoType, uniq: Uniq = new Uniq()) extends MonoType
+
+    // TODO: instead of FooCon(), Foo() have: Con<Foo>(Foo(), params) and Inst<Foo>(Foo(), args) ?
+  case class Param(name: String, uniq: Uniq = new Uniq()) extends MonoType
+  case class ForAll(typeParams: Seq[Param], typeTemplate: MonoType) extends Typ
+  case class Applied(typeArgs: Seq[MonoType], typeExpanded: MonoType) extends MonoType
+
+  def maybeForAll(typeParams: Seq[Param], typeTemplate: MonoType) = typeParams match {
+    case Nil => typeTemplate
+    case _ => ForAll(typeParams, typeTemplate)
+  }
 
   // TODO unit test
-  def isAssignable(t1: Typ, t2: Typ): Boolean =
-    t2 === Top ||
-    t1 === Bottom ||
-    ((t1, t2) match {
-      case (Func(p1, r1), Func(p2, r2)) => isAssignable(r1, r2) && isAssignable(p2, p1)
-      case (Alias(_, _, wrappedType), t2) => isAssignable(wrappedType, t2)
-      case (t1, Alias(_, _, wrappedType)) => isAssignable(t1, wrappedType)
-      case (t1: Unique, t2: Unique) => t1.uniq === t2.uniq // optimisation
-      case (Unique(_, _, _, wrappedType, _), t2) => isAssignable(wrappedType, t2)
-      case _ => false
-    }) ||
-    t1 === t2 // deep equality
+  def isAssignable(t1: Typ, t2: Typ): Boolean = (t1, t2) match {
+    case (_, Top) => true
+    case (Bottom, _) => true
+    case (Uni, Uni) => true
+    case (Func(p1, r1), Func(p2, r2)) => isAssignable(r1, r2) && isAssignable(p2, p1)
+    case (r1: Record, r2: Record) => r2.fields.entries.forall { case (name, t2) =>
+      r1.fields.get(name).exists(t1 => isAssignable(t1, t2))
+    }
+    case (Alias(_, wrappedType), t2) => isAssignable(wrappedType, t2)
+    case (t1, Alias(_, wrappedType)) => isAssignable(t1, wrappedType)
+    case (t1: Unique, t2: Unique) => t1.uniq === t2.uniq
+    case (Unique(_, wrappedType, _), t2) => isAssignable(wrappedType, t2)
+    case (p1: Param, p2: Param) => p1.uniq === p2.uniq
+    case (t1: Applied, t2: Applied) => isAssignable(t1.typeExpanded, t2.typeExpanded)
+    case _ => false
+  }
 
-  def substituteParams(substitutions: Map[Param, Typ], in: Typ) = {
-    def traverse(in: Typ): Typ = in match {
+  def substituteParams(substitutions: Map[Param, MonoType], in: MonoType) = {
+    def traverse(in: MonoType): MonoType = in match {
       // TODO maybe a trait for non-composite types that dont include other types
       case Top => Top
       case Bottom => Bottom
       case Uni => Uni
       case Func(parameter, result) => Func(traverse(parameter), traverse(result))
       case Record(fields) => Record(fields.mapValues(traverse))
-      case Alias(name, params, wrappedType) => Alias(name, params, traverse(wrappedType))
-      case Unique(name, args, constructible, wrappedType, uniq) => Unique(name, args.map(traverse), constructible, traverse(wrappedType), uniq)
+      case Alias(name, wrappedType) => Alias(name, traverse(wrappedType))
+      case Unique(constructible, wrappedType, uniq) => Unique(constructible, traverse(wrappedType), uniq)
       case p: Param => substitutions.getOrElse(p, p)
+      case Applied(typeArgs, typeExpanded) => Applied(typeArgs.map(traverse), traverse(typeExpanded))
     }
 
     traverse(in)
@@ -74,15 +83,11 @@ object Types {
       fields.mapValues(toSource).entries.map { case (name, v) =>
         safe"$name: $v"
       }.safeMkString("{", ", ", "}")
+    case Alias(name, _) => name
+    case _: Unique => throw new IllegalArgumentException("toSource(Unique) not defined") // FIXME
     case Param(name, _) => name
-    // TODO remove duplication between alias and typedef
-    case Alias(name, args, _) => safe"$name${typeArgsToSource(args)}"
-    case Unique(name, args, _, _, _) => safe"$name${typeArgsToSource(args)}"
-  }
-
-  def typeArgsToSource(args: Seq[Typ]): String = args match {
-    case Nil => ""
-    case _ => args.map(toSource(_)).safeMkString("<", ", ", ">")
+    case _: ForAll => throw new IllegalArgumentException("toSource(ForAll) not defined") // FIXME
+    case Applied(typeArgs, typeExpanded) => toSource(typeExpanded) + typeArgs.map(toSource).safeMkString("<", " ,", ">")
   }
 
 }

@@ -4,6 +4,7 @@ import clara.asg.{Attributes, Terms, Types, Namespace}
 import clara.ast.{Ast, Pos, SourceMessage}
 
 import ai.x.safe._
+import clara.asg.Types.Alias
 
 
 case class ValueExprAnalyzer(env: Env) {
@@ -55,35 +56,43 @@ case class ValueExprAnalyzer(env: Env) {
           case _ => An.error(SourceMessage(callee.pos, safe"Cannot call type `${Types.toSource(calleeTerm.typ)}`"))
         }
       }
-    case Ast.NewExpr(namedType, _) => TypeExprAnalyzer(env).walkTypeExpr(namedType).flatMap {
-      case typ @ Types.Unique(_, _, constructible, wrappedType, _) if constructible =>
-        An.result(Terms.NewExpr(Types.Func(wrappedType, typ)))
-      case typ =>
-        An.error(SourceMessage(namedType.pos, safe"Cannot construct instances of type `${Types.toSource(typ)}`"))
-    }
+    case Ast.NewExpr(namedType, _) => walkNewExpr(namedType)
   }
 
   def walkMemberSelection(
     objectTerm: Terms.ValueExpr,
     name: String,
     memberPos: Pos
-  ): An[(Terms.SelectedMember, Types.Typ)] = {
+  ): An[(Terms.SelectedMember, Types.MonoType)] = {
     lazy val memberNotFound = SourceMessage(memberPos, safe"`$name` is not a member of type `${Types.toSource(objectTerm.typ)}`")
 
-    def memberOfType(typ: Types.Typ): Option[(Terms.SelectedMember, Types.Typ)] = (env.methods.get(typ).flatMap {
+    def memberOfType(typ: Types.Typ): Option[(Terms.SelectedMember, Types.MonoType)] = (env.methods.get(typ).flatMap {
       case declSection: Terms.MethodDeclSection => declSection.methodDecls.get(name).map(m => (m.attributes, m.typ))
       case defSection: Terms.MethodDefSection => defSection.methodDefs.get(name).map(m => (m.attributes, m.body.typ))
     }).map { case (attributes, typ) =>
       (Terms.SelectedMethod(attributes), typ)
     }.orElse {
       typ match {
-        case Types.Unique(_, _, _, wrappedType, _) => memberOfType(wrappedType)
         case Types.Record(fields) => fields.get(name).map(typ => (Terms.SelectedField, typ))
+        case Alias(_, wrappedType) => memberOfType(wrappedType)
+        case Types.Unique(_, wrappedType, _) => memberOfType(wrappedType)
         case _ => None
       }
     }
 
     An.someOrError(memberOfType(objectTerm.typ), memberNotFound)
+  }
+
+  def walkNewExpr(namedType: Ast.NamedType): An[Terms.NewExpr] = {
+    def walkNew(typ: Types.Typ): An[Terms.NewExpr] = typ match {
+      case Alias(_, wrappedType) => walkNew(wrappedType)
+      case typ @ Types.Unique(constructible, wrappedType, _) if constructible =>
+        An.result(Terms.NewExpr(Types.Func(wrappedType, typ)))
+      case typ =>
+        An.error(SourceMessage(namedType.pos, safe"Cannot construct new values of type `${Types.toSource(typ)}`"))
+    }
+
+    TypeExprAnalyzer(env).walkTypeExpr(namedType).flatMap(walkNew)
   }
 
 }

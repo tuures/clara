@@ -9,7 +9,7 @@ import ai.x.safe._
 case class MethodSectionAnalyzer(env: Env) {
 
   def walkDeclSection(targetTypeExpr: Ast.TypeExpr, methodAsts: Seq[Ast.Method], pos: Pos) = {
-    walkTargetType(targetTypeExpr).flatMap { targetType =>
+    walkTargetTypeExpr(targetTypeExpr).flatMap { targetType =>
       walkMethodDecls(env, methodAsts).map { methodDeclNs =>
         Terms.MethodDeclSection(targetType, methodDeclNs)
       }.flatMap { methodSection =>
@@ -25,7 +25,7 @@ case class MethodSectionAnalyzer(env: Env) {
       case Ast.PatternAs(p, t, _) => An.result((p, t))
       case p => An.error(SourceMessage(p.pos, "Expected type assertion on top level"))
     }).flatMap { case (selfPattern, targetTypeExpr) =>
-      walkTargetType(targetTypeExpr).flatMap { targetType =>
+      walkTargetTypeExpr(targetTypeExpr).flatMap { targetType =>
         PatternAnalyzer(env, env).walkAssignment(selfPattern, targetType).map((_, targetType))
       }.flatMap { case ((selfPatternTerm, selfEnv), targetType) =>
         walkMethodDefs(selfEnv, methodAsts).map { methodDefNs =>
@@ -39,13 +39,17 @@ case class MethodSectionAnalyzer(env: Env) {
     }
   }
 
-  def walkTargetType(targetTypeExpr: Ast.TypeExpr) =
-    TypeExprAnalyzer(env).walkTypeExpr(targetTypeExpr).flatMap {
+  def walkTargetTypeExpr(targetTypeExpr: Ast.TypeExpr): An[Types.MonoType] = {
+    def walkTargetType(typ: Types.Typ): An[Types.MonoType] = typ match {
+      case Types.Alias(_, wrappedType) => walkTargetType(wrappedType)
       case u: Types.Unique => An.result(u)
       // TODO allow methods also for other kinds of types
       // (record should not have method if field with same name exists)
       case t => An.error(SourceMessage(targetTypeExpr.pos, safe"Cannot have methods for type `${Types.toSource(t)}`"))
     }
+
+    TypeExprAnalyzer(env).walkTypeExpr(targetTypeExpr).flatMap(walkTargetType)
+  }
 
   def walkMethodDecls(currentEnv: Env, methodAsts: Seq[Ast.Method]): An[Namespace[Terms.MethodDecl]] = {
     An.step(methodAsts)(Namespace.empty[Terms.MethodDecl]){ case (ns, methodAst) =>

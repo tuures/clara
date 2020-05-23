@@ -129,7 +129,7 @@ object NameMangler {
   def methodsCompanionName(typ: Types.Typ) = safe"${typeName(typ)}$$Methods"
 
   def typeName(typ: Types.Typ) = typ match {
-    case u: Types.Unique => u.name
+    case Types.Alias(name, _) => name
     case _ => ???
   }
 }

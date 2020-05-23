@@ -315,3 +315,5 @@ a b(c)  <=>  a (b c)  not: (a b) c
 a(b) c  <=>  (a b) c
 
 ---
+
+gradually nominal typing: start with structural types, add nominal types as you go
