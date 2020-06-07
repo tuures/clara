@@ -29,7 +29,7 @@ case class BlockAnalyzer(parentEnv: Env) {
   }
 
   def walkBlockContent(currentState: WalkBlockState, bc: Ast.BlockContent, isLast: Boolean): An[WalkBlockState] = {
-    val WalkBlockState(currentContents: Vector[Terms.BlockContent], currentReturnType: Option[Types.Typ], currentEnv: Env) = currentState
+    val WalkBlockState(currentContents: Vector[Terms.BlockContent], currentReturnType: Option[Types.Type], currentEnv: Env) = currentState
 
     (bc match {
       case valueExprAst: Ast.ValueExpr => {

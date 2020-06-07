@@ -1,16 +1,16 @@
 package clara.analyzer.impl
 
-import clara.asg.Types.Typ
+import clara.asg.Types.Type
 
-case class TypeInfo[I](m: Map[Typ, I]) {
-  def addOrModify(binding: (Typ, I)): TypeInfo[I] = this.copy(m = m + binding)
-  def add(binding: (Typ, I)): Option[TypeInfo[I]] = m.get(binding._1) match {
+case class TypeInfo[I](m: Map[Type, I]) {
+  def addOrModify(binding: (Type, I)): TypeInfo[I] = this.copy(m = m + binding)
+  def add(binding: (Type, I)): Option[TypeInfo[I]] = m.get(binding._1) match {
     case Some(_) => None
     case None => Some(this.addOrModify(binding))
   }
-  def get(typ: Typ): Option[I] = m.get(typ)
+  def get(typ: Type): Option[I] = m.get(typ)
 }
 
 object TypeInfo {
-  def empty[I] = TypeInfo(Map.empty[Typ, I])
+  def empty[I] = TypeInfo(Map.empty[Type, I])
 }

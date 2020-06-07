@@ -66,7 +66,7 @@ case class ValueExprAnalyzer(env: Env) {
   ): An[(Terms.SelectedMember, Types.MonoType)] = {
     lazy val memberNotFound = SourceMessage(memberPos, safe"`$name` is not a member of type `${Types.toSource(objectTerm.typ)}`")
 
-    def memberOfType(typ: Types.Typ): Option[(Terms.SelectedMember, Types.MonoType)] = (env.methods.get(typ).flatMap {
+    def memberOfType(typ: Types.Type): Option[(Terms.SelectedMember, Types.MonoType)] = (env.methods.get(typ).flatMap {
       case declSection: Terms.MethodDeclSection => declSection.methodDecls.get(name).map(m => (m.attributes, m.typ))
       case defSection: Terms.MethodDefSection => defSection.methodDefs.get(name).map(m => (m.attributes, m.body.typ))
     }).map { case (attributes, typ) =>
@@ -84,7 +84,7 @@ case class ValueExprAnalyzer(env: Env) {
   }
 
   def walkNewExpr(namedType: Ast.NamedType): An[Terms.NewExpr] = {
-    def walkNew(typ: Types.Typ): An[Terms.NewExpr] = typ match {
+    def walkNew(typ: Types.Type): An[Terms.NewExpr] = typ match {
       case Alias(_, wrappedType) => walkNew(wrappedType)
       case typ @ Types.Unique(constructible, wrappedType, _) if constructible =>
         An.result(Terms.NewExpr(Types.Func(wrappedType, typ)))

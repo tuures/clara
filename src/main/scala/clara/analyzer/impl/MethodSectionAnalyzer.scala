@@ -40,7 +40,7 @@ case class MethodSectionAnalyzer(env: Env) {
   }
 
   def walkTargetTypeExpr(targetTypeExpr: Ast.TypeExpr): An[Types.MonoType] = {
-    def walkTargetType(typ: Types.Typ): An[Types.MonoType] = typ match {
+    def walkTargetType(typ: Types.Type): An[Types.MonoType] = typ match {
       case Types.Alias(_, wrappedType) => walkTargetType(wrappedType)
       case u: Types.Unique => An.result(u)
       // TODO allow methods also for other kinds of types

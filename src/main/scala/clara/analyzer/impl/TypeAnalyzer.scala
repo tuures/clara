@@ -1,13 +1,13 @@
 package clara.analyzer.impl
 
 import clara.asg.Types
-import clara.asg.Types.{Applied, ForAll, MonoType, Param, Typ}
+import clara.asg.Types.{Applied, ForAll, MonoType, Param, Type}
 import clara.ast.{SourceMessage, Pos}
 
 import ai.x.safe._
 
 object TypeAnalyzer {
-  def instantiate(typ: Typ, typeArgs: Seq[MonoType], pos: Pos): An[MonoType] = typ match {
+  def instantiate(typ: Type, typeArgs: Seq[MonoType], pos: Pos): An[MonoType] = typ match {
     case ForAll(typeParams, typeTemplate) =>
       applyTypeArgs(typeParams, typeArgs, typeTemplate, pos).map { typeExpanded =>
         Applied(typeArgs, typeExpanded)
@@ -15,7 +15,7 @@ object TypeAnalyzer {
     case mt: MonoType => applyTypeArgs(Nil, typeArgs, mt, pos)
   }
 
-  def expectAssignable(t1: Typ, t2: Typ, pos: Pos): An[Unit] = Types.isAssignable(t1, t2) match {
+  def expectAssignable(t1: Type, t2: Type, pos: Pos): An[Unit] = Types.isAssignable(t1, t2) match {
     case true =>  An.result(())
     case false => An.error(SourceMessage(pos, safe"Type `${Types.toSource(t1)}` is not assignable to type `${Types.toSource(t2)}`"))
   }

@@ -1,7 +1,7 @@
 package clara.asg
 
 import clara.asg.Attributes.MethodAttributes
-import clara.asg.Types.{MonoType, Typ}
+import clara.asg.Types.{MonoType, Type}
 import clara.ast.LiteralValue
 
 object Terms {
@@ -45,8 +45,8 @@ object Terms {
   case class NewExpr(typ: MonoType) extends ValueExpr
 
   sealed trait MethodSection extends InBlockDef
-  case class MethodDeclSection(targetType: Typ, methodDecls: Namespace[MethodDecl]) extends MethodSection
+  case class MethodDeclSection(targetType: Type, methodDecls: Namespace[MethodDecl]) extends MethodSection
   case class MethodDecl(attributes: MethodAttributes, typ: MonoType) extends Member
-  case class MethodDefSection(targetType: Typ, self: Pattern, methodDefs: Namespace[MethodDef]) extends MethodSection
+  case class MethodDefSection(targetType: Type, self: Pattern, methodDefs: Namespace[MethodDef]) extends MethodSection
   case class MethodDef(attributes: MethodAttributes, body: ValueExpr) extends Member
 }

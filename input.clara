@@ -1,5 +1,7 @@
 // MVP TODO
 // - List/Array type (Parametric polymorphism / Generics)
+// - equality
+// - (pattern matching?)
 // - Module system (extracting standard library into a separate file)
 // - fix all warnings and ???s
 
@@ -91,11 +93,15 @@ fooRect: Rect = ::new Rect { x = 2, y = 3 }
 
 area = fooRect.area
 
+
+
 ::type Box<T> = { x: T }
 
-::methods r: Box<T> { // ??? or Box or <T> Box<T>
+::methods r: Box {
   area = r.x.multiply(r.y)
 }
+
+
 
 ::alias Foo<T> = { foo: T }
 

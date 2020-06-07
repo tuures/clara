@@ -10,8 +10,8 @@ object Uniq {
 
 // type lattice
 object Types {
-  sealed trait Typ
-  sealed trait MonoType extends Typ
+  sealed trait Type
+  sealed trait MonoType extends Type
 
   // primitive types
   // each object corresponds directly to the type
@@ -31,7 +31,7 @@ object Types {
 
     // TODO: instead of FooCon(), Foo() have: Con<Foo>(Foo(), params) and Inst<Foo>(Foo(), args) ?
   case class Param(name: String, uniq: Uniq = new Uniq()) extends MonoType
-  case class ForAll(typeParams: Seq[Param], typeTemplate: MonoType) extends Typ
+  case class ForAll(typeParams: Seq[Param], typeTemplate: MonoType) extends Type
   case class Applied(typeArgs: Seq[MonoType], typeExpanded: MonoType) extends MonoType
 
   def maybeForAll(typeParams: Seq[Param], typeTemplate: MonoType) = typeParams match {
@@ -40,7 +40,7 @@ object Types {
   }
 
   // TODO unit test
-  def isAssignable(t1: Typ, t2: Typ): Boolean = (t1, t2) match {
+  def isAssignable(t1: Type, t2: Type): Boolean = (t1, t2) match {
     case (_, Top) => true
     case (Bottom, _) => true
     case (Uni, Uni) => true
@@ -74,7 +74,7 @@ object Types {
     traverse(in)
   }
 
-  def toSource(t: Typ): String = t match {
+  def toSource(t: Type): String = t match {
     case Top => "⊤" // Any
     case Bottom => "⊥" // Nothing
     case Uni => "()"

@@ -79,7 +79,7 @@ object JsEmitter {
     case Terms.NamePattern(name) => JsAst.Const(JsAst.NamePattern(name), emitValueExpr(e))
   }
 
-  def emitMethodDefSection(targetType: Types.Typ, selfPattern: Terms.Pattern, methodDefs: Namespace[Terms.MethodDef]) = {
+  def emitMethodDefSection(targetType: Types.Type, selfPattern: Terms.Pattern, methodDefs: Namespace[Terms.MethodDef]) = {
     val entries = methodDefs.mapValues { case Terms.MethodDef(attributes, body) =>
       JsAst.UnaryArrowFunc(emitPattern(selfPattern), Seq(emitValueExpr(body)))
     }.entries
@@ -126,9 +126,9 @@ object JsEmitter {
 }
 
 object NameMangler {
-  def methodsCompanionName(typ: Types.Typ) = safe"${typeName(typ)}$$Methods"
+  def methodsCompanionName(typ: Types.Type) = safe"${typeName(typ)}$$Methods"
 
-  def typeName(typ: Types.Typ) = typ match {
+  def typeName(typ: Types.Type) = typ match {
     case Types.Alias(name, _) => name
     case _ => ???
   }
