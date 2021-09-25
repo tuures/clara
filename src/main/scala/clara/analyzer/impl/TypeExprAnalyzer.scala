@@ -4,9 +4,11 @@ import clara.asg.{Types, Namespace}
 import clara.ast.{Ast, SourceMessage}
 
 import ai.x.safe._
+import clara.ast.Ast.NamedType
 
 
 case class TypeExprAnalyzer(env: Env) {
+  //FIXME rename to walkMonoTypeExpr
   def walkTypeExpr(typeExpr: Ast.TypeExpr): An[Types.MonoType] = typeExpr match {
     case Ast.TopType(_) => An.result(Types.Top)
     case Ast.BottomType(_) => An.result(Types.Bottom)
@@ -14,7 +16,7 @@ case class TypeExprAnalyzer(env: Env) {
     case Ast.TupleType(ts, pos) => ???
     case Ast.NamedType(name, typeArgs, pos) =>
       An.seq(typeArgs.map(walkTypeExpr)).flatMap { args =>
-        env.useType(name, args, pos)
+        env.useTypeInst(name, args, pos)
       }
     case Ast.RecordType(fields, _) =>
       An.step(fields)(Namespace.empty[Types.MonoType]){ case (ns, Ast.FieldDecl(name, typeExpr, pos)) =>
@@ -25,11 +27,14 @@ case class TypeExprAnalyzer(env: Env) {
         }
       }.map(Types.Record(_))
     case Ast.FuncType(parameter, result, pos) => {
-      val tea = TypeExprAnalyzer(env)
-      tea.walkTypeExpr(parameter).zip(tea.walkTypeExpr(result)).map { case (parameterTyp, resultTyp) =>
+      walkTypeExpr(parameter).zip(walkTypeExpr(result)).map { case (parameterTyp, resultTyp) =>
         Types.Func(parameterTyp, resultTyp)
       }
     }
   }
 
+  // def walkNamedUnique(typeExpr: Ast.TypeExpr): An[Types.Unique] = typeExpr match {
+  //   case NamedType(name, Nil, pos) =>
+  //   case _ => An.error(SourceMessage(typeExpr.pos, "Named type expected"))
+  // }
 }

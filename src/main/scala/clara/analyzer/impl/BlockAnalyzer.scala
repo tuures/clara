@@ -74,10 +74,10 @@ case class BlockAnalyzer(parentEnv: Env) {
             map(nextEnv => (Terms.TypeDef(name), None, nextEnv))
         }
       }
-      case Ast.MethodDeclSection(targetTypeExpr, methodAsts, pos) =>
-        MethodSectionAnalyzer(currentEnv).walkDeclSection(targetTypeExpr, methodAsts, pos)
-      case Ast.MethodDefSection(targetPattern, methodAsts, pos) =>
-        MethodSectionAnalyzer(currentEnv).walkDefSection(targetPattern, methodAsts, pos)
+      case Ast.MethodDeclSection(targetTypeName, methods, _) =>
+        MethodSectionAnalyzer(currentEnv).walkDeclSection(targetTypeName, methods)
+      case Ast.MethodDefSection(targetPattern, methods, _) =>
+        MethodSectionAnalyzer(currentEnv).walkDefSection(targetPattern, methods)
     }).map { case (content, typ, nextEnv) =>
       WalkBlockState(currentContents :+ content, typ, nextEnv)
     }

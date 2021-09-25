@@ -382,13 +382,15 @@ object Parser {
 
     val methodsBody: P[Seq[Method]] = P(recordSyntax(methodDef | methodDecl))
 
+    val typeName: P[TypeName] = P(pp(name)(TypeName.apply _))
+
     val methodDeclSection: P[MethodDeclSection] = P(pp(
       keyword("declare") ~
-      keyword("methods") ~/ typeExpr ~ methodsBody
+      keyword("methods") ~/ typeName ~ methodsBody
     )(MethodDeclSection.apply _))
 
     val methodDefSection: P[MethodDefSection] = P(pp(
-      keyword("methods") ~/ pattern ~ methodsBody
+      keyword("methods") ~/ ??? ~ methodsBody
     )(MethodDefSection.apply _))
 
     val inBlockDef: P[InBlockDef] = P(valueDecl | valueNamesDef | aliasTypeDef | typeDef | methodDeclSection | methodDefSection)
