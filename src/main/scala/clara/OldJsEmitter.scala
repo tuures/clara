@@ -1,6 +1,6 @@
 // package clara
 //
-// import ai.x.safe._
+// import clara.util.Safe._
 //
 // object JsEmitter {
 //

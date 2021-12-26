@@ -3,7 +3,7 @@ package clara.analyzer.impl
 import clara.asg.{Types, Namespace}
 import clara.ast.{Ast, SourceMessage}
 
-import ai.x.safe._
+import clara.util.Safe._
 import clara.ast.Ast.NamedType
 
 

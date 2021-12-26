@@ -3,7 +3,7 @@ package clara.analyzer.impl
 import clara.asg.{Attributes, Terms, Types, Namespace}
 import clara.ast.{Ast, Pos, SourceMessage}
 
-import ai.x.safe._
+import clara.util.Safe._
 
 
 case class MethodSectionAnalyzer(env: Env) {

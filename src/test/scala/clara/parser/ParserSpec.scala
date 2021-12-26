@@ -1,33 +1,37 @@
 package clara.parser
 
-import ai.x.safe._
-import fastparse.all.{P, Parsed}
-import org.scalatest.FunSuite
-
+import clara.util.Safe._
 import clara.ast.{Ast, LiteralValue}
 
-class ParserSpec extends FunSuite {
+import fastparse._
+import org.scalatest.funsuite.AnyFunSuite
+import scala.reflect.ClassTag
+
+class ParserSpec extends AnyFunSuite {
 
   import Ast._
 
-  def parse[R](parser: P[R], input: String)(expected: Any) = test(safe"valid: ${parser.toString} ${input.replace("\n", "\\n")}") {
-    parser.parse(input) match {
-      case f: Parsed.Failure =>
-        fail(input + "\n" + f.toString + "\n" + f.extra.traced.toString)
-      case s: Parsed.Success[_] =>
-        assert(s.value == expected)
-        assert(s.index == input.length, "did not parse the whole input")
+  def parseTest[T](parser: P[_] => P[T])(input: String)(expected: Any)(implicit ct: ClassTag[T]) = {
+    test(safe"${ct.runtimeClass.getSimpleName()} ${input.replace("\n", "\\n")}") {
+      parse(input, parser) match {
+        case f: Parsed.Failure =>
+          fail(input + "\n" + f.toString + "\n" + f.extra.trace().toString)
+        case s: Parsed.Success[_] =>
+          assert(s.value == expected)
+          assert(s.index == input.length, "did not parse the whole input")
+      }
     }
   }
 
-  def err[R](parser: P[R], input: String) = test(safe"invalid: ${parser.toString} $input") {
-    parser.parse(input) match {
-      case Parsed.Success(_, index: Int) if index == input.length => fail("was parsed compeletely")
-      case _ =>
+  def err[T](parser: P[_] => P[T])(input: String)(implicit ct: ClassTag[T]) =
+    test(safe"invalid: ${ct.runtimeClass.getSimpleName()} $input") {
+      parse(input, parser) match {
+        case Parsed.Success(_, index: Int) if index == input.length => fail("was parsed compeletely")
+        case _ =>
+      }
     }
-  }
 
-  val p = Parser.Impl(None)
+  val p = ParserImpls(None)
 
   // TODO migrate:
   // t("(a: Int, b: String) => (b, a, 1, 'foobar')")
@@ -81,84 +85,84 @@ class ParserSpec extends FunSuite {
   //      |)""".stripMargin
   // )
 
-  parse(p.unitLiteral, "()")(UnitLiteral())
-  parse(p.unitType,    "()")(UnitType())
-  parse(p.unitPattern, "()")(UnitPattern())
+  parseTest(p.unitLiteral(_))("()")(UnitLiteral())
+  parseTest(p.unitType(_))(   "()")(UnitType())
+  parseTest(p.unitPattern(_))("()")(UnitPattern())
 
-  parse(p.floatLiteral, "3.14")(FloatLiteral(LiteralValue.Float("3", "14")))
-  parse(p.floatLiteral, "1_000.123_456")(FloatLiteral(LiteralValue.Float("1000", "123456")))
-  err(p.floatLiteral, "1._2")
-  err(p.floatLiteral, "1_.2")
+  parseTest(p.floatLiteral(_))("3.14")(FloatLiteral(LiteralValue.Float("3", "14")))
+  parseTest(p.floatLiteral(_))("1_000.123_456")(FloatLiteral(LiteralValue.Float("1000", "123456")))
+  err(p.floatLiteral(_))("1._2")
+  err(p.floatLiteral(_))("1_.2")
 
-  parse(p.integerLiteral, "123")(IntegerLiteral(LiteralValue.IntegerDec("123")))
-  // parse(p.integerLiteral, "-123")(IntegerLiteral(LiteralValue.IntegerDec("123")))
-  parse(p.integerLiteral, "1_000")(IntegerLiteral(LiteralValue.IntegerDec("1000")))
-  parse(p.integerLiteral, "1_\n000")(IntegerLiteral(LiteralValue.IntegerDec("1000")))
-  parse(p.integerLiteral, "#x1a")(IntegerLiteral(LiteralValue.IntegerHex("1a")))
-  // parse(p.integerLiteral, "-#x1a")(IntegerLiteral(LiteralValue.IntegerHex("1a")))
-  parse(p.integerLiteral, "#x1A")(IntegerLiteral(LiteralValue.IntegerHex("1A")))
-  parse(p.integerLiteral, "#b0010")(IntegerLiteral(LiteralValue.IntegerBin("0010")))
-  // parse(p.integerLiteral, "-#b0010")(IntegerLiteral(LiteralValue.IntegerBin("0010")))
-  err(p.integerLiteral, "1 0")
-  err(p.integerLiteral, "1_")
-  err(p.integerLiteral, "1__2")
-  err(p.integerLiteral, "#\nx\n1")
-  err(p.integerLiteral, "#x1g")
-  err(p.integerLiteral, "#x1G")
-  err(p.integerLiteral, "#x1ö")
-  err(p.integerLiteral, "#b2")
+  parseTest(p.integerLiteral(_))("123")(IntegerLiteral(LiteralValue.IntegerDec("123")))
+  // FIXME parse(p.integerLiteral, "-123")(IntegerLiteral(LiteralValue.IntegerDec("123")))
+  parseTest(p.integerLiteral(_))("1_000")(IntegerLiteral(LiteralValue.IntegerDec("1000")))
+  parseTest(p.integerLiteral(_))("1_\n000")(IntegerLiteral(LiteralValue.IntegerDec("1000")))
+  parseTest(p.integerLiteral(_))("#x1a")(IntegerLiteral(LiteralValue.IntegerHex("1a")))
+  // FIXME parse(p.integerLiteral, "-#x1a")(IntegerLiteral(LiteralValue.IntegerHex("1a")))
+  parseTest(p.integerLiteral(_))("#x1A")(IntegerLiteral(LiteralValue.IntegerHex("1A")))
+  parseTest(p.integerLiteral(_))("#b0010")(IntegerLiteral(LiteralValue.IntegerBin("0010")))
+  // FIXME parse(p.integerLiteral, "-#b0010")(IntegerLiteral(LiteralValue.IntegerBin("0010")))
+  err(p.integerLiteral(_))("1 0")
+  err(p.integerLiteral(_))("1_")
+  err(p.integerLiteral(_))("1__2")
+  err(p.integerLiteral(_))("#\nx\n1")
+  err(p.integerLiteral(_))("#x1g")
+  err(p.integerLiteral(_))("#x1G")
+  err(p.integerLiteral(_))("#x1ö")
+  err(p.integerLiteral(_))("#b2")
 
-  parse(p.processedStringLiteral, """"str($foo)"""")(StringLiteral(Seq(
+  parseTest(p.processedStringLiteral(_))(""""str($foo)"""")(StringLiteral(Seq(
     LiteralValue.StringPlainPart("str("),
     LiteralValue.StringExpressionPart(NamedValue("foo")),
     LiteralValue.StringPlainPart(")")
   )))
-  parse(p.processedStringLiteral, "\" line1 \n line2\"")(StringLiteral(Seq(
+  parseTest(p.processedStringLiteral(_))("\" line1 \n line2\"")(StringLiteral(Seq(
     LiteralValue.StringPlainPart(" line1 \n line2")
   )))
-  parse(p.processedStringLiteral, """"str$(bar)"""")(StringLiteral(Seq(
+  parseTest(p.processedStringLiteral(_))(""""str$(bar)"""")(StringLiteral(Seq(
     LiteralValue.StringPlainPart("str"),
     LiteralValue.StringExpressionPart(NamedValue("bar"))
   )))
-  parse(p.processedStringLiteral, """"\"\\10\$\n"""")(StringLiteral(Seq(
+  parseTest(p.processedStringLiteral(_))(""""\"\\10\$\n"""")(StringLiteral(Seq(
     LiteralValue.StringEscapePart(Seq('"'.toString, """\""")),
     LiteralValue.StringPlainPart("10"),
     LiteralValue.StringEscapePart(Seq("$", "n"))
   )))
-  err(p.processedStringLiteral, """"10$"""")
-  err(p.processedStringLiteral, """"10$$"""")
-  err(p.processedStringLiteral, """"10\"""")
-  err(p.processedStringLiteral, """"10\ö"""")
+  err(p.processedStringLiteral(_))(""""10$"""")
+  err(p.processedStringLiteral(_))(""""10$$"""")
+  err(p.processedStringLiteral(_))(""""10\"""")
+  err(p.processedStringLiteral(_))(""""10\ö"""")
 
-  parse(p.verbatimStringLiteral, "' str '")(StringLiteral(Seq(
+  parseTest(p.verbatimStringLiteral(_))("' str '")(StringLiteral(Seq(
     LiteralValue.StringPlainPart(" str ")
   )))
-  parse(p.verbatimStringLiteral, "'line1 \n line2'")(StringLiteral(Seq(
+  parseTest(p.verbatimStringLiteral(_))("'line1 \n line2'")(StringLiteral(Seq(
     LiteralValue.StringPlainPart("line1 \n line2")
   )))
-  parse(p.verbatimStringLiteral, """'"'""")(StringLiteral(Seq(
+  parseTest(p.verbatimStringLiteral(_))("""'"'""")(StringLiteral(Seq(
     LiteralValue.StringPlainPart('"'.toString)
   )))
-  parse(p.verbatimStringLiteral, """'c:\n\$BAR\\a\'""")(StringLiteral(Seq(
+  parseTest(p.verbatimStringLiteral(_))("""'c:\n\$BAR\\a\'""")(StringLiteral(Seq(
     LiteralValue.StringPlainPart("""c:\n\$BAR\\a\""")
   )))
-  parse(p.verbatimStringLiteral, """#'''#""")(StringLiteral(Seq(
+  parseTest(p.verbatimStringLiteral(_))("""#'''#""")(StringLiteral(Seq(
     LiteralValue.StringPlainPart("'")
   )))
-  parse(p.verbatimStringLiteral, """##''#'##""")(StringLiteral(Seq(
+  parseTest(p.verbatimStringLiteral(_))("""##''#'##""")(StringLiteral(Seq(
     LiteralValue.StringPlainPart("'#")
   )))
-  err(p.verbatimStringLiteral, """'''""")
+  err(p.verbatimStringLiteral(_))("""'''""")
 
-  parse(p.tuple, "((),())")(
+  parseTest(p.tuple(_))("((),())")(
     Tuple(Seq(UnitLiteral(), UnitLiteral()))
   )
-  err(p.tuple, "()")
+  err(p.tuple(_))("()")
 
-  parse(p.tupleType, "(() , ())")(
+  parseTest(p.tupleType(_))("(() , ())")(
     TupleType(Seq(UnitType(), UnitType()))
   )
-  parse(p.tuplePattern, "(\n(),\n(),\n)")(
+  parseTest(p.tuplePattern(_))("(\n(),\n(),\n)")(
     TuplePattern(Seq(UnitPattern(), UnitPattern()))
   )
   // nt("multi-line tuple")(
@@ -176,18 +180,18 @@ class ParserSpec extends FunSuite {
   // )
 
 
-  parse(p.parens, "((()))")(UnitLiteral())
-  parse(p.parens, "((\n\n  ())\n)")(UnitLiteral())
+  parseTest(p.parens(_))("((()))")(UnitLiteral())
+  parseTest(p.parens(_))("((\n\n  ())\n)")(UnitLiteral())
   // nt("multi-line parens")(
   //   """|(
   //      |  1
   //      |)
   //      |""".stripMargin
   // )
-  parse(p.typeParens, "((()))")(UnitType())
-  parse(p.patternParens, "((()))")(UnitPattern())
+  parseTest(p.typeParens(_))("((()))")(UnitType())
+  parseTest(p.patternParens(_))("((()))")(UnitPattern())
 
-  parse(p.block, "(\n\n// comment\n()\n;\n()\n();();;)")(
+  parseTest(p.block(_))("(\n\n// comment\n()\n;\n()\n();();;)")(
     Block(Seq.fill(4)(UnitLiteral()))
   )
   // nt("simple block")(
@@ -204,11 +208,11 @@ class ParserSpec extends FunSuite {
   //      |  xyzzy
   //      |)""".stripMargin
   // )
-  err(p.block, "()")
+  err(p.block(_))("()")
 
-  parse(p.namedValue, "foo")(NamedValue("foo"))
+  parseTest(p.namedValue(_))("foo")(NamedValue("foo"))
 
-  parse(p.namedType, "Foo")(NamedType("Foo"/*, Nil*/))
+  parseTest(p.namedType(_))("Foo")(NamedType("Foo", Nil))
   // parse(p.namedType, "Foo[Bar]")(
   //   NamedType("Foo", Seq(NamedType("Bar"/*, Nil*/)))
   // )
@@ -219,31 +223,31 @@ class ParserSpec extends FunSuite {
   //   )
   // )
 
-  parse(p.namePattern, "foo")(NamePattern("foo"))
+  parseTest(p.namePattern(_))("foo")(NamePattern("foo"))
 
-  parse(p.valueAs, "foo: String")(
-    ValueAs(NamedValue("foo"), NamedType("String"/*, Nil*/))
+  parseTest(p.valueAs(_))("foo: String")(
+    ValueAs(NamedValue("foo"), NamedType("String", Nil))
   )
 
-  parse(p.record, "{}")(Record(Nil))
-  parse(p.record, "{ a = foo, b: Bar = bar }")(Record(Seq(
+  parseTest(p.record(_))("{}")(Record(Nil))
+  parseTest(p.record(_))("{ a = foo, b: Bar = bar }")(Record(Seq(
     FieldDef("a", None, NamedValue("foo")),
-    FieldDef("b", Some(NamedType("Bar")), NamedValue("bar"))
+    FieldDef("b", Some(NamedType("Bar", Nil)), NamedValue("bar"))
   )))
 
-  parse(p.recordType, "{}")(RecordType(Nil))
-  parse(p.recordType, "{ a: Foo, b: Bar }")(RecordType(Seq(
-    FieldDecl("a", NamedType("Foo")),
-    FieldDecl("b", NamedType("Bar"))
+  parseTest(p.recordType(_))("{}")(RecordType(Nil))
+  parseTest(p.recordType(_))("{ a: Foo, b: Bar }")(RecordType(Seq(
+    FieldDecl("a", NamedType("Foo", Nil)),
+    FieldDecl("b", NamedType("Bar", Nil))
   )))
 
-  parse(p.lambda, "() => ()")(
+  parseTest(p.lambda(_))("() => ()")(
     Lambda(UnitPattern(), UnitLiteral())
   )
-  parse(p.lambda, "() =>\n  ()")(
+  parseTest(p.lambda(_))("() =>\n  ()")(
     Lambda(UnitPattern(), UnitLiteral())
   )
-  parse(p.lambda, "() =>//comment\n  ()")(
+  parseTest(p.lambda(_))("() =>//comment\n  ()")(
     Lambda(UnitPattern(), UnitLiteral())
   )
   // nt("multi-line function")(
@@ -253,17 +257,17 @@ class ParserSpec extends FunSuite {
   //      |""".stripMargin
   // )
 
-  parse(p.funcType, "() => ()")(
+  parseTest(p.funcType(_))("() => ()")(
     FuncType(UnitType(), UnitType())
   )
 
-  parse(p.memberOrCall, "foo.length.toString")(
+  parseTest(p.memberOrCall(_))("foo.length.toString")(
     MemberSelection(MemberSelection(NamedValue("foo"), NamedMember("length"/*, Nil*/)), NamedMember("toString"/*, Nil*/))
   )
   // parse(p.memberOrCall, "foo.bar[Zot]")(
   //   MemberSelection(NamedValue("foo"), NamedMember("bar", Seq(NamedType("Zot"/*, Nil*/))))
   // )
-  parse(p.memberOrCall, "foo.\n  length.\n  toString")(
+  parseTest(p.memberOrCall(_))("foo.\n  length.\n  toString")(
     MemberSelection(MemberSelection(NamedValue("foo"), NamedMember("length"/*, Nil*/)), NamedMember("toString"/*, Nil*/))
   )
   // nt("multi-line member")(
@@ -273,73 +277,73 @@ class ParserSpec extends FunSuite {
   //      |  sqrt
   //      |""".stripMargin
   // )
-  parse(p.memberOrCall, "foo()")(
+  parseTest(p.memberOrCall(_))("foo()")(
     Call(NamedValue("foo"), UnitLiteral())
   )
-  parse(p.memberOrCall, "foo ()")(
+  parseTest(p.memberOrCall(_))("foo ()")(
     Call(NamedValue("foo"), UnitLiteral())
   )
-  parse(p.memberOrCall, "foo bar")(
+  parseTest(p.memberOrCall(_))("foo bar")(
     Call(NamedValue("foo"), NamedValue("bar"))
   )
 
-  parse(p.attributes, "@[a b]@[c]")(Seq(Attribute("a", Some("b")), Attribute("c", None)))
-  parse(p.attributes, "@[a]\n@[c]\n")(Seq(Attribute("a", None), Attribute("c", None)))
+  parseTest(p.attributes(_))("@[a b]@[c]")(Seq(Attribute("a", Some("b")), Attribute("c", None)))
+  parseTest(p.attributes(_))("@[a]\n@[c]\n")(Seq(Attribute("a", None), Attribute("c", None)))
 
-  parse(p.valueDecl, "::declare ::val foo: ()")(ValueDecl("foo", UnitType()))
+  parseTest(p.valueDecl(_))("::declare ::val foo: ()")(ValueDecl("foo", UnitType()))
 
-  parse(p.valueNamesDef, "a =\u0020\u0020\n\u0020\u0020\n  foo")(
+  parseTest(p.valueNamesDef(_))("a =\u0020\u0020\n\u0020\u0020\n  foo")(
     ValueNamesDef(NamePattern("a"), NamedValue("foo"))
   )
 
-  parse(p.aliasTypeDef, "::alias Foo = Bar")(AliasTypeDef("Foo", NamedType("Bar")))
+  parseTest(p.aliasTypeDef(_))("::alias Foo = Bar")(AliasTypeDef("Foo", Nil, NamedType("Bar", Nil)))
 
-  parse(p.typeDef, "::declare ::type Foo = Bar")(TypeDef(true, "Foo", NamedType("Bar")))
+  parseTest(p.typeDef(_))("::declare ::type Foo = Bar")(TypeDef(true, "Foo", Nil, NamedType("Bar", Nil)))
 
-  parse(p.typeDef, "::type Foo = Bar")(TypeDef(false, "Foo", NamedType("Bar")))
+  parseTest(p.typeDef(_))("::type Foo = Bar")(TypeDef(false, "Foo", Nil, NamedType("Bar", Nil)))
 
-  parse(p.newExpr, "::new Foo")(NewExpr(NamedType("Foo")))
+  parseTest(p.newExpr(_))("::new Foo")(NewExpr(NamedType("Foo", Nil)))
 
-  parse(p.methodDeclSection, "::declare ::methods Bar { foo: Bar }")(
-    MethodDeclSection(NamedType("Bar"), Seq(
-      MethodDecl(Nil, "foo", NamedType("Bar"))
+  parseTest(p.methodDeclSection(_))("::declare ::methods Bar { foo: Bar }")(
+    MethodDeclSection(TypeName("Bar"), Seq(
+      MethodDecl(Nil, "foo", NamedType("Bar", Nil))
     ))
   )
-  parse(p.methodDeclSection, "::declare ::methods Bar { foo: Bar = sic }")(
-    MethodDeclSection(NamedType("Bar"), Seq(
-      MethodDef(Nil, "foo", Some(NamedType("Bar")), NamedValue("sic"))
+  parseTest(p.methodDeclSection(_))("::declare ::methods Bar { foo: Bar = sic }")(
+    MethodDeclSection(TypeName("Bar"), Seq(
+      MethodDef(Nil, "foo", Some(NamedType("Bar", Nil)), NamedValue("sic"))
     ))
   )
-  parse(p.methodDeclSection, "::declare ::methods Bar {\n@[a]\nfoo: Bar\nbaz: Baz\n}")(
-    MethodDeclSection(NamedType("Bar"), Seq(
-      MethodDecl(Seq(Attribute("a", None)), "foo", NamedType("Bar")),
-      MethodDecl(Nil, "baz", NamedType("Baz")),
-    ))
-  )
-
-  parse(p.methodDefSection, "::methods b: Bar { foo = b }")(
-    MethodDefSection(PatternAs(NamePattern("b"), NamedType("Bar")), Seq(
-      MethodDef(Nil, "foo", None, NamedValue("b"))
-    ))
-  )
-  parse(p.methodDefSection, "::methods b: Bar {\nfoo: Bar = b\n}")(
-    MethodDefSection(PatternAs(NamePattern("b"), NamedType("Bar")), Seq(
-      MethodDef(Nil, "foo", Some(NamedType("Bar")), NamedValue("b"))
-    ))
-  )
-  parse(p.methodDefSection, "::methods b: Bar { foo: Sic }")(
-    MethodDefSection(PatternAs(NamePattern("b"), NamedType("Bar")), Seq(
-      MethodDecl(Nil, "foo", NamedType("Sic"))
+  parseTest(p.methodDeclSection(_))("::declare ::methods Bar {\n@[a]\nfoo: Bar\nbaz: Baz\n}")(
+    MethodDeclSection(TypeName("Bar"), Seq(
+      MethodDecl(Seq(Attribute("a", None)), "foo", NamedType("Bar", Nil)),
+      MethodDecl(Nil, "baz", NamedType("Baz", Nil)),
     ))
   )
 
-  parse(p.program, "(foo/*comment\n /*  \n // line2*/)")(
+  // parseTest(p.methodDefSection(_))("::methods b: Bar { foo = b }")(
+  //   MethodDefSection(PatternAs(NamePattern("b"), NamedType("Bar", Nil)), Seq(
+  //     MethodDef(Nil, "foo", None, NamedValue("b"))
+  //   ))
+  // )
+  // parseTest(p.methodDefSection(_))("::methods b: Bar {\nfoo: Bar = b\n}")(
+  //   MethodDefSection(PatternAs(NamePattern("b"), TypeName("Bar")), Seq(
+  //     MethodDef(Nil, "foo", Some(NamedType("Bar", Nil)), NamedValue("b"))
+  //   ))
+  // )
+  // parseTest(p.methodDefSection(_))("::methods b: Bar { foo: Sic }")(
+  //   MethodDefSection(PatternAs(NamePattern("b"), TypeName("Bar")), Seq(
+  //     MethodDecl(Nil, "foo", NamedType("Sic", Nil))
+  //   ))
+  // )
+
+  parseTest(p.programBlock(_))("(foo/*comment\n /*  \n // line2*/)")(
     Block(Seq(NamedValue("foo")))
   )
-  parse(p.program, "foo//\n")(
+  parseTest(p.programBlock(_))("foo//\n")(
     Block(Seq(NamedValue("foo")))
   )
-  parse(p.program, "foo//")(
+  parseTest(p.programBlock(_))("foo//")(
     Block(Seq(NamedValue("foo")))
   )
 
@@ -409,7 +413,7 @@ class ParserSpec extends FunSuite {
   // )
   // t("::new Foo {}")
 
-  parse(p.valueExpr, "123")(IntegerLiteral(LiteralValue.IntegerDec("123")))
-  err(p.valueExpr, "foo square = 1")
-  err(p.valueExpr, "1square = 1")
+  parseTest(p.valueExpr(_))("1234")(IntegerLiteral(LiteralValue.IntegerDec("1234")))
+  err(p.valueExpr(_))("foo square = 1")
+  err(p.valueExpr(_))("1square = 1")
 }

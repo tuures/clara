@@ -2,12 +2,12 @@
 //
 // import scala.collection.immutable.ListMap
 //
-// import ai.x.safe._
+// import clara.util.Safe._
 //
 // object Analyzer {
 //
 //   def mapPair[A, B](f: A => B)(a: (A, A)) = (f(a._1), f(a._2))
-// 
+//
 //   type Errors = Seq[SourceError]
 //
 //   type An[A] = Either[Errors, A]
@@ -111,7 +111,7 @@
 //   object TypeParams {
 //     def empty = Namespace.empty[VarTypeCon]
 //     def signature(typeParams: TypeParams, env: Env) =
-//       if (typeParams.length > 0) typeParams.names.safeMkString("[", ", ", "]")
+//       if (typeParams.length > 0) typeParams.names.safeString("[", ", ", "]")
 //       else ""
 //     def validateArgs(typeParams: TypeParams, typeArgs: TypeArgs) = typeParams.items.map(_.arity) === typeArgs.map(_.arity)
 //   }
@@ -175,7 +175,7 @@
 //   //
 //
 //   case class VarTypeCon(sourceName: String, arity: Int) extends TypeCon {
-//     def signature(env: Env) = safe"${envName(env)}${(if (arity > 0) List.fill(arity)("_").safeMkString("[", ", ", "]") else "")}"
+//     def signature(env: Env) = safe"${envName(env)}${(if (arity > 0) List.fill(arity)("_").safeString("[", ", ", "]") else "")}"
 //     def typeParams = ??? // hmm
 //     def getValueMember(env: Env, pos: Pos, name: String) = An(None)
 //     def getAllValueMembers(env: Env, pos: Pos) = An.error(pos, "Members not known for type parameter")
@@ -195,7 +195,7 @@
 //
 //   object TypeArgs {
 //     def signature(typeArgs: TypeArgs, env: Env) =
-//       if (typeArgs.length > 0) typeArgs.map(_.signature(env)).safeMkString("[", ", ", "]")
+//       if (typeArgs.length > 0) typeArgs.map(_.signature(env)).safeString("[", ", ", "]")
 //       else ""
 //   }
 //

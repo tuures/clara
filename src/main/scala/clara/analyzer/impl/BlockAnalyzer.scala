@@ -3,7 +3,7 @@ package clara.analyzer.impl
 import clara.asg.{Terms, Types}
 import clara.ast.{Ast, Pos, SourceMessage}
 
-import ai.x.safe._
+import clara.util.Safe._
 import clara.ast.Ast.ValueDecl
 
 
@@ -76,8 +76,9 @@ case class BlockAnalyzer(parentEnv: Env) {
       }
       case Ast.MethodDeclSection(targetTypeName, methods, _) =>
         MethodSectionAnalyzer(currentEnv).walkDeclSection(targetTypeName, methods)
-      case Ast.MethodDefSection(targetPattern, methods, _) =>
-        MethodSectionAnalyzer(currentEnv).walkDefSection(targetPattern, methods)
+      case Ast.MethodDefSection(_/*targetTypeName*/, _/*methods*/, _) =>
+        ???
+        //MethodSectionAnalyzer(currentEnv).walkDefSection(targetTypeName, methods)
     }).map { case (content, typ, nextEnv) =>
       WalkBlockState(currentContents :+ content, typ, nextEnv)
     }

@@ -1,6 +1,6 @@
 package clara.ast
 
-import ai.x.safe._
+import clara.util.Safe._
 
 sealed trait Pos {
   def humanFormat: String

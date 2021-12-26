@@ -7,7 +7,7 @@ import clara.ast.LiteralValue
 
 import impl._
 
-import ai.x.safe._
+import clara.util.Safe._
 
 
 object JsEmitter {
@@ -58,7 +58,7 @@ object JsEmitter {
     case LiteralValue.StringEscapePart(escapes) => ???
     case LiteralValue.StringExpressionPart(e) => ???
     case LiteralValue.StringPlainPart(value) => value
-  }).safeMkString(""))
+  }).safeString(""))
 
   def emitBlock(bcs: Seq[Terms.BlockContent]) = {
     // TODO: JsAst.Iife so that we can automatically optimise unintentional iifes away

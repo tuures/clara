@@ -7,7 +7,7 @@ import clara.jsemitter.impl.JsPrinter
 import clara.parser.Parser
 import clara.util.FileIo
 
-import ai.x.safe._
+import clara.util.Safe._
 
 object ClaraCli {
 
@@ -27,7 +27,7 @@ object ClaraCli {
       case `OutputPath` :: str :: rest => p(rest, o.copy(outputPath = Some(str)))
       case str :: rest if (o.inputPath === "-") => p(rest, o.copy(inputPath = str))
       case Nil => Right(o)
-      case rest => unexpected(rest.safeMkString(" "))
+      case rest => unexpected(rest.safeString(" "))
     }
 
     p(args)
@@ -40,37 +40,29 @@ object ClaraCli {
   |  ${OutputPath}\toutput path
   """.stripMargin
 
-  def run(options: Options) = FileIo.readFile(options.inputPath).flatMap { input =>
-    Parser(options.inputPath, input).parseAsProgramBlock
+  def run(options: Options): Unit = FileIo.readFile(options.inputPath).map { input =>
+    Parser.parseString(options.inputPath, input)
   }.flatMap { programBlock =>
     if (options.printAst) {
       println(AstPrinter.print(programBlock))
       println()
     }
 
-    // val blockWithPrelude = Prelude.prependTo(block)
-
-    // options.outputPath.foreach { outputPath =>
-    //   FileIo.writeFile(outputPath, JsEmitter.emitString(blockWithPrelude)) match {
-    //     case Left(errors) => println(errors.map(_.humanFormat).safeMkString("\n"))
-    //     case Right(()) => ()
-    //   }
-    // }
-
-    // Analyzer.analyze(blockWithPrelude)
     Analyzer.analyzeProgramBlock(programBlock)
   }.map { asg =>
     JsEmitter.emitProgram(asg)
   }.map { jsAst =>
     JsPrinter.emitString(jsAst)
   } match {
-    // case Right(resultType) => println(resultType.signature(Analyzer.Env.empty))
     case Right(out) => options.outputPath match {
-      case Some(outputPath) => FileIo.writeFile(outputPath, out) // FIXME check result
+      case Some(outputPath) => FileIo.writeFile(outputPath, out) match {
+        case Left(errors) => println(errors.map(_.humanFormat).safeString("\n"))
+        case Right(()) => ()
+      }
       case None => println(out)
     }
     case Left(errors) =>
-      println(errors.map(_.humanFormat).safeMkString("\n"))
+      println(errors.map(_.humanFormat).safeString("\n"))
   }
 
   def main(args: Array[String]): Unit = {

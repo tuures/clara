@@ -2,7 +2,7 @@ package clara.jsemitter.impl
 
 // JsAst => String
 
-import ai.x.safe._
+import clara.util.Safe._
 
 object JsPrinter {
   def emitString(module: JsAst.Module): String = JsPrinterImpl().walkModule(module)
@@ -14,7 +14,7 @@ case class JsPrinterImpl() {
 
   import JsAst._
 
-  def walkModule(module: Module) = module.nodes.map(walkNode).safeMkString("\n\n")
+  def walkModule(module: Module) = module.nodes.map(walkNode).safeString("\n\n")
 
   def walkNode(node: Node): String = node match {
     case e: Expr => walkExpr(e)
@@ -42,7 +42,7 @@ case class JsPrinterImpl() {
   }
 
   def walkObjectLiteral(entries: Seq[(String, Expr)]): String =
-    entries.map { case (name, expr) => indented(safe"$name: ${walkExpr(expr)}") }.safeMkString("{\n", ",\n", "\n}")
+    entries.map { case (name, expr) => indented(safe"$name: ${walkExpr(expr)}") }.safeString("{\n", ",\n", "\n}")
 
   def walkArrowFunc(param: Option[Pattern], body: Seq[Node]): String = {
     val paramPrinted = param.map(walkPattern).getOrElse("()")
@@ -50,7 +50,7 @@ case class JsPrinterImpl() {
     body match {
       case Seq((e: JsAst.Expr)) => safe"$paramPrinted =>\n" + indented(walkExpr(e))
       case _ => {
-        safe"$paramPrinted => {\n" + indented(body.map(walkNode).safeMkString("\n")) + "\n}"
+        safe"$paramPrinted => {\n" + indented(body.map(walkNode).safeString("\n")) + "\n}"
       }
     }
   }

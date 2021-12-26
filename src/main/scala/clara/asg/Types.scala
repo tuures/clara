@@ -1,6 +1,6 @@
 package clara.asg
 
-import ai.x.safe._
+import clara.util.Safe._
 
 
 class Uniq()
@@ -82,12 +82,12 @@ object Types {
     case Record(fields) =>
       fields.mapValues(toSource).entries.map { case (name, v) =>
         safe"$name: $v"
-      }.safeMkString("{", ", ", "}")
+      }.safeString("{", ", ", "}")
     case Alias(name, _) => name
     case _: Unique => throw new IllegalArgumentException("toSource(Unique) not defined") // FIXME
     case Param(name, _) => name
     case _: ForAll => throw new IllegalArgumentException("toSource(ForAll) not defined") // FIXME
-    case Applied(typeArgs, typeExpanded) => toSource(typeExpanded) + typeArgs.map(toSource).safeMkString("<", " ,", ">")
+    case Applied(typeArgs, typeExpanded) => toSource(typeExpanded) + typeArgs.map(toSource).safeString("<", " ,", ">")
   }
 
 }

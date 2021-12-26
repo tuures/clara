@@ -2,7 +2,7 @@ package clara.asg
 
 import scala.collection.immutable.ListMap
 
-import ai.x.safe._
+import clara.util.Safe._
 
 case class Namespace[I](m: ListMap[String, I]) {
   def addOrModify(binding: (String, I)): Namespace[I] = this.copy(m = m + binding)

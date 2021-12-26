@@ -1,8 +1,6 @@
 package clara.ast
 
-import ai.x.safe._
-
-// TODO unit tests for this file, lot's of + - 1 index stuff
+import clara.util.Safe._
 
 // zero-indexed line and col
 case class LineCol(line: Int, col: Int) {

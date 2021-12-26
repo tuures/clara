@@ -4,7 +4,7 @@ import clara.asg.Types
 import clara.asg.Types.{Applied, ForAll, MonoType, Param, Type}
 import clara.ast.{SourceMessage, Pos}
 
-import ai.x.safe._
+import clara.util.Safe._
 
 object TypeAnalyzer {
   def instantiate(typ: Type, typeArgs: Seq[MonoType], pos: Pos): An[MonoType] = typ match {

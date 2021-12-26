@@ -2,7 +2,7 @@
 //
 // import org.scalatest.FunSuite
 //
-// import ai.x.safe._
+// import clara.util.Safe._
 //
 // class AnalyzerSpec extends FunSuite {
 //   import Ast._
@@ -10,7 +10,7 @@
 //   def ve(testName: String, expectedSignature: String)(valueExpr: ValueExpr) = test(testName) {
 //     Analyzer.analyze(Prelude.prependTo(valueExpr)) match {
 //       case Right(t) => assert(t.signature(Analyzer.Env.empty) == expectedSignature)
-//       case Left(errors) => fail(errors.map(_.humanFormat).safeMkString("\n"))
+//       case Left(errors) => fail(errors.map(_.humanFormat).safeString("\n"))
 //     }
 //   }
 //

@@ -3,7 +3,7 @@ package clara.analyzer.impl
 import clara.ast.{SourceMessage, Pos}
 import clara.asg.{Terms, Types}
 
-import ai.x.safe._
+import clara.util.Safe._
 
 case class MemberSelectionAnalyzer(env: Env, name: String, memberPos: Pos) {
   def walkMemberSelection(objectTerm: Terms.ValueExpr): An[(Terms.SelectedMember, Types.MonoType)] = {

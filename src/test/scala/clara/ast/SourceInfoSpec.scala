@@ -1,8 +1,8 @@
 package clara.ast
 
-import org.scalatest.FunSuite
+import org.scalatest.funsuite.AnyFunSuite
 
-class SourceInfoSpec extends FunSuite {
+class SourceInfoSpec extends AnyFunSuite {
   def testSourceInfoFromString(testDesc: String)(
     content: String
   )(

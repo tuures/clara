@@ -3,7 +3,7 @@ package clara.util
 import java.nio.file.{Files, Paths}
 import java.nio.charset.StandardCharsets
 
-import ai.x.safe._
+import clara.util.Safe._
 
 object FileIo {
 

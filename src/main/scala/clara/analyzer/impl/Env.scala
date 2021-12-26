@@ -1,6 +1,6 @@
 package clara.analyzer.impl
 
-import ai.x.safe._
+import clara.util.Safe._
 
 import clara.ast.{Pos, SourceMessage}
 import clara.asg.{Types, Namespace}

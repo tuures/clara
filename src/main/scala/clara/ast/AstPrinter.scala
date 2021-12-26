@@ -17,10 +17,5 @@ case class AstPrinterImpl(indentLevel: Int = 0) {
 }
 
 object AstPrinter {
-  // def print(astNode: Ast.Node): String = {
-  //   import sext._
-
-  //   programBlock.treeString
-  // }
   def print(astNode: Ast.Node): String = AstPrinterImpl().print(astNode).getOrElse("")
 }
