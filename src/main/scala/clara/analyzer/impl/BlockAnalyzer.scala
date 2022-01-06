@@ -48,9 +48,9 @@ case class BlockAnalyzer(parentEnv: Env) {
         }.map { nextEnv =>
           (Terms.ValueDecl(name), None, nextEnv)
         }
-      case Ast.ValueNamesDef(target, e, _) => {
+      case Ast.ValueDef(target, e, _) => {
         ValueExprAnalyzer(currentEnv).walkValueExpr(e).flatMap { valueExprTerm =>
-          walkValueNamesDef(currentEnv, target, valueExprTerm)
+          walkValueDef(currentEnv, target, valueExprTerm)
         }.map { case (namesDef, nextEnv) => (namesDef, None, nextEnv) }
       }
       // TODO remove duplication between alias and typedef
@@ -64,7 +64,8 @@ case class BlockAnalyzer(parentEnv: Env) {
             map(nextEnv => (Terms.AliasTypeDef(name), None, nextEnv))
         }
       }
-      case Ast.TypeDef(isDecl, name, typeParams, typeExpr, pos) => { // TODO maybe this should be called ::subtype or ::tagged instead, or ::uniq
+      case Ast.TypeDef(isDecl, name, typeParams, typeExpr, pos) => {
+        // TODO maybe this should be called ::tagged instead
         TypeParamAnalyzer(currentEnv).walkTypeParams(typeParams).flatMap { case (paramTypes, withParamsEnv) =>
           TypeExprAnalyzer(withParamsEnv).walkTypeExpr(typeExpr).map { typ =>
             Types.maybeForAll(paramTypes, Types.Alias(name, Types.Unique(constructible = !isDecl, typ)))
@@ -76,17 +77,18 @@ case class BlockAnalyzer(parentEnv: Env) {
       }
       case Ast.MethodDeclSection(targetTypeName, methods, _) =>
         MethodSectionAnalyzer(currentEnv).walkDeclSection(targetTypeName, methods)
-      case Ast.MethodDefSection(_/*targetTypeName*/, _/*methods*/, _) =>
-        ???
-        //MethodSectionAnalyzer(currentEnv).walkDefSection(targetTypeName, methods)
+          .map { case (term, nextEnv) => (term, None, nextEnv) }
+      case Ast.MethodDefSection(targetTypeName, selfPattern, methods, _) =>
+        MethodSectionAnalyzer(currentEnv).walkDefSection(targetTypeName, selfPattern, methods)
+          .map { case (term, nextEnv) => (term, None, nextEnv) }
     }).map { case (content, typ, nextEnv) =>
       WalkBlockState(currentContents :+ content, typ, nextEnv)
     }
   }
 
-  def walkValueNamesDef(currentEnv: Env, target: Ast.Pattern, valueExprTerm: Terms.ValueExpr): An[(Terms.ValueNamesDef, Env)] = {
+  def walkValueDef(currentEnv: Env, target: Ast.Pattern, valueExprTerm: Terms.ValueExpr): An[(Terms.ValueDef, Env)] = {
     PatternAnalyzer(currentEnv, parentEnv).walkAssignment(target, valueExprTerm.typ).map { case (targetTerm, nextEnv) =>
-      (Terms.ValueNamesDef(targetTerm, valueExprTerm), nextEnv)
+      (Terms.ValueDef(targetTerm, valueExprTerm), nextEnv)
     }
   }
 

@@ -38,8 +38,6 @@ object Terms {
 
   case class Call(callee: ValueExpr, argument: ValueExpr, typ: MonoType) extends ValueExpr
 
-  case class ValueDecl(name: String) extends InBlockDef
-  case class ValueNamesDef(target: Pattern, e: ValueExpr) extends InBlockDef
   case class AliasTypeDef(name: String) extends InBlockDef
   case class TypeDef(name: String) extends InBlockDef
   case class NewExpr(typ: MonoType) extends ValueExpr
@@ -49,4 +47,7 @@ object Terms {
   case class MethodDecl(attributes: MethodAttributes, typ: MonoType) extends Member
   case class MethodDefSection(targetType: Type, self: Pattern, methodDefs: Namespace[MethodDef]) extends MethodSection
   case class MethodDef(attributes: MethodAttributes, body: ValueExpr) extends Member
+
+  case class ValueDecl(name: String) extends InBlockDef
+  case class ValueDef(target: Pattern, e: ValueExpr) extends InBlockDef
 }

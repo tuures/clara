@@ -9,9 +9,11 @@ object Ast {
   sealed trait BlockContent extends Node
   sealed trait TypeExpr extends Node
   sealed trait Pattern extends Node
+  sealed trait Method extends Node
   sealed trait ValueExpr extends BlockContent
   sealed trait InBlockDef extends BlockContent
-  sealed trait Method extends Node
+
+  case class Invalid(pos: Pos = NoPos) extends BlockContent with TypeExpr with Pattern with Method
 
   case class TopType(pos: Pos = NoPos) extends TypeExpr
   case class BottomType(pos: Pos = NoPos) extends TypeExpr
@@ -55,20 +57,18 @@ object Ast {
 
   case class Attribute(key: String, value: Option[String], pos: Pos = NoPos) extends Node
 
-  case class ValueDecl(name: String, t: TypeExpr, pos: Pos = NoPos) extends InBlockDef
-  case class ValueNamesDef(target: Pattern, e: ValueExpr, pos: Pos = NoPos) extends InBlockDef
-
   // TODO remove duplication between alias and typedef
   case class AliasTypeDef(name: String, params: Seq[TypeParam], t: TypeExpr, pos: Pos = NoPos) extends InBlockDef
   case class TypeDef(isDecl: Boolean, name: String, params: Seq[TypeParam], t: TypeExpr, pos: Pos = NoPos) extends InBlockDef
-  case class NewExpr(t: NamedType, pos: Pos = NoPos) extends ValueExpr
 
   case class TypeName(name: String, pos: Pos = NoPos) extends Node
   case class MethodDeclSection(targetType: TypeName, methods: Seq[Method], pos: Pos = NoPos) extends InBlockDef
   case class MethodDecl(attributes: Seq[Attribute], name: String, t: TypeExpr, pos: Pos = NoPos) extends Method
-  case class MethodDefSection(targetType: TypeName, methods: Seq[Method], pos: Pos = NoPos) extends InBlockDef
+  case class MethodDefSection(targetType: TypeName, selfPattern: Pattern, methods: Seq[Method], pos: Pos = NoPos) extends InBlockDef
   case class MethodDef(attributes: Seq[Attribute], name: String, t: Option[TypeExpr], body: ValueExpr, pos: Pos = NoPos) extends Method
 
+  case class ValueDecl(name: String, t: TypeExpr, pos: Pos = NoPos) extends InBlockDef
+  case class ValueDef(target: Pattern, e: ValueExpr, pos: Pos = NoPos) extends InBlockDef
 
   // sealed trait Variance
   // case object Covariant extends Variance

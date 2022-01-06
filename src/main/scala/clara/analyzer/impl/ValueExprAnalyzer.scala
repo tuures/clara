@@ -33,7 +33,7 @@ case class ValueExprAnalyzer(env: Env) {
         typeOpt.foreach(_ => ???) // FIXME
 
         walkValueExpr(body).flatMap { bodyTerm =>
-          An.someOrError(ns.add((name, Terms.Field(bodyTerm))), duplicateName)
+          An.fromSomeOrError(ns.add((name, Terms.Field(bodyTerm))), duplicateName)
         }
       }.map { fields =>
         Terms.Record(fields, Types.Record(fields.mapValues(_.body.typ)))
@@ -56,19 +56,6 @@ case class ValueExprAnalyzer(env: Env) {
           case _ => An.error(SourceMessage(callee.pos, safe"Cannot call type `${Types.toSource(calleeTerm.typ)}`"))
         }
       }
-    case Ast.NewExpr(namedType, _) => walkNewExpr(namedType)
-  }
-
-  def walkNewExpr(namedType: Ast.NamedType): An[Terms.NewExpr] = {
-    def walkNew(typ: Types.Type): An[Terms.NewExpr] = typ match {
-      case Alias(_, wrappedType) => walkNew(wrappedType)
-      case typ @ Types.Unique(constructible, wrappedType, _) if constructible =>
-        An.result(Terms.NewExpr(Types.Func(wrappedType, typ)))
-      case typ =>
-        An.error(SourceMessage(namedType.pos, safe"Cannot construct new values of type `${Types.toSource(typ)}`"))
-    }
-
-    TypeExprAnalyzer(env).walkTypeExpr(namedType).flatMap(walkNew)
   }
 
 }

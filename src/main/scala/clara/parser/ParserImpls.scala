@@ -167,7 +167,7 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
     def startMarker[X: P]: P[Int] = P(hash.repX.!.map(_.length) ~~ boundary)
     def endMarker[X: P](hashCount: Int) = P(boundary ~~ hash.repX(exactly=hashCount))
 
-    def valueBetweenMarkers[X: P] = P(startMarker.flatMap { hashCount =>
+    def valueBetweenMarkers[X: P] = P(startMarker.flatMapX { hashCount =>
       (anythingBefore(endMarker(hashCount)).! ~~ endMarker(hashCount)).map(s => Seq(LiteralValue.StringPlainPart(s)))
     })
   }
@@ -229,10 +229,12 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
 
   val colon = ":"
 
-  def typed[X: P]: P[TypeExpr] = P(colon ~ typeExpr)
+  def typed[X: P]: P[TypeExpr] = P(colon ~ nl.rep ~ typeExpr)
 
   // TODO is NoCut really needed? review all NoCuts
   def valueAs[X: P]: P[ValueAs] = P(pp(NoCut(simple ~ typed))(ValueAs.apply _))
+
+  def patternAs[X: P]: P[PatternAs] = P(pp(simplePattern ~ typed)(PatternAs.apply _))
 
   //////
   // Record
@@ -255,9 +257,12 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   //////
   // Simple
 
-  def simple[X: P]: P[ValueExpr] = P(unitLiteral | floatLiteral | integerLiteral | stringLiteral | tuple | block | parens | namedValue | record | newExpr)
+  def simple[X: P]: P[ValueExpr] = P(unitLiteral | floatLiteral | integerLiteral | stringLiteral | tuple | block | parens | namedValue | record)
 
   def simpleType[X: P]: P[TypeExpr] = P(topType | bottomType | unitType | tupleType | typeParens | namedType | recordType)
+
+  // FIXME floatPattern integerPattern stringPattern
+  def simplePattern[X: P]: P[Pattern] = P(unitPattern | tuplePattern | patternParens | namePattern)
 
   //////
   // Function syntax
@@ -341,41 +346,41 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   //////
   // In-block defs
   val doubleColon = "::"
-  def keyword[X: P](word: String) = P(doubleColon ~~ word)
-
-  def valueDecl[X: P]: P[ValueDecl] = P(pp(keyword("declare") ~ keyword("val") ~/ name ~ typed)(ValueDecl.apply _))
-
-  def valueNamesDef[X: P]: P[ValueNamesDef] = P(pp(pattern ~ equalsSign ~/ nl.rep ~ valueExpr)(ValueNamesDef.apply _))
+  def keyword[X: P](word: String) = P((doubleColon + word) ~ nl.rep)
 
   // TODO remove duplication between alias and typedef
-  def aliasTypeDef[X: P]: P[AliasTypeDef] = P(pp(keyword("alias") ~/ name ~ maybeTypeParams ~ equalsSign ~ typeExpr)(AliasTypeDef.apply _))
+  def aliasTypeDef[X: P]: P[AliasTypeDef] =
+    P(pp(keyword("alias") ~/ name ~ maybeTypeParams ~ typed)(AliasTypeDef.apply _))
 
   def typeDef[X: P]: P[TypeDef] = P(pp(
     keyword("declare").!.?.map(_.isDefined) ~
     keyword("type") ~/
-    name ~ maybeTypeParams ~ equalsSign ~ typeExpr
+    name ~ maybeTypeParams ~ typed
   )(TypeDef.apply _))
-
-  def newExpr[X: P]: P[NewExpr] = P(pp(keyword("new") ~/ namedType)(NewExpr.apply _))
-
-  def methodDecl[X: P]: P[MethodDecl] = P(pp(attributes ~ name ~ typed)(MethodDecl.apply _))
-
-  def methodDef[X: P]: P[MethodDef] = P(pp(attributes ~ name ~ typed.? ~ equalsSign ~ valueExpr)(MethodDef.apply _))
-
-  def methodsBody[X: P]: P[Seq[Method]] = P(recordSyntax(methodDef | methodDecl))
 
   def typeName[X: P]: P[TypeName] = P(pp(name)(TypeName.apply _))
 
+  def methodDef[X: P]: P[MethodDef] = P(pp(attributes ~ name ~ typed.? ~ equalsSign ~ valueExpr)(MethodDef.apply _))
+
+  def methodDecl[X: P]: P[MethodDecl] = P(pp(attributes ~ name ~ typed)(MethodDecl.apply _))
+
+  def methodsBody[X: P]: P[Seq[Method]] = P(recordSyntax(methodDef | methodDecl))
+
   def methodDeclSection[X: P]: P[MethodDeclSection] = P(pp(
     keyword("declare") ~
-    keyword("methods") ~/ typeName ~ methodsBody
+    keyword("methods") ~/ typeName ~ colon ~ nl.rep ~ methodsBody
   )(MethodDeclSection.apply _))
 
+  // TODO use ConstructPattern instead of typeName ~ simplePattern
   def methodDefSection[X: P]: P[MethodDefSection] = P(pp(
-    keyword("methods") ~/ typeName ~ methodsBody
+    keyword("methods") ~/ typeName ~ simplePattern ~ colon ~ nl.rep ~ methodsBody
   )(MethodDefSection.apply _))
 
-  def inBlockDef[X: P]: P[InBlockDef] = P(valueDecl | valueNamesDef | aliasTypeDef | typeDef | methodDeclSection | methodDefSection)
+  def valueDecl[X: P]: P[ValueDecl] = P(pp(keyword("declare") ~ name ~ typed)(ValueDecl.apply _))
+
+  def valueDef[X: P]: P[ValueDef] = P(pp(pattern ~ equalsSign ~/ nl.rep ~ valueExpr)(ValueDef.apply _))
+
+  def inBlockDef[X: P]: P[InBlockDef] = P(aliasTypeDef | typeDef | methodDeclSection | methodDefSection | valueDecl | valueDef)
 
   //////
   // Top level rules
@@ -384,7 +389,7 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
 
   def typeExpr[X: P]: P[TypeExpr] = P(funcType | simpleType)
 
-  def pattern[X: P]: P[Pattern] = P(pp((unitPattern | tuplePattern | patternParens | namePattern) ~ typed.?)((p, t, pos) => t map (PatternAs(p, _, pos)) getOrElse p))
+  def pattern[X: P]: P[Pattern] = P(patternAs | simplePattern)
 
   //////
   // Start here

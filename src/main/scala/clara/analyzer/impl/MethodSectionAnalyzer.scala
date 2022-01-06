@@ -14,7 +14,7 @@ case class MethodSectionAnalyzer(env: Env) {
   }
 
   def walkDeclSection(targetType: Ast.TypeName, methodAsts: Seq[Ast.Method]) = {
-    walkTargeTypeName(targetType).flatMap { targetType =>
+    walkTargetTypeName(targetType).flatMap { targetType =>
       An.step(methodAsts)(WalkDeclState.begin(env)){ case (state, methodAst) =>
         (methodAst match {
           case _: Ast.MethodDef => An.error(SourceMessage(methodAst.pos, "Method declaration expected"))
@@ -25,7 +25,7 @@ case class MethodSectionAnalyzer(env: Env) {
               // TODO: do we really need a Namespace in the term/asg, (vs list), since we check dups at env.addMethod
               lazy val duplicateName = SourceMessage(pos, safe"Duplicate method name `$name`")
 
-              An.someOrError(state.ns.add((name, Terms.MethodDecl(memberAttributes, typ))), duplicateName)
+              An.fromSomeOrError(state.ns.add((name, Terms.MethodDecl(memberAttributes, typ))), duplicateName)
                 .flatMap { updatedNs =>
                   state.env.addMethod(targetType, (name, EnvMethod(memberAttributes, typ)), pos).map { nextEnv =>
                     WalkDeclState(updatedNs, nextEnv)
@@ -34,7 +34,7 @@ case class MethodSectionAnalyzer(env: Env) {
             }
         })
       }.map { case WalkDeclState(ns, nextEnv) =>
-        (Terms.MethodDeclSection(targetType, ns), None /*FIXME remove usless*/, nextEnv)
+        (Terms.MethodDeclSection(targetType, ns), nextEnv)
       }
     }
   }
@@ -44,38 +44,33 @@ case class MethodSectionAnalyzer(env: Env) {
     def begin(env: Env) = WalkDefState(Namespace.empty[Terms.MethodDef], env)
   }
 
-  def walkDefSection(targetPattern: Ast.Pattern, methodAsts: Seq[Ast.Method]) = {
-    (targetPattern match {
-      case Ast.PatternAs(p, t, _) => An.result((p, t))
-      case p => An.error(SourceMessage(p.pos, "Expected type assertion on top level"))
-    }).flatMap { case (selfPattern, targetTypeExpr) =>
-      walkTargetTypeExpr(targetTypeExpr).flatMap { targetType =>
-        PatternAnalyzer(env, env).walkAssignment(selfPattern, targetType).map((_, targetType))
-      }.flatMap { case ((selfPatternTerm, selfEnv), targetType) =>
-        An.step(methodAsts)(WalkDefState.begin(env)){ case (state, methodAst) =>
-          (methodAst match {
-            case _: Ast.MethodDecl => An.error(SourceMessage(methodAst.pos, "Method definition expected"))
-            case Ast.MethodDef(attributes, name, typeOpt, body, pos) =>
-              typeOpt.foreach(_ => ???) // FIXME
+  def walkDefSection(targetType: Ast.TypeName, selfPattern: Ast.Pattern, methodAsts: Seq[Ast.Method]) = {
+    walkTargetTypeName(targetType).flatMap { targetType =>
+      PatternAnalyzer(env, env).walkAssignment(selfPattern, targetType).map((_, targetType))
+    }.flatMap { case ((selfPatternTerm, selfEnv), targetType) =>
+      An.step(methodAsts)(WalkDefState.begin(env)){ case (state, methodAst) =>
+        (methodAst match {
+          case _: Ast.MethodDecl => An.error(SourceMessage(methodAst.pos, "Method definition expected"))
+          case Ast.MethodDef(attributes, name, typeOpt, body, pos) =>
+            typeOpt.foreach(_ => ???) // FIXME
 
-              val memberAttributesAn = walkMethodDefAttributes(attributes)
-              val bodyTermAn = ValueExprAnalyzer(selfEnv).walkValueExpr(body)
+            val memberAttributesAn = walkMethodDefAttributes(attributes)
+            val bodyTermAn = ValueExprAnalyzer(selfEnv).walkValueExpr(body)
 
-              memberAttributesAn.zip(bodyTermAn).flatMap { case (memberAttributes, bodyTerm) =>
-                // TODO: do we really need a Namespace in the term/asg, (vs list), since we check dups at env.addMethod
-                lazy val duplicateName = SourceMessage(pos, safe"Duplicate method name `$name`")
+            memberAttributesAn.zip(bodyTermAn).flatMap { case (memberAttributes, bodyTerm) =>
+              // TODO: do we really need a Namespace in the term/asg, (vs list), since we check dups at env.addMethod
+              lazy val duplicateName = SourceMessage(pos, safe"Duplicate method name `$name`")
 
-                An.someOrError(state.ns.add((name, Terms.MethodDef(memberAttributes, bodyTerm))), duplicateName)
-                  .flatMap { updatedNs =>
-                    state.env.addMethod(targetType, (name, EnvMethod(memberAttributes, bodyTerm.typ)), pos).map { nextEnv =>
-                      WalkDefState(updatedNs, nextEnv)
-                    }
+              An.fromSomeOrError(state.ns.add((name, Terms.MethodDef(memberAttributes, bodyTerm))), duplicateName)
+                .flatMap { updatedNs =>
+                  state.env.addMethod(targetType, (name, EnvMethod(memberAttributes, bodyTerm.typ)), pos).map { nextEnv =>
+                    WalkDefState(updatedNs, nextEnv)
                   }
-              }
-          })
-        }.map { case WalkDefState(ns, nextEnv) =>
-          (Terms.MethodDefSection(targetType, selfPatternTerm, ns), None /*FIXME remove usless*/, nextEnv)
-        }
+                }
+            }
+        })
+      }.map { case WalkDefState(ns, nextEnv) =>
+        (Terms.MethodDefSection(targetType, selfPatternTerm, ns), nextEnv)
       }
     }
   }
@@ -89,16 +84,14 @@ case class MethodSectionAnalyzer(env: Env) {
     case t => An.error(SourceMessage(pos, safe"Cannot have methods for type `${Types.toSource(t)}`"))
   }
 
-  def walkTargeTypeName(targetType: Ast.TypeName): An[Types.Unique] = {
-    env.useType(targetType.name, targetType.pos).flatMap(walkTargetType(targetType.pos))
-  }
-
-  def walkTargetTypeExpr(targetTypeExpr: Ast.TypeExpr): An[Types.Unique] = {
-    TypeExprAnalyzer(env).walkTypeExpr(targetTypeExpr).flatMap(walkTargetType(targetTypeExpr.pos))
+  def walkTargetTypeName(targetType: Ast.TypeName): An[Types.Unique] = {
+    val Ast.TypeName(name, pos) = targetType
+    env.useType(name, pos).flatMap(walkTargetType(pos))
   }
 
   def walkMethodDeclAttributes(attributes: Seq[Ast.Attribute]): An[Attributes.MethodAttributes] = {
     // TODO error for duplicate attributes?
+    // TODO first reduce the seq into a Namespace, then build MethodAttributes from that?
     An.step(attributes)(Attributes.MethodAttributes()) { case (attributes, Ast.Attribute(key, value, pos)) =>
       (key, value) match {
         case ("emitKind", Some("binaryOperator")) =>

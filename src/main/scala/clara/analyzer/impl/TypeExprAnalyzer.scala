@@ -23,7 +23,7 @@ case class TypeExprAnalyzer(env: Env) {
         lazy val duplicateName = SourceMessage(pos, safe"Duplicate field name `$name`")
 
         walkTypeExpr(typeExpr).flatMap { typ =>
-          An.someOrError(ns.add((name, typ)), duplicateName)
+          An.fromSomeOrError(ns.add((name, typ)), duplicateName)
         }
       }.map(Types.Record(_))
     case Ast.FuncType(parameter, result, pos) => {

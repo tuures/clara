@@ -17,8 +17,8 @@ object Parser {
 
         block
       }
-      case Parsed.Failure(_, _, extra) => {
-        throw new IllegalArgumentException(safe"Parser failed to handle input: ${extra.trace().longMsg}")
+      case f: Parsed.Failure => {
+        throw new IllegalArgumentException(safe"Parser failed to handle input: ${f.extra.trace().longMsg}")
       }
     }
   }

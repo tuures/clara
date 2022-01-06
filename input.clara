@@ -6,16 +6,6 @@
 
 // - fix all warnings and ???s
 
-// ::alias Any = ⊤
-
-// ::alias Nothing = ⊥
-
-// ::declare ::type Float = Any
-
-// ::declare ::type Int = Any
-
-// ::declare ::type String = Any
-
 ::alias Any: ⊤
 
 ::alias Nothing: ⊥
@@ -27,10 +17,16 @@
 ::declare ::type String: Any
 
 ::declare ::type Boolean: Any
-::declare ::val true: Boolean
-::declare ::val false: Boolean
+::declare true: Boolean
+::declare false: Boolean
 
-::declare ::methods Float {
+// ::tagged True: ()
+// True: True = True ()
+// ::tagged False: ()
+// False: False = False ()
+// ::alias Boolean: True | False
+
+::declare ::methods Float: {
   @[emitKind binaryOperator] @[emitName +]
   plus: Float => Float
 
@@ -44,7 +40,7 @@
   divideBy: Float => Float
 }
 
-::declare ::methods Int {
+::declare ::methods Int: {
   @[emitKind binaryOperator] @[emitName +]
   plus: Int => Int
 
@@ -58,7 +54,7 @@
   divideBy: Int => Float
 }
 
-::declare ::methods String {
+::declare ::methods String: {
   @[emitKind instanceProperty]
   length: Int
 }
@@ -81,11 +77,13 @@
 
 // console.log("Hello World!")
 
-// ::type UserOrdinal = Int
+::type UserOrdinal: Int
 
-// ::methods o: UserOrdinal {
-//   next = o .plus 1
-// }
+::methods UserOrdinal o: {
+  next = o .plus 1
+}
+
+
 
 // FIXME allow numbers (and other non letters) in names:
 // r1 = 1
@@ -117,28 +115,11 @@
 
 
 
-::type Box<T>: { x: T }
+// ::type Box<A>: { x: A }
 
-// ::methods<T> b: Box<T> {
-//   get = b.x: T
-// }
-
-// ::methods b: Box {
-//   get = b.x
-// }
-
-// ::methods Box {
-//   get = _.x: T
-// }
-
-// ::methods (b: Box) => {
-//   get = b.x: T
-//   // map<B> = (f: T => B) => Box{ x = f(b.x) }
-// }
-
-// ::methods Box @ $b {
-//   get: T = b.x
-//   map<B> = (f: T => B) => Box{ x = f(b.x) }
+// ::methods Box a: {
+//   get: A = a.x
+//   map: <B>(A => B) => Box<B> = <B>(f: A => B) => Box{ x = f a.x }
 // }
 
 // ::methods Maybe {

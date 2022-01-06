@@ -72,8 +72,9 @@ object An {
     An(Writer(seqValue, log))
   }
 
-  // TODO better name `fromOption`?
-  def someOrError[A](o: Option[A], e: => Message): An[A] = o.map(An.result).getOrElse(An.error(e))
+  def fromSomeOrElse[A](o: Option[A], fallback: => An[A]): An[A] = o.map(An.result).getOrElse(fallback)
+
+  def fromSomeOrError[A](o: Option[A], e: => Message): An[A] = fromSomeOrElse(o, An.error(e))
 
   /**
    * Starting with `initialResult` result, for each element in `as`,
