@@ -6,13 +6,13 @@ import clara.asg.{Terms, Types}
 import clara.util.Safe._
 
 case class MemberSelectionAnalyzer(env: Env, name: String, memberPos: Pos) {
-  def walkMemberSelection(objectTerm: Terms.ValueExpr): An[(Terms.SelectedMember, Types.MonoType)] = {
+  def walkMemberSelection(objectTerm: Terms.ValueExpr): An[(Terms.SelectedMember, Types.Type)] = {
     lazy val memberNotFound = SourceMessage(memberPos, safe"`$name` is not a member of type `${Types.toSource(objectTerm.typ)}`")
 
     memberOfType(objectTerm.typ).flatMap(memberOpt => An.fromSomeOrError(memberOpt, memberNotFound))
   }
 
-  def memberOfType(objectType: Types.Type): An[Option[(Terms.SelectedMember, Types.MonoType)]] = objectType match {
+  def memberOfType(objectType: Types.Type): An[Option[(Terms.SelectedMember, Types.Type)]] = objectType match {
     case Types.Record(fields) => An.result(fields.get(name).map(typ => (Terms.SelectedField, typ)))
     case Types.Alias(_, wrappedType) => memberOfType(wrappedType)
     case u @ Types.Unique(_, wrappedType, _) => methodOfType(u).flatMap {
@@ -22,7 +22,7 @@ case class MemberSelectionAnalyzer(env: Env, name: String, memberPos: Pos) {
     case _ => An.result(None)
   }
 
-  def methodOfType(objectType: Types.Unique): An[Option[(Terms.SelectedMember, Types.MonoType)]] = {
+  def methodOfType(objectType: Types.Unique): An[Option[(Terms.SelectedMember, Types.Type)]] = {
     val methodOpt = env.methods.get(objectType.uniq).flatMap(ns => ns.get(name))
 
     methodOpt match {

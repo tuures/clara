@@ -9,7 +9,7 @@ import clara.ast.Ast.NamedType
 
 case class TypeExprAnalyzer(env: Env) {
   //FIXME rename to walkMonoTypeExpr
-  def walkTypeExpr(typeExpr: Ast.TypeExpr): An[Types.MonoType] = typeExpr match {
+  def walkTypeExpr(typeExpr: Ast.TypeExpr): An[Types.Type] = typeExpr match {
     case Ast.TopType(_) => An.result(Types.Top)
     case Ast.BottomType(_) => An.result(Types.Bottom)
     case Ast.UnitType(_) => An.result(Types.Uni)
@@ -19,7 +19,7 @@ case class TypeExprAnalyzer(env: Env) {
         env.useTypeInst(name, args, pos)
       }
     case Ast.RecordType(fields, _) =>
-      An.step(fields)(Namespace.empty[Types.MonoType]){ case (ns, Ast.FieldDecl(name, typeExpr, pos)) =>
+      An.step(fields)(Namespace.empty[Types.Type]){ case (ns, Ast.FieldDecl(name, typeExpr, pos)) =>
         lazy val duplicateName = SourceMessage(pos, safe"Duplicate field name `$name`")
 
         walkTypeExpr(typeExpr).flatMap { typ =>

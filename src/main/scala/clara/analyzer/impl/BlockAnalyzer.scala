@@ -21,7 +21,7 @@ case class BlockAnalyzer(parentEnv: Env) {
 
   case class WalkBlockState(
     currentContents: Vector[Terms.BlockContent],
-    currentReturnType: Option[Types.MonoType],
+    currentReturnType: Option[Types.Type],
     currentEnv: Env
   )
   object WalkBlockState {
@@ -54,16 +54,16 @@ case class BlockAnalyzer(parentEnv: Env) {
         }.map { case (namesDef, nextEnv) => (namesDef, None, nextEnv) }
       }
       // TODO remove duplication between alias and typedef
-      case Ast.AliasTypeDef(name, typeParams, typeExpr, pos) => {
-        TypeParamAnalyzer(currentEnv).walkTypeParams(typeParams).flatMap { case (paramTypes, withParamsEnv) =>
-          TypeExprAnalyzer(withParamsEnv).walkTypeExpr(typeExpr).map { typ =>
-            Types.maybeForAll(paramTypes, Types.Alias(name, typ))
-          }
-        }.flatMap { aliasType =>
-          currentEnv.addOrShadowType((name, aliasType), parentEnv, pos).
-            map(nextEnv => (Terms.AliasTypeDef(name), None, nextEnv))
-        }
-      }
+      // case Ast.AliasTypeDef(name, typeParams, typeExpr, pos) => {
+      //   TypeParamAnalyzer(currentEnv).walkTypeParams(typeParams).flatMap { case (paramTypes, withParamsEnv) =>
+      //     TypeExprAnalyzer(withParamsEnv).walkTypeExpr(typeExpr).map { typ =>
+      //       Types.maybeForAll(paramTypes, Types.Alias(name, typ))
+      //     }
+      //   }.flatMap { aliasType =>
+      //     currentEnv.addOrShadowType((name, aliasType), parentEnv, pos).
+      //       map(nextEnv => (Terms.AliasTypeDef(name), None, nextEnv))
+      //   }
+      // }
       case Ast.TypeDef(isDecl, name, typeParams, typeExpr, pos) => {
         // TODO maybe this should be called ::tagged instead
         TypeParamAnalyzer(currentEnv).walkTypeParams(typeParams).flatMap { case (paramTypes, withParamsEnv) =>

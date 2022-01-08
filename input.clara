@@ -6,9 +6,11 @@
 
 // - fix all warnings and ???s
 
-::alias Any: ⊤
+// // TODO should it be * or ::top?
+// ::alias Any: ⊤
 
-::alias Nothing: ⊥
+// // TODO should it be ! or ::bottom?
+// ::alias Nothing: ⊥
 
 ::declare ::type Float: Any
 

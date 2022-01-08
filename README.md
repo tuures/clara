@@ -47,7 +47,12 @@ Features should be orthogonal. There should be only one obvious way to do someth
 ## Influencers
 
 - Scala: syntax, FP/OOP unification
-- Typescript
+- Typescript: structural typing, first class polymorphic function values
 - OCaml: all functions are unary, call without parens
 - Reason
 - Smalltalk: no operator precedence, operators are methods, all values are objects
+- Rust: methods defined separately from the type definition
+
+## Syntax comparison (notable differences)
+
+TODO

@@ -129,7 +129,7 @@ object NameMangler {
   def methodsCompanionName(typ: Types.Type) = safe"${typeName(typ)}$$Methods"
 
   def typeName(typ: Types.Type) = typ match {
-    case Types.Alias(name, _) => name
+    // case Types.Alias(name, _) => name
     case t => throw new scala.NotImplementedError(t.toString())
   }
 }
