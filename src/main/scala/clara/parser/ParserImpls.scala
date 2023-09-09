@@ -7,20 +7,26 @@ import clara.ast.{Ast, LiteralValue, NoPos, Pos, SourcePos, SourceInfo}
 case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   import fastparse._
 
-  val nlPred = (_: Char) == '\n'
+  val nlPred: Char => Boolean = (_: Char) == '\n'
 
-  implicit val whitespace = { implicit ctx: ParsingRun[_] =>
-    def lineComment[X: P] = P("//" ~~ CharsWhile(!nlPred(_)) ~~ (End | CharPred(nlPred)))
+  implicit object whitespace extends Whitespace {
+    override def apply(ctx: P[_]): P[Unit] = {
+      implicit val ctx0 = ctx
 
-    def blockComment[X: P] = P {
-      val (start, end) = ("/*", "*/")
+      def lineComment[X: P] = P("//" ~~ CharsWhile(c => !nlPred(c)).? ~~ (End | CharPred(nlPred)))
 
-      start ~~ (!end ~~ AnyChar).repX ~~ (End | end)
+      def blockComment[X: P] = P {
+        val (start, end) = ("/*", "*/")
+
+        start ~~ (!end ~~ AnyChar).repX ~~ (End | end)
+      }
+
+      val space = " "
+
+      def comment[X: P] = P(lineComment | blockComment)
+
+      P(comment | space).repX
     }
-
-    def comment[X: P] = P(lineComment | blockComment)
-
-    (" " | comment).repX
   }
 
   import Ast._

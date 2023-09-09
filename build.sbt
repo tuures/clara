@@ -6,8 +6,8 @@ lazy val main = (project in file("."))
   .settings(
     name := "Clara",
     libraryDependencies ++= Seq(
-      "com.lihaoyi" %% "fastparse" % "2.2.2",
-      "org.scalatest" %% "scalatest-funsuite" % "3.2.10" % Test
+      "com.lihaoyi" %% "fastparse" % "3.0.2",
+      "org.scalatest" %% "scalatest-funsuite" % "3.2.16" % Test
     ),
     scalacOptions ++= Seq(
       "-encoding", "UTF-8",
