@@ -14,24 +14,24 @@ case class MemberSelectionAnalyzer(env: Env, name: String, memberPos: Pos) {
 
   def memberOfType(objectType: Types.Type): An[Option[(Terms.SelectedMember, Types.Type)]] = objectType match {
     case Types.Record(fields) => An.result(fields.get(name).map(typ => (Terms.SelectedField, typ)))
-    case Types.Alias(_, wrappedType) => memberOfType(wrappedType)
-    case u @ Types.Unique(_, wrappedType, _) => methodOfType(u).flatMap {
-      case m @ Some(_) => An.result(m)
-      case None => memberOfType(wrappedType)
-    }
+    // case Types.Alias(_, wrappedType) => memberOfType(wrappedType)
+    // case u @ Types.Unique(_, wrappedType, _) => methodOfType(u).flatMap {
+    //   case m @ Some(_) => An.result(m)
+    //   case None => memberOfType(wrappedType)
+    // }
     case _ => An.result(None)
   }
 
-  def methodOfType(objectType: Types.Unique): An[Option[(Terms.SelectedMember, Types.Type)]] = {
-    val methodOpt = env.methods.get(objectType.uniq).flatMap(ns => ns.get(name))
+  // def methodOfType(objectType: Types.Unique): An[Option[(Terms.SelectedMember, Types.Type)]] = {
+  //   val methodOpt = env.methods.get(objectType.uniq).flatMap(ns => ns.get(name))
 
-    methodOpt match {
-      case Some(EnvMethod(attributes, typ)) =>
-        val typeArgs = Nil // FIXME get from objectTerm.typ if it's Applied
-        TypeAnalyzer.instantiate(typ, typeArgs, memberPos).map { typeInst =>
-          Some((Terms.SelectedMethod(attributes), typeInst))
-        }
-      case None => An.result(None)
-    }
-  }
+  //   methodOpt match {
+  //     case Some(EnvMethod(attributes, typ)) =>
+  //       val typeArgs = Nil // FIXME get from objectTerm.typ if it's Applied
+  //       TypeAnalyzer.instantiate(typ, typeArgs, memberPos).map { typeInst =>
+  //         Some((Terms.SelectedMethod(attributes), typeInst))
+  //       }
+  //     case None => An.result(None)
+  //   }
+  // }
 }

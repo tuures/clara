@@ -86,8 +86,8 @@ case class MethodSectionAnalyzer(env: Env) {
   }
 
   private def walkTargetType(pos: Pos)(typ: Types.Type): An[(Types.Type, Uniq)] = typ match {
-    case Types.Alias(_, wrappedType) => walkTargetType(pos)(wrappedType)
-    case u: Types.Unique => An.result(u)
+    // case Types.Alias(_, wrappedType) => walkTargetType(pos)(wrappedType)
+    // case u: Types.Unique => An.result(u)
     // TODO: ForAll
     // TODO allow methods also for other kinds of types
     // (record should not have method if field with same name exists)

@@ -1,8 +1,10 @@
 .DS_Store
 /project/.bloop/
-/.ensime
-/.ensime_cache/
+/project/metals.sbt
+/project/project/metals.sbt
 /.bloop/
 /.metals/
-/project/metals.sbt
+/.bsp/
+/.vscode/settings.json
 target/
+/.runsbt

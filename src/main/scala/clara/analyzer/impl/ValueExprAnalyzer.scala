@@ -4,21 +4,21 @@ import clara.asg.{Attributes, Terms, Types, Namespace}
 import clara.ast.{Ast, Pos, SourceMessage}
 
 import clara.util.Safe._
-import clara.asg.Types.Alias
+// import clara.asg.Types.Alias
 
 
 case class ValueExprAnalyzer(env: Env) {
   def walkValueExpr(valueExpr: Ast.ValueExpr): An[Terms.ValueExpr] = valueExpr match {
     case Ast.UnitLiteral(_) => An.result(Terms.UnitLiteral())
-    case Ast.IntegerLiteral(value, pos) => env.useTypeInst("Int", Nil, pos).map { typ =>
-      Terms.IntegerLiteral(value, typ)
-    }
-    case Ast.FloatLiteral(value, pos) => env.useTypeInst("Float", Nil, pos).map { typ =>
-      Terms.FloatLiteral(value, typ)
-    }
-    case Ast.StringLiteral(parts, pos) => env.useTypeInst("String", Nil, pos).map { typ =>
-      Terms.StringLiteral(parts, typ)
-    }
+    // case Ast.IntegerLiteral(value, pos) => env.useTypeInst("Int", Nil, pos).map { typ =>
+    //   Terms.IntegerLiteral(value, typ)
+    // }
+    // case Ast.FloatLiteral(value, pos) => env.useTypeInst("Float", Nil, pos).map { typ =>
+    //   Terms.FloatLiteral(value, typ)
+    // }
+    // case Ast.StringLiteral(parts, pos) => env.useTypeInst("String", Nil, pos).map { typ =>
+    //   Terms.StringLiteral(parts, typ)
+    // }
     case _: Ast.Tuple => ???
     case Ast.Block(bcs, pos) => BlockAnalyzer(env).walkBlock(bcs, pos)
     case Ast.NamedValue(name, pos) => env.useValue(name, pos).map(typ => Terms.NamedValue(name, typ))

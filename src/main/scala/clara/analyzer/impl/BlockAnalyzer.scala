@@ -64,17 +64,17 @@ case class BlockAnalyzer(parentEnv: Env) {
       //       map(nextEnv => (Terms.AliasTypeDef(name), None, nextEnv))
       //   }
       // }
-      case Ast.TypeDef(isDecl, name, typeParams, typeExpr, pos) => {
-        // TODO maybe this should be called ::tagged instead
-        TypeParamAnalyzer(currentEnv).walkTypeParams(typeParams).flatMap { case (paramTypes, withParamsEnv) =>
-          TypeExprAnalyzer(withParamsEnv).walkTypeExpr(typeExpr).map { typ =>
-            Types.maybeForAll(paramTypes, Types.Alias(name, Types.Unique(constructible = !isDecl, typ)))
-          }
-        }.flatMap { uniqueType =>
-          currentEnv.addOrShadowType((name, uniqueType), parentEnv, pos).
-            map(nextEnv => (Terms.TypeDef(name), None, nextEnv))
-        }
-      }
+      // case Ast.TypeDef(isDecl, name, typeParams, typeExpr, pos) => {
+      //   // TODO maybe this should be called ::tagged instead
+      //   TypeParamAnalyzer(currentEnv).walkTypeParams(typeParams).flatMap { case (paramTypes, withParamsEnv) =>
+      //     TypeExprAnalyzer(withParamsEnv).walkTypeExpr(typeExpr).map { typ =>
+      //       Types.maybeForAll(paramTypes, Types.Alias(name, Types.Unique(constructible = !isDecl, typ)))
+      //     }
+      //   }.flatMap { uniqueType =>
+      //     currentEnv.addOrShadowType((name, uniqueType), parentEnv, pos).
+      //       map(nextEnv => (Terms.TypeDef(name), None, nextEnv))
+      //   }
+      // }
       case Ast.MethodDeclSection(targetTypeName, methods, _) =>
         MethodSectionAnalyzer(currentEnv).walkDeclSection(targetTypeName, methods)
           .map { case (term, nextEnv) => (term, None, nextEnv) }

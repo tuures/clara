@@ -1,4 +1,4 @@
-ThisBuild / scalaVersion := "2.13.7"
+ThisBuild / scalaVersion := "2.13.11"
 ThisBuild / organization := "com.example"
 ThisBuild / version      := "0.1.0-SNAPSHOT"
 
@@ -10,11 +10,10 @@ lazy val main = (project in file("."))
       "org.scalatest" %% "scalatest-funsuite" % "3.2.10" % Test
     ),
     scalacOptions ++= Seq(
-      "-target:jvm-1.8",
       "-encoding", "UTF-8",
       "-unchecked",
       "-deprecation",
-      "-Xlint",
+      // "-Xlint",
       "-Wnumeric-widen",
       "-Wunused",
       "-Wvalue-discard",
