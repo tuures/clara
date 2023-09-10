@@ -36,6 +36,9 @@ class ParserImplsSpec extends AnyFunSuite {
 
   import Ast._
 
+  //////
+  // Literals
+
   parseAst(p.unitLiteral(_))("()")(UnitLiteral())
   parseAst(p.unitType(_))(   "()")(UnitType())
   parseAst(p.unitPattern(_))("()")(UnitPattern())
@@ -104,6 +107,9 @@ class ParserImplsSpec extends AnyFunSuite {
     LiteralValue.StringPlainPart("'#")
   )))
   reject(p.verbatimStringLiteral(_))("""'''""")
+
+  //////
+  // Basic syntax
 
   parseAst(p.tuple(_))("((),())")(
     Tuple(Seq(UnitLiteral(), UnitLiteral()))
@@ -262,15 +268,32 @@ class ParserImplsSpec extends AnyFunSuite {
     Call(NamedValue("foo"), NamedValue("bar"))
   )
 
-  parseAst(p.memberOrCall(_))("foo.bar(zot.baz)")(
-    Call(MemberSelection(NamedValue("foo"), NamedMember("bar")), MemberSelection(NamedValue("zot"), NamedMember("baz")))
-  )
-  parseAst(p.memberOrCall(_))("foo.bar zot.baz")(
-    Call(MemberSelection(NamedValue("foo"), NamedMember("bar")), MemberSelection(NamedValue("zot"), NamedMember("baz")))
-  )
+  parseAst(p.memberOrCall(_))("foo.bar(zot.baz)"){
+    val foobar = MemberSelection(NamedValue("foo"), NamedMember("bar"))
+    val zotbaz = MemberSelection(NamedValue("zot"), NamedMember("baz"))
+
+    Call(foobar, zotbaz)
+  }
+  // TODO: call with space should have lower precedence than call without space?
+  // parseAst(p.memberOrCall(_))("foo.bar zot.baz buz(qux)"){
+  //   val foobar = MemberSelection(NamedValue("foo"), NamedMember("bar"))
+  //   val zotbaz = MemberSelection(NamedValue("zot"), NamedMember("baz"))
+  //   val buzqux = Call(NamedValue("buz"), NamedValue("qux"))
+
+  //   Call(Call(foobar, zotbaz), buzqux)
+  // }
+  parseAst(p.memberOrCall(_))("foo.bar(zot).baz"){
+    val foobar = MemberSelection(NamedValue("foo"), NamedMember("bar"))
+    val zot = NamedValue("zot")
+
+    MemberSelection(Call(foobar, zot), NamedMember("baz"))
+  }
   parseAst(p.memberOrCall(_))("foo .bar baz")(
     Call(MemberSelection(NamedValue("foo"), NamedMember("bar")), NamedValue("baz"))
   )
+
+  //////
+  // Declarations
 
   parseAst(p.attributes(_))("@[a b]@[c]")(Seq(Attribute("a", Some("b")), Attribute("c", None)))
   parseAst(p.attributes(_))("@[a]\n@[c]\n")(Seq(Attribute("a", None), Attribute("c", None)))
@@ -337,6 +360,9 @@ class ParserImplsSpec extends AnyFunSuite {
   parseAst(p.valueDef(_))("(a, b) = c")(
     ValueDef(TuplePattern(Seq(NamePattern("a"), NamePattern("b"))), NamedValue("c"))
   )
+
+  //////
+  // Top-level
 
   parseAst(p.programBlock(_))("(foo/*comment\n /*  \n // line2*/)")(
     Block(Seq(NamedValue("foo")))
