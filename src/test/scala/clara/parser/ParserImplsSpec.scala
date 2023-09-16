@@ -55,6 +55,9 @@ class ParserImplsSpec extends AnyFunSuite {
   //////
   // Literals
 
+  parseAst(p.topType(_))("*")(TopType())
+  parseAst(p.bottomType(_))("!")(BottomType())
+
   parseAst(p.unitLiteral(_))("()")(UnitLiteral())
   parseAst(p.unitType(_))(   "()")(UnitType())
   parseAst(p.unitPattern(_))("()")(UnitPattern())

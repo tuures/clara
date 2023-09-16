@@ -85,8 +85,8 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   //////
   // Literals
 
-  val topTypeSyntax = "⊤"
-  val bottomTypeSyntax = "⊥"
+  val topTypeSyntax = "*"
+  val bottomTypeSyntax = "!"
 
   def topType[X: P]: P[TopType] = P(pp(topTypeSyntax)(TopType.apply _))
 

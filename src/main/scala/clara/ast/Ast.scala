@@ -13,8 +13,6 @@ object Ast {
   sealed trait ValueExpr extends BlockContent
   sealed trait InBlockDecl extends BlockContent
 
-  case class Invalid(pos: Pos = NoPos) extends BlockContent with TypeExpr with Pattern with Method
-
   case class TopType(pos: Pos = NoPos) extends TypeExpr
   case class BottomType(pos: Pos = NoPos) extends TypeExpr
 
@@ -97,4 +95,6 @@ object Ast {
   // TODO: add attributes?
   case class ValueDecl(name: String, t: TypeExpr, pos: Pos = NoPos) extends InBlockDecl
   case class ValueDef(target: Pattern, e: ValueExpr, pos: Pos = NoPos) extends InBlockDecl
+
+  case class Invalid(pos: Pos = NoPos) extends BlockContent
 }
