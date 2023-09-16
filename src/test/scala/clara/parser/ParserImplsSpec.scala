@@ -15,7 +15,7 @@ class ParserImplsSpec extends AnyFunSuite {
     test(safe"${typeName} ${escapeInputForName(input)}") {
       parse(input, parser) match {
         case f: Parsed.Failure =>
-          fail("Failed to parse " + f.trace().msg)
+          fail("Failed to parse: " + f.trace().msg)
         case s: Parsed.Success[_] =>
           assert(s.value == expected)
           assert(s.index == input.length, "Did not parse the whole input")
@@ -32,9 +32,25 @@ class ParserImplsSpec extends AnyFunSuite {
       }
     }
 
+  //////
+  // Test setup
+
   val p = ParserImpls(None)
 
   import Ast._
+
+  //////
+  // Test helpers
+
+  object NamedType {
+    def apply(name: String) = new NamedType(NameWithPos(name), Nil)
+    def apply(name: String, typeArgs: Seq[TypeExpr]) = new NamedType(NameWithPos(name), typeArgs)
+  }
+
+  object TypeDef {
+    def apply(typeDefKind: TypeDefKind, name: String, t: TypeExpr) = new TypeDef(typeDefKind, NameWithPos(name), Nil, t)
+    def apply(typeDefKind: TypeDefKind, name: String, typeParams: Seq[TypeParam], t: TypeExpr) = new TypeDef(typeDefKind, NameWithPos(name), typeParams, t)
+  }
 
   //////
   // Literals
@@ -45,6 +61,7 @@ class ParserImplsSpec extends AnyFunSuite {
 
   parseAst(p.floatLiteral(_))("3.14")(FloatLiteral(LiteralValue.Float("3", "14")))
   parseAst(p.floatLiteral(_))("1_000.123_456")(FloatLiteral(LiteralValue.Float("1000", "123456")))
+  // FIXME parseAst(p.floatLiteral(_))("-1.1")(FloatLiteral(LiteralValue.Float("1", "1")))
   reject(p.floatLiteral(_))("1._2")
   reject(p.floatLiteral(_))("1_.2")
 
@@ -177,11 +194,11 @@ class ParserImplsSpec extends AnyFunSuite {
 
   parseAst(p.namedValue(_))("foo")(NamedValue("foo"))
 
-  parseAst(p.namedType(_))("Foo")(NamedType("Foo", Nil))
-  // parse(p.namedType, "Foo[Bar]")(
+  parseAst(p.namedType(_))("Foo")(NamedType("Foo"))
+  // FIXME parse(p.namedType, "Foo[Bar]")(
   //   NamedType("Foo", Seq(NamedType("Bar"/*, Nil*/)))
   // )
-  // parse(p.namedType, "Foo[Bar, Baz[Zot]]")(
+  // FIXME parse(p.namedType, "Foo[Bar, Baz[Zot]]")(
   //   NamedType("Foo", Seq(
   //     NamedType("Bar", Nil),
   //     NamedType("Baz", Seq(NamedType("Zot"/*, Nil*/))))
@@ -191,10 +208,10 @@ class ParserImplsSpec extends AnyFunSuite {
   parseAst(p.namePattern(_))("foo")(NamePattern("foo"))
 
   parseAst(p.valueAs(_))("foo: String")(
-    ValueAs(NamedValue("foo"), NamedType("String", Nil))
+    ValueAs(NamedValue("foo"), NamedType("String"))
   )
   parseAst(p.valueAs(_))("(foo): (String)")(
-    ValueAs(NamedValue("foo"), NamedType("String", Nil))
+    ValueAs(NamedValue("foo"), NamedType("String"))
   )
 
   parseAst(p.patternAs(_))("(): ()")(
@@ -204,17 +221,17 @@ class ParserImplsSpec extends AnyFunSuite {
   parseAst(p.record(_))("{}")(Record(Nil))
   parseAst(p.record(_))("{ a = foo, b: Bar = bar }")(Record(Seq(
     FieldDef("a", None, NamedValue("foo")),
-    FieldDef("b", Some(NamedType("Bar", Nil)), NamedValue("bar"))
+    FieldDef("b", Some(NamedType("Bar")), NamedValue("bar"))
   )))
   parseAst(p.record(_))("{\n  a = foo\n  b: Bar = bar\n}")(Record(Seq(
     FieldDef("a", None, NamedValue("foo")),
-    FieldDef("b", Some(NamedType("Bar", Nil)), NamedValue("bar"))
+    FieldDef("b", Some(NamedType("Bar")), NamedValue("bar"))
   )))
 
   parseAst(p.recordType(_))("{}")(RecordType(Nil))
   parseAst(p.recordType(_))("{ a: Foo, b: Bar }")(RecordType(Seq(
-    FieldDecl("a", NamedType("Foo", Nil)),
-    FieldDecl("b", NamedType("Bar", Nil))
+    FieldDecl("a", NamedType("Foo")),
+    FieldDecl("b", NamedType("Bar"))
   )))
 
   parseAst(p.lambda(_))("() => ()")(
@@ -243,13 +260,10 @@ class ParserImplsSpec extends AnyFunSuite {
   )
 
   parseAst(p.memberOrCall(_))("foo.length.toString")(
-    MemberSelection(MemberSelection(NamedValue("foo"), NamedMember("length"/*, Nil*/)), NamedMember("toString"/*, Nil*/))
+    MemberSelection(MemberSelection(NamedValue("foo"), NamedMember("length")), NamedMember("toString"))
   )
-  // parse(p.memberOrCall, "foo.bar[Zot]")(
-  //   MemberSelection(NamedValue("foo"), NamedMember("bar", Seq(NamedType("Zot"/*, Nil*/))))
-  // )
   parseAst(p.memberOrCall(_))("foo.\n  length.\n  toString")(
-    MemberSelection(MemberSelection(NamedValue("foo"), NamedMember("length"/*, Nil*/)), NamedMember("toString"/*, Nil*/))
+    MemberSelection(MemberSelection(NamedValue("foo"), NamedMember("length")), NamedMember("toString"))
   )
   // nt("multi-line member")(
   //   """|123.
@@ -298,44 +312,81 @@ class ParserImplsSpec extends AnyFunSuite {
   parseAst(p.attributes(_))("@[a b]@[c]")(Seq(Attribute("a", Some("b")), Attribute("c", None)))
   parseAst(p.attributes(_))("@[a]\n@[c]\n")(Seq(Attribute("a", None), Attribute("c", None)))
 
-  parseAst(p.aliasTypeDef(_))("::alias Foo: Bar")(AliasTypeDef("Foo", Nil, NamedType("Bar", Nil)))
+  parseAst(p.typeDef(_))("::alias Foo: Bar")(
+    TypeDef(TypeDefKind.Alias, "Foo", NamedType("Bar"))
+  )
 
-  parseAst(p.typeDef(_))("::declare ::type Foo: Bar")(TypeDef(true, "Foo", Nil, NamedType("Bar", Nil)))
+  parseAst(p.typeDef(_))("::alias Foo<A, B>: Bar<B, A>"){
+    val bar = NamedType("Bar", Seq(NamedType("B"), NamedType("A")))
 
-  parseAst(p.typeDef(_))("::type Foo:\n Bar")(TypeDef(false, "Foo", Nil, NamedType("Bar", Nil)))
+    TypeDef(TypeDefKind.Alias, "Foo", Seq(TypeParam("A"), TypeParam("B")), bar)
+  }
+
+  parseAst(p.typeDef(_))("::tagged Foo: Bar")(
+    TypeDef(TypeDefKind.Tagged, "Foo", NamedType("Bar"))
+  )
+
+  parseAst(p.typeDef(_))("::tagged Foo<A, B>: (A, B)"){
+    val abTuple = TupleType(Seq(NamedType("A"), NamedType("B")))
+
+    TypeDef(TypeDefKind.Tagged, "Foo", Seq(TypeParam("A"), TypeParam("B")), abTuple)
+  }
+
+  parseAst(p.typeDef(_))("::boxed Foo: Bar")(
+    TypeDef(TypeDefKind.Boxed, "Foo", NamedType("Bar"))
+  )
+
+  parseAst(p.typeDef(_))("::boxed Foo<A, B>:\n  {a: A, b: B}"){
+    val abRecord = RecordType(Seq(FieldDecl("a", NamedType("A")), FieldDecl("b", NamedType("B"))))
+
+    TypeDef(TypeDefKind.Boxed, "Foo", Seq(TypeParam("A"), TypeParam("B")), abRecord)
+  }
+
+  parseAst(p.typeDef(_))("::opaque Foo: Bar")(
+    TypeDef(TypeDefKind.Opaque, "Foo", NamedType("Bar"))
+  )
+
+  parseAst(p.typeDef(_))("::opaque Foo<A, B>: Bar")(
+    TypeDef(TypeDefKind.Opaque, "Foo", Seq(TypeParam("A"), TypeParam("B")), NamedType("Bar"))
+  )
+
+  parseAst(p.typeDef(_))("::singleton Foo: Bar")(
+    TypeDef(TypeDefKind.Singleton, "Foo", NamedType("Bar"))
+  )
 
   parseAst(p.methodDeclSection(_))("::declare ::methods Bar: {\n  foo: Bar\n}")(
-    MethodDeclSection(TypeName("Bar"), Seq(
+    MethodDeclSection(NameWithPos("Bar"), Seq(
       MethodDecl(Nil, "foo", NamedType("Bar", Nil))
     ))
   )
   parseAst(p.methodDeclSection(_))("::declare ::methods Bar: { foo: Bar = sic }")(
-    MethodDeclSection(TypeName("Bar"), Seq(
+    MethodDeclSection(NameWithPos("Bar"), Seq(
       MethodDef(Nil, "foo", Some(NamedType("Bar", Nil)), NamedValue("sic"))
     ))
   )
   parseAst(p.methodDeclSection(_))("::declare ::methods Bar: {\n@[a]\nfoo: Bar\nbaz: Baz\n}")(
-    MethodDeclSection(TypeName("Bar"), Seq(
+    MethodDeclSection(NameWithPos("Bar"), Seq(
       MethodDecl(Seq(Attribute("a", None)), "foo", NamedType("Bar", Nil)),
       MethodDecl(Nil, "baz", NamedType("Baz", Nil)),
     ))
   )
 
   parseAst(p.methodDefSection(_))("::methods Bar b: { foo = b }")(
-    MethodDefSection(TypeName("Bar"), NamePattern("b"), Seq(
+    MethodDefSection(NameWithPos("Bar"), NamePattern("b"), Seq(
       MethodDef(Nil, "foo", None, NamedValue("b"))
     ))
   )
   parseAst(p.methodDefSection(_))("::methods Bar b:\n  {foo: Bar = b}")(
-    MethodDefSection(TypeName("Bar"), NamePattern("b"), Seq(
+    MethodDefSection(NameWithPos("Bar"), NamePattern("b"), Seq(
       MethodDef(Nil, "foo", Some(NamedType("Bar", Nil)), NamedValue("b"))
     ))
   )
   parseAst(p.methodDefSection(_))("::methods Bar b: { foo: Sic }")(
-    MethodDefSection(TypeName("Bar"), NamePattern("b"), Seq(
+    MethodDefSection(NameWithPos("Bar"), NamePattern("b"), Seq(
       MethodDecl(Nil, "foo", NamedType("Sic", Nil))
     ))
   )
+  // FIXME
   // parseAst(p.methodDefSection(_))(
   //   "::methods Box a: { map: <B>(A => B) => Box<B> = <B>(f: A => B) => Box{ x = f a.x } }"
   // )(
@@ -387,65 +438,6 @@ class ParserImplsSpec extends AnyFunSuite {
   //      |bla.squared
   //      |""".stripMargin
   // )
-
-  // FIXME
-  // parse(p.typeDef, "::type String = _")(TypeDef("String"))
-
-  // parse(p.classDef, "::class Book {isbn: String, desc: String}")(
-  //   ClassDef("Book", Nil, None, Seq(
-  //     ValueDecl("isbn", NamedType("String", Nil)),
-  //     ValueDecl("desc", NamedType("String", Nil))
-  //   ))
-  // )
-  // nt("single-line class")(
-  //   "::class Book {isbn: String, author: String, title: String}"
-  // )
-
-  // parse(p.classDef, "::class Book[+D] {\n  isbn: String,\n  desc: String,\n}")(
-  //   ClassDef("Book", Seq(TypeParam(Covariant, "D", 0)), None, Seq(
-  //     ValueDecl("isbn", NamedType("String", Nil)),
-  //     ValueDecl("desc", NamedType("String", Nil))
-  //   ))
-  // )
-  // nt("class with simple type params and value declarations")(
-  //   "::class Book[A] {isbn: String, author: String, title: String}"
-  // )
-  // nt("multi-line class")(
-  //   """|::class Book {
-  //      |  isbn: String
-  //      |  author: String
-  //      |\u0020\u0020
-  //      |  title: String,
-  //      |}
-  //      |""".stripMargin
-  // )
-
-  // TODO migrate:
-  // nt("class fields and methods")(
-  //   """|::class Foo << Bar {
-  //      |  yyy: Int = 2
-  //      |  yyy = 3
-  //      |  sum: Int (i: Int, j: Int) = i .plus j
-  //      |  xxx: Int (i: Int) = i
-  //      |  yyy: Int = 2
-  //      |  sum(i: Int, j: Int) = i .plus j
-  //      |  xxx(i: Int) = i
-  //      |  xxx i: Int = i
-  //      |  yyy = 3
-  //      |}
-  //      |""".stripMargin
-  // )
-  // nt("complex type params and method declarations")(
-  //   "::class Functor[A, M[_]] { ::method map[B]: (A => B) => M[B] }"
-  // )
-
-  // parse(p.classNew, "::new Foo {bar = 1, zot = 2}")(
-  //   ClassNew(NamedType("Foo", Nil), Seq(
-  //     ValueDef(NamePattern("bar"), IntegerLiteral(LiteralValue.IntegerDec("1"))),
-  //     ValueDef(NamePattern("zot"), IntegerLiteral(LiteralValue.IntegerDec("2")))
-  //   ))
-  // )
-  // t("::new Foo {}")
 
   parseAst(p.valueExpr(_))("1234")(IntegerLiteral(LiteralValue.IntegerDec("1234")))
   reject(p.valueExpr(_))("foo square = 1")

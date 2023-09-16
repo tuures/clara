@@ -213,7 +213,7 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   def blockItemSep[X: P] = P(nl | semi)
   def blockContents[X: P](acceptSingle: Boolean): P[Seq[BlockContent]] = P {
     val min = if (acceptSingle) 1 else 2
-    P(blockItemSep.rep ~ (inBlockDef | valueExpr).rep(min=min, sep=blockItemSep.rep(1)) ~ blockItemSep.rep)
+    P(blockItemSep.rep ~ (inBlockDecl | valueExpr).rep(min=min, sep=blockItemSep.rep(1)) ~ blockItemSep.rep)
   }
 
   def block[X: P]: P[Block] = P(pp(openParens ~ blockContents(false) ~ closeParens)(Block.apply _))
@@ -224,9 +224,11 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   // FIXME allow numbers and other symbols in name
   def name[X: P] = CharsWhile(c => Character.isLetter(c)).! // NOTE: Character.isLetter works only with BMP characters
 
+  def nameWithPos[X: P]: P[NameWithPos] = P(pp(name)(NameWithPos.apply _))
+
   def namedValue[X: P]: P[NamedValue] = P(pp(name)(NamedValue.apply _))
 
-  def namedType[X: P]: P[NamedType] = P(pp(name ~ maybeTypeArgs)(NamedType.apply _))
+  def namedType[X: P]: P[NamedType] = P(pp(nameWithPos ~ maybeTypeArgs)(NamedType.apply _))
 
   def namePattern[X: P]: P[NamePattern] = P(pp(name)(NamePattern.apply _))
 
@@ -352,19 +354,24 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   //////
   // In-block defs
   val doubleColon = "::"
-  def keyword[X: P](word: String) = P((doubleColon + word) ~ nl.rep)
+  def keywordSyntax[T, X: P](word: => P[T]): P[T] = P(doubleColon ~ word ~ nl.rep)
 
-  // TODO remove duplication between alias and typedef
-  def aliasTypeDef[X: P]: P[AliasTypeDef] =
-    P(pp(keyword("alias") ~/ name ~ maybeTypeParams ~ typed)(AliasTypeDef.apply _))
+  def keyword[X: P](word: String) = P(keywordSyntax(word))
+
+  object TypeDefImpl {
+    def alias[X: P] = P("alias").map(_ => TypeDefKind.Alias)
+    def tagged[X: P] = P("tagged").map(_ => TypeDefKind.Tagged)
+    def boxed[X: P] = P("boxed").map(_ => TypeDefKind.Boxed)
+    def opaque[X: P] = P("opaque").map(_ => TypeDefKind.Opaque)
+    def singleton[X: P] = P("singleton").map(_ => TypeDefKind.Singleton)
+
+    def typeDefKind[X: P] = P(keywordSyntax(alias | tagged | boxed | opaque | singleton))
+  }
 
   def typeDef[X: P]: P[TypeDef] = P(pp(
-    keyword("declare").!.?.map(_.isDefined) ~
-    keyword("type") ~/
-    name ~ maybeTypeParams ~ typed
+    TypeDefImpl.typeDefKind ~/
+    nameWithPos ~ maybeTypeParams ~ typed
   )(TypeDef.apply _))
-
-  def typeName[X: P]: P[TypeName] = P(pp(name)(TypeName.apply _))
 
   def methodDef[X: P]: P[MethodDef] = P(pp(attributes ~ name ~ typed.? ~ equalsSign ~ valueExpr)(MethodDef.apply _))
 
@@ -372,21 +379,21 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
 
   def methodsBody[X: P]: P[Seq[Method]] = P(recordSyntax(methodDef | methodDecl))
 
-  def methodDeclSection[X: P]: P[MethodDeclSection] = P(pp(
-    keyword("declare") ~
-    keyword("methods") ~/ typeName ~ colon ~ nl.rep ~ methodsBody
-  )(MethodDeclSection.apply _))
-
   // TODO use ConstructPattern instead of typeName ~ simplePattern
   def methodDefSection[X: P]: P[MethodDefSection] = P(pp(
-    keyword("methods") ~/ typeName ~ simplePattern ~ colon ~ nl.rep ~ methodsBody
+    keyword("methods") ~/ nameWithPos ~ simplePattern ~ colon ~ nl.rep ~ methodsBody
   )(MethodDefSection.apply _))
+
+  def methodDeclSection[X: P]: P[MethodDeclSection] = P(pp(
+    keyword("declare") ~
+    keyword("methods") ~/ nameWithPos ~ colon ~ nl.rep ~ methodsBody
+  )(MethodDeclSection.apply _))
 
   def valueDecl[X: P]: P[ValueDecl] = P(pp(keyword("declare") ~ name ~ typed)(ValueDecl.apply _))
 
   def valueDef[X: P]: P[ValueDef] = P(pp(pattern ~ equalsSign ~/ nl.rep ~ valueExpr)(ValueDef.apply _))
 
-  def inBlockDef[X: P]: P[InBlockDef] = P(aliasTypeDef | typeDef | methodDeclSection | methodDefSection | valueDecl | valueDef)
+  def inBlockDecl[X: P]: P[InBlockDecl] = P(typeDef | methodDefSection | methodDeclSection | valueDecl | valueDef)
 
   //////
   // Top level rules

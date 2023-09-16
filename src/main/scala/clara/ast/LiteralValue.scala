@@ -2,10 +2,12 @@ package clara.ast
 
 object LiteralValue {
   sealed trait Integer
+  // FIXME add sign
   case class IntegerBin(value: String) extends Integer
   case class IntegerDec(value: String) extends Integer
   case class IntegerHex(value: String) extends Integer
 
+  // FIXME add sign
   case class Float(whole: String, fraction: String)
 
   sealed trait StringPart

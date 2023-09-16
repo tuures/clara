@@ -31,7 +31,7 @@ case class MethodSectionAnalyzer(env: Env) {
     }
   }
 
-  def walkDeclSection(targetTypeName: Ast.TypeName, methodAsts: Seq[Ast.Method]) = {
+  def walkDeclSection(targetTypeName: Ast.NameWithPos, methodAsts: Seq[Ast.Method]) = {
     walkTargetTypeName(targetTypeName).flatMap { case (targetType, uniq) =>
       An.step(methodAsts)(WalkDeclState.begin(env)){ case (currentState, methodAst) =>
         (methodAst match {
@@ -70,7 +70,7 @@ case class MethodSectionAnalyzer(env: Env) {
     }
   }
 
-  def walkDefSection(targetTypeName: Ast.TypeName, selfPattern: Ast.Pattern, methodAsts: Seq[Ast.Method]) = {
+  def walkDefSection(targetTypeName: Ast.NameWithPos, selfPattern: Ast.Pattern, methodAsts: Seq[Ast.Method]) = {
     walkTargetTypeName(targetTypeName).flatMap { case (targetType, uniq) =>
       PatternAnalyzer(env, env).walkAssignment(selfPattern, targetType).map((targetType, uniq, _))
     }.flatMap { case (targetType, uniq, (selfPatternTerm, selfEnv)) =>
@@ -94,8 +94,8 @@ case class MethodSectionAnalyzer(env: Env) {
     case t => An.error(SourceMessage(pos, safe"Cannot have methods for type `${Types.toSource(t)}`"))
   }
 
-  def walkTargetTypeName(targetType: Ast.TypeName): An[(Types.Type, Uniq)] = {
-    val Ast.TypeName(name, pos) = targetType
+  def walkTargetTypeName(targetType: Ast.NameWithPos): An[(Types.Type, Uniq)] = {
+    val Ast.NameWithPos(name, pos) = targetType
     env.useType(name, pos).flatMap(walkTargetType(pos))
   }
 

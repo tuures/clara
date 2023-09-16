@@ -11,7 +11,7 @@ object Terms {
   sealed trait ValueExpr extends BlockContent {
     def typ: Type
   }
-  sealed trait InBlockDef extends BlockContent
+  sealed trait InBlockDecl extends BlockContent
   sealed trait Member {
     def attributes: MethodAttributes
   }
@@ -38,16 +38,16 @@ object Terms {
 
   case class Call(callee: ValueExpr, argument: ValueExpr, typ: Type) extends ValueExpr
 
-  case class AliasTypeDef(name: String) extends InBlockDef
-  case class TypeDef(name: String) extends InBlockDef
+  case class AliasTypeDef(name: String) extends InBlockDecl
+  case class TypeDef(name: String) extends InBlockDecl
   case class NewExpr(typ: Type) extends ValueExpr
 
-  sealed trait MethodSection extends InBlockDef
+  sealed trait MethodSection extends InBlockDecl
   case class MethodDeclSection(targetType: Type, methodDecls: Namespace[MethodDecl]) extends MethodSection
   case class MethodDecl(attributes: MethodAttributes, typ: Type) extends Member
   case class MethodDefSection(targetType: Type, self: Pattern, methodDefs: Namespace[MethodDef]) extends MethodSection
   case class MethodDef(attributes: MethodAttributes, body: ValueExpr) extends Member
 
-  case class ValueDecl(name: String) extends InBlockDef
-  case class ValueDef(target: Pattern, e: ValueExpr) extends InBlockDef
+  case class ValueDecl(name: String) extends InBlockDecl
+  case class ValueDef(target: Pattern, e: ValueExpr) extends InBlockDecl
 }

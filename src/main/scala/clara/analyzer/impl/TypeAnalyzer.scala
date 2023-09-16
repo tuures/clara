@@ -6,6 +6,7 @@ import clara.ast.{SourceMessage, Pos}
 
 import clara.util.Safe._
 
+// rename TypeInterpreter?
 object TypeAnalyzer {
   import Impl._
 
