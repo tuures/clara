@@ -28,7 +28,7 @@ case class JsPrinterImpl() {
     case StringLiteral(value) => {
       val quoteChar = "'"
 
-      safe"""${quoteChar}${value.replace(quoteChar, s"\\${quoteChar}")}${quoteChar}"""
+      safe"""${quoteChar}${value.replace(quoteChar, safe"\\${quoteChar}")}${quoteChar}"""
     }
     case ArrayLiteral(values) => ???
     case ObjectLiteral(entries) => walkObjectLiteral(entries)

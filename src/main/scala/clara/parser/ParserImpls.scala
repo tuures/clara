@@ -1,13 +1,14 @@
 package clara.parser
 
 import clara.ast.{Ast, LiteralValue, NoPos, Pos, SourcePos, SourceInfo}
+import clara.util.Safe._
 
 // TODO add more cuts to optimise and improve the error messages
 // https://www.lihaoyi.com/fastparse/#Cuts
 case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   import fastparse._
 
-  val nlPred: Char => Boolean = (_: Char) == '\n'
+  val nlPred: Char => Boolean = (_: Char) === '\n'
 
   implicit object whitespace extends Whitespace {
     override def apply(ctx: P[_]): P[Unit] = {
@@ -144,7 +145,7 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
     val escapeStart = '\\'
     val exprStart = '$'
 
-    def boundary[X: P] = CharPred(_ == quote).opaque("quote")
+    def boundary[X: P] = CharPred(_ === quote).opaque("quote")
 
     def plainPart[X: P]: P[LiteralValue.StringPlainPart] = P {
       val nothingSpecial = (c: Char) => c != quote && c != escapeStart && c != exprStart
@@ -169,7 +170,7 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
 
   object VerbatimStringLiteralImpl {
     val quote = '\''
-    def boundary[X: P] = CharPred(_ == quote).opaque("quote")
+    def boundary[X: P] = CharPred(_ === quote).opaque("quote")
     def startMarker[X: P]: P[Int] = P(hash.repX.!.map(_.length) ~~ boundary)
     def endMarker[X: P](hashCount: Int) = P(boundary ~~ hash.repX(exactly=hashCount))
 
@@ -211,9 +212,18 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   val semi = ";"
 
   def blockItemSep[X: P] = P(nl | semi)
-  def blockContents[X: P](acceptSingle: Boolean): P[Seq[BlockContent]] = P {
-    val min = if (acceptSingle) 1 else 2
-    P(blockItemSep.rep ~ (inBlockDecl | valueExpr).rep(min=min, sep=blockItemSep.rep(1)) ~ blockItemSep.rep)
+
+  def invalidBlockContent[X: P]: P[InvalidBlockContent] =
+    P(pp(CharsWhile(c => !nlPred(c) && c.toString() != semi).!)(InvalidBlockContent.apply _))
+
+  def blockContents[X: P](isProgramBlock: Boolean): P[Seq[BlockContent]] = P {
+    val min = if (isProgramBlock) 1 else 2
+
+    def maybeInvalidBlockContent = P(if (isProgramBlock) invalidBlockContent else Fail)
+
+    def blockContent = P(inBlockDecl | valueExpr | maybeInvalidBlockContent)
+
+    P(blockItemSep.rep ~ blockContent.rep(min=min, sep=blockItemSep.rep(1)) ~ blockItemSep.rep)
   }
 
   def block[X: P]: P[Block] = P(pp(openParens ~ blockContents(false) ~ closeParens)(Block.apply _))

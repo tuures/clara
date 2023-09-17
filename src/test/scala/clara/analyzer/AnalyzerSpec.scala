@@ -1,10 +1,10 @@
-// package clara
-//
-// import org.scalatest.FunSuite
-//
-// import clara.util.Safe._
-//
-// class AnalyzerSpec extends FunSuite {
+package clara.analyzer
+
+import clara.util.Safe._
+
+import org.scalatest.funsuite.AnyFunSuite
+
+class AnalyzerSpec extends AnyFunSuite {
 //   import Ast._
 //
 //   def ve(testName: String, expectedSignature: String)(valueExpr: ValueExpr) = test(testName) {
@@ -126,4 +126,4 @@
 //     ))
 //   )
 //
-// }
+}

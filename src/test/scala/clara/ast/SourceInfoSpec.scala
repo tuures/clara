@@ -1,5 +1,7 @@
 package clara.ast
 
+import clara.util.Safe.SafeStringContext
+
 import org.scalatest.funsuite.AnyFunSuite
 
 class SourceInfoSpec extends AnyFunSuite {
@@ -7,11 +9,11 @@ class SourceInfoSpec extends AnyFunSuite {
     content: String
   )(
     expectedLength: Int, expectedNewlineIndices: Seq[Int]
-  ) = test(s"SourceInfo.fromString: $testDesc") {
+  ) = test(safe"SourceInfo.fromString: $testDesc") {
     val s = SourceInfo.fromString("foo.file", content)
 
     assert(s.length === expectedLength)
-    assert(s.newlineIndices == expectedNewlineIndices)
+    assert(s.newlineIndices === expectedNewlineIndices)
   }
 
   testSourceInfoFromString("file with no content")(
@@ -75,5 +77,10 @@ class SourceInfoSpec extends AnyFunSuite {
     assertThrows[IllegalArgumentException](s.lineCol(-1))
     assert(lineColsFromSourceInfo === expectedLineCols)
     assertThrows[IllegalArgumentException](s.lineCol(24))
+  }
+
+  test("LineCol.humanFormat") {
+    assert(LineCol(0, 0).humanFormat === "1:1")
+    assert(LineCol(1, 1).humanFormat === "2:2")
   }
 }

@@ -11,7 +11,7 @@ case class BlockAnalyzer(parentEnv: Env) {
 
   def walkBlock(bcs: Seq[Ast.BlockContent], pos: Pos): An[Terms.Block] =
     An.step(bcs.zipWithIndex)(WalkBlockState.begin) { case (currentState, (bc, index)) =>
-      walkBlockContent(currentState, bc, index == bcs.length - 1)
+      walkBlockContent(currentState, bc, index === bcs.length - 1)
     }.flatMap { case WalkBlockState(contents, returnType, _) =>
       returnType match {
         case Some(typ) => An.result(Terms.Block(contents, typ))

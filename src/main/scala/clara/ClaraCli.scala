@@ -33,7 +33,7 @@ object ClaraCli {
     p(args)
   }
 
-  val usage = s"""
+  val usage = safe"""
   |Usage: [options] <input file>
   |Options:
   |  ${PrintAst}\tprint parsed AST

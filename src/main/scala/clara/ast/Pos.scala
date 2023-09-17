@@ -10,15 +10,16 @@ case class SourcePos(sourceInfo: SourceInfo, fromIndex: Int, untilIndex: Option[
     val fromLineCol = sourceInfo.lineCol(fromIndex)
     val from = fromLineCol.humanFormat
     val until = untilIndex.map { untilIndex =>
-      val lineCol = sourceInfo.lineCol(untilIndex - 1)
       // use inclusive range format for humans, thus - 1
-      safe"(–${if (lineCol.line === fromLineCol.line) lineCol.humanFormatCol else lineCol.humanFormat})"
+      val lineCol = sourceInfo.lineCol(untilIndex - 1)
+      val ndash = "\u2013"
+      safe"($ndash${if (lineCol.line === fromLineCol.line) lineCol.humanFormatCol else lineCol.humanFormat})"
     }.getOrElse("")
 
     safe"${sourceInfo.name}:$from$until"
   }
 
-  override def toString() = s"SourcePos($humanFormat)"
+  override def toString() = safe"SourcePos($humanFormat)"
 }
 case object NoPos extends Pos {
   val humanFormat = "unknown position"

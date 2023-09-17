@@ -1,6 +1,6 @@
 package clara.parser
 
-import clara.util.Safe._
+import clara.util.Safe.SafeStringContext
 import clara.ast.{Ast, LiteralValue}
 
 import fastparse._
@@ -11,22 +11,24 @@ class ParserImplsSpec extends AnyFunSuite {
   def typeName[T](implicit ct: ClassTag[T]) = ct.runtimeClass.getSimpleName()
   def escapeInputForName(s: String) = s.replace("\n", "\\n")
 
+  /** tests that the give sub-parser can parse given input into given AST */
   def parseAst[T](parser: P[_] => P[T])(input: String)(expected: Any)(implicit ct: ClassTag[T]) = {
     test(safe"${typeName} ${escapeInputForName(input)}") {
       parse(input, parser) match {
         case f: Parsed.Failure =>
           fail("Failed to parse: " + f.trace().msg)
         case s: Parsed.Success[_] =>
-          assert(s.value == expected)
-          assert(s.index == input.length, "Did not parse the whole input")
+          assert(s.value === expected)
+          assert(s.index === input.length, "Did not parse the whole input")
         }
     }
   }
 
+  /** tests that the given sub-parser rejects the given input */
   def reject[T](parser: P[_] => P[T])(input: String)(implicit ct: ClassTag[T]) =
     test(safe"reject ${typeName} ${escapeInputForName(input)}") {
       parse(input, parser) match {
-        case Parsed.Success(value, index) if index == input.length =>
+        case Parsed.Success(value, index) if index === input.length =>
           fail(safe"Should have been rejected but parsed as ${value.toString()}")
         case _ => ()
       }
@@ -194,6 +196,9 @@ class ParserImplsSpec extends AnyFunSuite {
   // )
 
   reject(p.block(_))("()")
+
+  parseAst(p.invalidBlockContent(_))("::foobar")(InvalidBlockContent("::foobar"))
+  reject(p.invalidBlockContent(_))("::foobar\n")
 
   parseAst(p.namedValue(_))("foo")(NamedValue("foo"))
 
