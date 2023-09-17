@@ -27,6 +27,9 @@ case class An[+A](w: An.Impl[A]) {
 
     An(Writer(zippedValue, log))
   }
+
+  def resultOrErrors: Either[Seq[Message], A] = w.value
+  def log: Seq[Message] = w.log
 }
 
 object An {
@@ -34,6 +37,7 @@ object An {
 
   type Impl[+A] = Writer[Either[Errors, A], Message]
 
+  /** Successful analysis which produced a complete result */
   object Success {
     def apply[A](a: A, log: Vector[Message]): An[A] = An(Writer(Right(a), log))
     def unapply[A](an: An[A]): Option[(A, Vector[Message])] = an.w.value match {
@@ -41,9 +45,10 @@ object An {
       case Left(_) => None
     }
   }
-  /** builds a Success with the result and no log */
+  /** Builds a Success with the result and no log. */
   def result[A](a: A): An[A] = Success(a, Vector())
 
+  /** Failed analysis which could not be completed due to errors */
   object Failure {
     def apply[A](errors: Vector[Message], log: Vector[Message]): An[Nothing] = An(Writer(Left(errors), log))
     def unapply[A](an: An[A]): Option[(Vector[Message], Vector[Message])] = an.w.value match {
@@ -51,9 +56,13 @@ object An {
       case Left(errors) => Some((errors, an.w.log))
     }
   }
-  /** builds a Failure with the error and no log */
+  /** Builds a Failure with the error and no log. */
   def error(e: Message): An[Nothing] = Failure(Vector(e), Vector())
 
+  /**
+   * Combines sequence of analyses together. Failure if any of the analyses had failed.
+   * However, all logs are always combined.
+   */
   def seq[A](ans: Seq[An[A]]): An[Seq[A]] = {
     val Writer(values, log) = Writer.seq(ans.map(_.w))
     val (allErrors, allResults) = values.foldLeft((Vector.empty: Errors, Vector.empty[A])) { case ((errorsAcc, resultsAcc), value) =>
@@ -83,7 +92,12 @@ object An {
    * otherwise return the last result.
    *
    * In other words, analyse a list of elements when the analysis of the next
-   * element depends on the analysis results of the previous element.
+   * element may depend on the state of the analysis after the previous elements.
+   *
+   * If analysis of one of the elements fails, the analysis still continues
+   * to the next element providing the last successful result. The combined
+   * analysis in the end will be a Failure, but the benefit of this behaviour is that
+   * all possible further errors and logs from the later elements can be captured.
    */
   def step[A, B](as: Seq[A])(initialResult: B)(f: (B, A) => An[B]): An[B] =
     as.foldLeft(StepState.begin(initialResult)) { case (state, a) =>
