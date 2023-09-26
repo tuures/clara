@@ -6,9 +6,7 @@ import clara.ast.{Ast, SourceMessage}
 import clara.util.Safe._
 import clara.ast.Ast.NamedType
 
-
 case class TypeExprAnalyzer(env: Env) {
-  //FIXME rename to walkMonoTypeExpr
   def walkTypeExpr(typeExpr: Ast.TypeExpr): An[Types.Type] = typeExpr match {
     case Ast.TopType(_) => An.result(Types.Top)
     case Ast.BottomType(_) => An.result(Types.Bottom)

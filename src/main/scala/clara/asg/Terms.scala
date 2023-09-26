@@ -38,8 +38,11 @@ object Terms {
 
   case class Call(callee: ValueExpr, argument: ValueExpr, typ: Type) extends ValueExpr
 
+  // FIMXE
   case class AliasTypeDef(name: String) extends InBlockDecl
+  // FIXME
   case class TypeDef(name: String) extends InBlockDecl
+  // FIXME
   case class NewExpr(typ: Type) extends ValueExpr
 
   sealed trait MethodSection extends InBlockDecl

@@ -1,7 +1,7 @@
 package clara.analyzer.impl
 
 import clara.asg.Types
-import clara.asg.Types.{Param, Type, TaggedCon, TaggedApplied}
+import clara.asg.Types.{Param, Type}
 import clara.ast.{SourceMessage, Pos}
 
 import clara.util.Safe._
@@ -10,13 +10,13 @@ import clara.util.Safe._
 object TypeAnalyzer {
   import Impl._
 
-  def applyTypeArgs(typ: Type, typeArgs: Seq[Type], pos: Pos): An[Type] = typ match {
-    case TaggedCon(name, typeParams, wrappedType, constructible, uniq) =>
-      validateArgsAndSubstituteParams(typeParams, typeArgs, wrappedType, pos).map { wrappedTypeSubstituted =>
-        TaggedApplied(name, typeArgs, wrappedTypeSubstituted, constructible, uniq)
-      }
-    case t: Type => doesNotTakeArgsError(t, typeArgs, pos)
-  }
+  // def applyTypeArgs(typ: Type, typeArgs: Seq[Type], pos: Pos): An[Type] = typ match {
+  //   case TaggedCon(name, typeParams, wrappedType, constructible, uniq) =>
+  //     validateArgsAndSubstituteParams(typeParams, typeArgs, wrappedType, pos).map { wrappedTypeSubstituted =>
+  //       TaggedApplied(name, typeArgs, wrappedTypeSubstituted, constructible, uniq)
+  //     }
+  //   case t: Type => doesNotTakeArgsError(t, typeArgs, pos)
+  // }
 
   def validateArgsAndSubstituteParams(params: Seq[Param], args: Seq[Type], typ: Type, pos: Pos): An[Type] = {
     if (params.length === args.length) {

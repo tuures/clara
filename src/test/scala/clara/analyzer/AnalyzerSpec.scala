@@ -1,10 +1,26 @@
 package clara.analyzer
 
-import clara.util.Safe._
+import clara.analyzer.impl.{BlockAnalyzer, Env}
+import clara.ast.Ast
+import clara.asg.{Terms, Types}
+import clara.util.Safe.SafeStringContext
 
 import org.scalatest.funsuite.AnyFunSuite
 
 class AnalyzerSpec extends AnyFunSuite {
+
+  // test("foo") {
+  //   val block = Ast.Block(Seq(Ast.UnitLiteral()))
+
+  //   val an = BlockAnalyzer(Env.empty).walkBlock(block.bcs, block.pos)
+
+  //   val expectedTerm = Terms.Block(Seq(Terms.UnitLiteral()), Types.Uni)
+  //   assert(an.resultOrErrors === Right(expectedTerm))
+  // }
+
+
+
+
 //   import Ast._
 //
 //   def ve(testName: String, expectedSignature: String)(valueExpr: ValueExpr) = test(testName) {

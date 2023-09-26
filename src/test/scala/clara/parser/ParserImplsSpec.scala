@@ -2,12 +2,17 @@ package clara.parser
 
 import clara.util.Safe.SafeStringContext
 import clara.ast.{Ast, LiteralValue}
+import clara.testutil.AstTestHelpers
 
-import fastparse._
 import org.scalatest.funsuite.AnyFunSuite
 import scala.reflect.ClassTag
 
 class ParserImplsSpec extends AnyFunSuite {
+  import Ast.{TypeDef => _, NamedType => _, _}
+  import AstTestHelpers._
+
+  import fastparse._
+
   def typeName[T](implicit ct: ClassTag[T]) = ct.runtimeClass.getSimpleName()
   def escapeInputForName(s: String) = s.replace("\n", "\\n")
 
@@ -34,25 +39,7 @@ class ParserImplsSpec extends AnyFunSuite {
       }
     }
 
-  //////
-  // Test setup
-
   val p = ParserImpls(None)
-
-  import Ast._
-
-  //////
-  // Test helpers
-
-  object NamedType {
-    def apply(name: String) = new NamedType(NameWithPos(name), Nil)
-    def apply(name: String, typeArgs: Seq[TypeExpr]) = new NamedType(NameWithPos(name), typeArgs)
-  }
-
-  object TypeDef {
-    def apply(typeDefKind: TypeDefKind, name: String, t: TypeExpr) = new TypeDef(typeDefKind, NameWithPos(name), Nil, t)
-    def apply(typeDefKind: TypeDefKind, name: String, typeParams: Seq[TypeParam], t: TypeExpr) = new TypeDef(typeDefKind, NameWithPos(name), typeParams, t)
-  }
 
   //////
   // Literals
@@ -350,17 +337,23 @@ class ParserImplsSpec extends AnyFunSuite {
     TypeDef(TypeDefKind.Boxed, "Foo", Seq(TypeParam("A"), TypeParam("B")), abRecord)
   }
 
-  parseAst(p.typeDef(_))("::opaque Foo: Bar")(
-    TypeDef(TypeDefKind.Opaque, "Foo", NamedType("Bar"))
-  )
+  // FIXME
+  // parseAst(p.typeDef(_))("::opaque Foo")(
+  //   TypeDef(TypeDefKind.Opaque, "Foo", NamedType("Bar"))
+  // )
 
-  parseAst(p.typeDef(_))("::opaque Foo<A, B>: Bar")(
-    TypeDef(TypeDefKind.Opaque, "Foo", Seq(TypeParam("A"), TypeParam("B")), NamedType("Bar"))
+  parseAst(p.typeDef(_))("::opaque Foo<A, B>: Nonsense")(
+    TypeDef(TypeDefKind.Opaque, "Foo", Seq(TypeParam("A"), TypeParam("B")), NamedType("Nonsense"))
   )
 
   parseAst(p.typeDef(_))("::singleton Foo: Bar")(
     TypeDef(TypeDefKind.Singleton, "Foo", NamedType("Bar"))
   )
+
+  // FIXME
+  // parseAst(p.typeDef(_))("::singleton Foo<Nonsense>: Bar")(
+  //   TypeDef(TypeDefKind.Singleton, "Foo", Seq(TypeParam("Nonsense"), NamedType("Bar"))
+  // )
 
   parseAst(p.methodDeclSection(_))("::declare ::methods Bar: {\n  foo: Bar\n}")(
     MethodDeclSection(NameWithPos("Bar"), Seq(

@@ -6,6 +6,7 @@ import clara.util.Safe._
 // TODO add more cuts to optimise and improve the error messages
 // https://www.lihaoyi.com/fastparse/#Cuts
 case class ParserImpls(sourceInfo: Option[SourceInfo]) {
+  import Ast._
   import fastparse._
 
   val nlPred: Char => Boolean = (_: Char) === '\n'
@@ -29,8 +30,6 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
       P(comment | space).repX
     }
   }
-
-  import Ast._
 
   def makePos(from: Int, until: Option[Int]) =
     sourceInfo.map(SourcePos(_, from, until)).getOrElse(NoPos)
