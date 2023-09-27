@@ -11,8 +11,7 @@ import impl._
 
 object Analyzer {
   def analyzeProgramBlock(programBlock: Ast.Block): Either[Seq[Message], Terms.Block] = {
-    val Ast.Block(bcs, pos) = programBlock
-    val analysis: An[Terms.Block] = BlockAnalyzer(Env.empty).walkBlock(bcs, pos)
+    val analysis: An[Terms.Block] = BlockAnalyzer(Env.empty).walkBlock(programBlock)
 
     // FIXME
     require(analysis.log.length === 0, "warnings not implemented")

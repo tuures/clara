@@ -6,22 +6,27 @@ import clara.ast.{Ast, Pos, SourceMessage}
 import clara.util.Safe._
 import clara.ast.Ast.ValueDecl
 
+case class BlockAnalyzerState(
+  currentContents: Vector[Terms.BlockContent],
+  currentReturnType: Option[Types.Type],
+  currentEnv: Env
+) {
+  def finishTerm(blockPos: Pos): An[Terms.Block] = currentReturnType match {
+    case Some(typ) => An.result(Terms.Block(currentContents, typ))
+    case None => An.result(Terms.Block(currentContents, Types.Uni)).
+      tell(SourceMessage(blockPos, "Block should end with an expression."))
+  }
+}
+object BlockAnalyzerState {
+  def begin(parentEnv: Env) = BlockAnalyzerState(Nil.toVector, None, parentEnv)
+}
 
 case class BlockAnalyzer(parentEnv: Env) {
-
-  case class WalkBlockState(
-    currentContents: Vector[Terms.BlockContent],
-    currentReturnType: Option[Types.Type],
-    currentEnv: Env
-  )
-  object WalkBlockState {
-    def begin = WalkBlockState(Nil.toVector, None, parentEnv)
-  }
 
   case class BlockContentStep(contentTerm: Terms.BlockContent, nextReturnType: Option[Types.Type], nextEnv: Env)
 
   def walkBlockContent(currentEnv: Env, bc: Ast.BlockContent, isLast: Boolean): An[BlockContentStep] = bc match {
-    case valueExprAst: Ast.ValueExpr => {
+    case valueExprAst: Ast.ValueExpr =>
       ValueExprAnalyzer(currentEnv).walkValueExpr(valueExprAst).flatMap { valueExprTerm =>
         val isUnit = valueExprTerm.typ === Types.Uni
 
@@ -30,18 +35,19 @@ case class BlockAnalyzer(parentEnv: Env) {
 
         An.result(BlockContentStep(valueExprTerm, Some(valueExprTerm.typ), currentEnv)).tell(maybeDiscardWarning)
       }
-    }
     case ValueDecl(name, t, pos) =>
       TypeExprAnalyzer(currentEnv).walkTypeExpr(t).flatMap { typ =>
         currentEnv.addOrShadowValue((name, typ), parentEnv, pos)
       }.map { nextEnv =>
         BlockContentStep(Terms.ValueDecl(name), None, nextEnv)
       }
-    case Ast.ValueDef(target, e, _) => {
+    case Ast.ValueDef(target, e, _) =>
       ValueExprAnalyzer(currentEnv).walkValueExpr(e).flatMap { valueExprTerm =>
-        walkValueDef(currentEnv, target, valueExprTerm)
-      }.map { case (namesDef, nextEnv) => BlockContentStep(namesDef, None, nextEnv) }
-    }
+        PatternAnalyzer(currentEnv, parentEnv).walkAssignment(target, valueExprTerm.typ).
+          map { case (targetTerm, nextEnv) =>
+            BlockContentStep(Terms.ValueDef(targetTerm, valueExprTerm), None, nextEnv)
+          }
+      }
     // TODO remove duplication between alias and typedef
     // case Ast.AliasTypeDef(name, typeParams, typeExpr, pos) => {
     //   TypeParamAnalyzer(currentEnv).walkTypeParams(typeParams).flatMap { case (paramTypes, withParamsEnv) =>
@@ -81,28 +87,17 @@ case class BlockAnalyzer(parentEnv: Env) {
     //     .map { case (term, nextEnv) => (term, None, nextEnv) }
   }
 
-  def walkBlock(bcs: Seq[Ast.BlockContent], pos: Pos): An[Terms.Block] =
-    An.step(bcs.zipWithIndex)(WalkBlockState.begin) { case (currentState, (bc, index)) =>
-      val WalkBlockState(currentContents, _, currentEnv) = currentState
+  def walkBlockContents(bcs: Seq[Ast.BlockContent]): An[BlockAnalyzerState] =
+    An.step(bcs.zipWithIndex)(BlockAnalyzerState.begin(parentEnv)) { case (currentState, (bc, index)) =>
+      val BlockAnalyzerState(currentContents, _, currentEnv) = currentState
 
       walkBlockContent(currentEnv, bc, index === bcs.length - 1).
         map { case BlockContentStep(contentTerm, nextReturnType, nextEnv) =>
-          WalkBlockState(currentContents :+ contentTerm, nextReturnType, nextEnv)
+          BlockAnalyzerState(currentContents :+ contentTerm, nextReturnType, nextEnv)
         }
-    }.flatMap { case WalkBlockState(contents, returnType, _) =>
-      returnType match {
-        case Some(typ) => An.result(Terms.Block(contents, typ))
-        case None => An.result(Terms.Block(contents, Types.Uni)).
-          tell(SourceMessage(pos, "Block should end with an expression."))
-      }
     }
 
-  def walkValueDef(currentEnv: Env, target: Ast.Pattern, valueExprTerm: Terms.ValueExpr): An[(Terms.ValueDef, Env)] = {
-    PatternAnalyzer(currentEnv, parentEnv).walkAssignment(target, valueExprTerm.typ).map { case (targetTerm, nextEnv) =>
-      (Terms.ValueDef(targetTerm, valueExprTerm), nextEnv)
-    }
-  }
-
+  def walkBlock(block: Ast.Block): An[Terms.Block] = walkBlockContents(block.bcs).flatMap(_.finishTerm(block.pos))
 }
 
 // FIXME move

@@ -15,7 +15,7 @@ class BlockAnalyzerSpec extends AnyFunSuite {
     val typeDef = TypeDef(TypeDefKind.Alias, "Unit", UnitType())
     val block = Ast.Block(Seq(typeDef))
 
-    val an = BlockAnalyzer(Env.empty).walkBlock(block.bcs, block.pos)
+    val an = BlockAnalyzer(Env.empty).walkBlockContents(block.bcs)
 
     val expectedTerm = Terms.Block(Vector(Terms.TypeDef("Unit"/*FIXME add missing properties*/)), Types.Uni)
     assert(an.resultOrErrors === Right(expectedTerm))

@@ -6,21 +6,22 @@ import scala.collection.immutable.ListMap
 class NamespaceSpec extends AnyFunSuite {
 
   val ns1 = Namespace(ListMap("foo" -> 1))
+  val ns2 = Namespace(ListMap("foo" -> 1, "bar" -> 2))
 
-  test("add(newName) => Some") {
+  test("add(newName) -> Some") {
     val res = ns1.add("bar" -> 2)
 
     assert(res === Some(Namespace(ListMap("foo" -> 1, "bar" -> 2))))
   }
 
-  test("add(existingName) => None") {
+  test("add(existingName) -> None") {
     val res = ns1.add("foo" -> 2)
 
     assert(res === None)
   }
 
-  test("addOrModify(existingName) => Some") {
-    val ns = ns1.addOrModify("foo" -> 3)
+  test("addOrModify(existingName) -> Some") {
+    val ns = ns2.addOrModify("foo" -> 3)
 
     // TODO: order of entries is preserved (foo still first) – is this good?
     assert(ns === Namespace(ListMap("foo" -> 3, "bar" -> 2)))

@@ -20,7 +20,7 @@ case class ValueExprAnalyzer(env: Env) {
     //   Terms.StringLiteral(parts, typ)
     // }
     case _: Ast.Tuple => ???
-    case Ast.Block(bcs, pos) => BlockAnalyzer(env).walkBlock(bcs, pos)
+    case b: Ast.Block => BlockAnalyzer(env).walkBlock(b)
     case Ast.NamedValue(name, pos) => env.useValue(name, pos).map(typ => Terms.NamedValue(name, typ))
     case Ast.ValueAs(e, t, pos) =>
       walkValueExpr(e).zip(TypeExprAnalyzer(env).walkTypeExpr(t)).flatMap { case (term, typ) =>
