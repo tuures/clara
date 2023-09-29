@@ -17,7 +17,7 @@ class AnSpec extends AnyFunSuite {
     val an = an1.flatMap(v => An.Success(v + 2, Vector(messageB)))
 
     assert(an.log === Vector(messageA, messageB))
-    assert(an.resultOrErrors === Right(3))
+    assert(an.value === Right(3))
   }
 
   test("Success.flatMap(Failure)") {
@@ -25,7 +25,7 @@ class AnSpec extends AnyFunSuite {
     val an = an1.flatMap((_: Int) => An.Failure(Vector(messageC), Vector(messageB)))
 
     assert(an.log === Vector(messageA, messageB))
-    assert(an.resultOrErrors === Left(Vector(messageC)))
+    assert(an.value === Left(Vector(messageC)))
   }
 
   test("Failure.flatMap(Success)") {
@@ -33,7 +33,7 @@ class AnSpec extends AnyFunSuite {
     val an = an1.flatMap(v => An.Success(v + 2, Vector(messageB)))
 
     assert(an.log === Vector(messageA))
-    assert(an.resultOrErrors === Left(Vector(messageC)))
+    assert(an.value === Left(Vector(messageC)))
   }
 
   test("Success.map") {
@@ -41,7 +41,7 @@ class AnSpec extends AnyFunSuite {
     val an = an1.map(v => v + 2)
 
     assert(an.log === Vector(messageA))
-    assert(an.resultOrErrors === Right(3))
+    assert(an.value === Right(3))
   }
 
   test("Failure.map") {
@@ -49,7 +49,7 @@ class AnSpec extends AnyFunSuite {
     val an = an1.map(v => v + 2)
 
     assert(an.log === Vector(messageA))
-    assert(an.resultOrErrors === Left(Vector(messageC)))
+    assert(an.value === Left(Vector(messageC)))
   }
 
   test("Success.tell") {
@@ -57,7 +57,7 @@ class AnSpec extends AnyFunSuite {
     val an = an1.tell(messageB)
 
     assert(an.log === Vector(messageA, messageB))
-    assert(an.resultOrErrors === Right(1))
+    assert(an.value === Right(1))
   }
 
   test("Failure.tell") {
@@ -65,7 +65,7 @@ class AnSpec extends AnyFunSuite {
     val an = an1.tell(messageB)
 
     assert(an.log === Vector(messageA, messageB))
-    assert(an.resultOrErrors === Left(Vector(messageC)))
+    assert(an.value === Left(Vector(messageC)))
   }
 
   test("Success.zip(Success)") {
@@ -74,7 +74,7 @@ class AnSpec extends AnyFunSuite {
     val an = an1.zip(an2)
 
     assert(an.log === Vector(messageA, messageB))
-    assert(an.resultOrErrors === Right((1, 2)))
+    assert(an.value === Right((1, 2)))
   }
 
   test("Success.zip(Failure)") {
@@ -83,7 +83,7 @@ class AnSpec extends AnyFunSuite {
     val an = an1.zip(an2)
 
     assert(an.log === Vector(messageA, messageB))
-    assert(an.resultOrErrors === Left(Vector(messageC)))
+    assert(an.value === Left(Vector(messageC)))
   }
 
   test("Failure.zip(Success)") {
@@ -92,7 +92,7 @@ class AnSpec extends AnyFunSuite {
     val an = an1.zip(an2)
 
     assert(an.log === Vector(messageA, messageB))
-    assert(an.resultOrErrors === Left(Vector(messageC)))
+    assert(an.value === Left(Vector(messageC)))
   }
 
   test("Failure.zip(Failure)") {
@@ -101,7 +101,7 @@ class AnSpec extends AnyFunSuite {
     val an = an1.zip(an2)
 
     assert(an.log === Vector(messageA, messageB))
-    assert(an.resultOrErrors === Left(Vector(messageC, messageD)))
+    assert(an.value === Left(Vector(messageC, messageD)))
   }
 
   test("An.seq Success") {
@@ -111,7 +111,7 @@ class AnSpec extends AnyFunSuite {
     val an = An.seq(Seq(an1, an2, an3))
 
     assert(an.log === Vector(messageA, messageB, messageC))
-    assert(an.resultOrErrors === Right(Vector(1, 2, 3)))
+    assert(an.value === Right(Vector(1, 2, 3)))
   }
 
   test("An.seq Failure") {
@@ -121,7 +121,7 @@ class AnSpec extends AnyFunSuite {
     val an = An.seq(Seq(an1, an2, an3))
 
     assert(an.log === Vector(messageA, messageB, messageC))
-    assert(an.resultOrErrors === Left(Vector(messageD)))
+    assert(an.value === Left(Vector(messageD)))
   }
 
   test("An.step Success") {
@@ -134,7 +134,7 @@ class AnSpec extends AnyFunSuite {
     })
 
     assert(an.log === Vector("sum: 1", "sum: 3", "sum: 6").map(GeneralMessage(_)))
-    assert(an.resultOrErrors === Right(6))
+    assert(an.value === Right(6))
   }
 
   test("An.step Failure") {
@@ -154,6 +154,6 @@ class AnSpec extends AnyFunSuite {
     })
 
     assert(an.log === Vector("sum: 1", "sum: 3", "sum: 4").map(GeneralMessage(_)))
-    assert(an.resultOrErrors === Left(Vector("failure at item: 2", "failure at item: 3").map(GeneralMessage(_))))
+    assert(an.value === Left(Vector("failure at item: 2", "failure at item: 3").map(GeneralMessage(_))))
   }
 }

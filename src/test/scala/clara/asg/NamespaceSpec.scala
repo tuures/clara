@@ -1,17 +1,16 @@
 package clara.asg
 
 import org.scalatest.funsuite.AnyFunSuite
-import scala.collection.immutable.ListMap
 
 class NamespaceSpec extends AnyFunSuite {
 
-  val ns1 = Namespace(ListMap("foo" -> 1))
-  val ns2 = Namespace(ListMap("foo" -> 1, "bar" -> 2))
+  val ns1 = Namespace("foo" -> 1)
+  val ns2 = Namespace("foo" -> 1, "bar" -> 2)
 
   test("add(newName) -> Some") {
     val res = ns1.add("bar" -> 2)
 
-    assert(res === Some(Namespace(ListMap("foo" -> 1, "bar" -> 2))))
+    assert(res === Some(Namespace("foo" -> 1, "bar" -> 2)))
   }
 
   test("add(existingName) -> None") {
@@ -24,7 +23,7 @@ class NamespaceSpec extends AnyFunSuite {
     val ns = ns2.addOrModify("foo" -> 3)
 
     // TODO: order of entries is preserved (foo still first) – is this good?
-    assert(ns === Namespace(ListMap("foo" -> 3, "bar" -> 2)))
+    assert(ns === Namespace("foo" -> 3, "bar" -> 2))
   }
 
   // FIXME addOrShadow doesn't really work: you can shadow twice in the same block

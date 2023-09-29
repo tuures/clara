@@ -28,7 +28,7 @@ case class An[+A](w: An.Impl[A]) {
     An(Writer(zippedValue, log))
   }
 
-  def resultOrErrors: Either[Seq[Message], A] = w.value
+  def value: Either[Seq[Message], A] = w.value
   def log: Seq[Message] = w.log
 }
 

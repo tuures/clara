@@ -18,7 +18,7 @@ case class Namespace[A](m: ListMap[String, A]) {
   /** NOTE: slow sequential search */
   // def getNames(item: I): Iterable[String] = m.filter(_._2 === item).map(_._1)
   // def size = m.size
-  // def names = m.keys
+  def names = m.keys
   // def items = m.values
   def entries: Seq[(String, A)] = m.toSeq
   // def filter(p: (String, I) => Boolean) = Namespace(m.filter(p.tupled))
@@ -27,5 +27,7 @@ case class Namespace[A](m: ListMap[String, A]) {
 }
 
 object Namespace {
-  def empty[A]: Namespace[A] = Namespace(ListMap.empty)
+  def apply[A](entries: (String, A)*): Namespace[A] = Namespace(ListMap(entries:_*))
+  def unapplySeq[A](ns: Namespace[A]): Option[Seq[(String, A)]] = Some(ns.entries)
+  def empty[A]: Namespace[A] = Namespace()
 }

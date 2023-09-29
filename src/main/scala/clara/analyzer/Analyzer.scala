@@ -16,6 +16,6 @@ object Analyzer {
     // FIXME
     require(analysis.log.length === 0, "warnings not implemented")
 
-    analysis.resultOrErrors
+    analysis.value
   }
 }
