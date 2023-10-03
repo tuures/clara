@@ -378,8 +378,8 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   }
 
   def typeDef[X: P]: P[TypeDef] = P(pp(
-    TypeDefImpl.typeDefKind ~/
-    nameWithPos ~ maybeTypeParams ~ typed
+    TypeDefImpl.typeDefKind ~
+    nameWithPos ~ maybeTypeParams ~ typed.?
   )(TypeDef.apply _))
 
   def methodDef[X: P]: P[MethodDef] = P(pp(attributes ~ name ~ typed.? ~ equalsSign ~ valueExpr)(MethodDef.apply _))

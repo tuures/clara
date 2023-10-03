@@ -82,7 +82,7 @@ object Ast {
   case class TypeParam(name: String, pos: Pos = NoPos) extends Node
 
   // TODO: add attributes?
-  case class TypeDef(typeDefKind: TypeDefKind, name: NameWithPos, typeParams: Seq[TypeParam], t: TypeExpr, pos: Pos = NoPos) extends InBlockDecl
+  case class TypeDef(typeDefKind: TypeDefKind, name: NameWithPos, typeParams: Seq[TypeParam], t: Option[TypeExpr], pos: Pos = NoPos) extends InBlockDecl
 
   // TODO: remove duplication MethodDeclSection vs MethodDefSection
   // TODO: use ConstructPattern instead of targetType, selfPattern

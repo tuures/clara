@@ -60,8 +60,8 @@ object An {
   def error(e: Message): An[Nothing] = Failure(Vector(e), Vector())
 
   /**
-   * Combines sequence of analyses together. Failure if any of the analyses had failed.
-   * However, all logs are always combined.
+   * Combines sequence of analyses together. Returns a combiend Failure if any of the analyses had failed.
+   * All logs are always combined.
    */
   def seq[A](ans: Seq[An[A]]): An[Seq[A]] = {
     val Writer(values, log) = Writer.seq(ans.map(_.w))

@@ -4,7 +4,6 @@ import clara.asg.{Terms, Types, TypeCons}
 import clara.ast.{Ast, Pos, SourceMessage}
 
 import clara.util.Safe._
-import clara.ast.Ast.ValueDecl
 
 case class BlockAnalyzerState(
   currentContents: Vector[Terms.BlockContent],
@@ -35,7 +34,7 @@ case class BlockAnalyzer(parentEnv: Env) {
 
         An.result(BlockContentStep(valueExprTerm, Some(valueExprTerm.typ), currentEnv)).tell(maybeDiscardWarning)
       }
-    case ValueDecl(name, t, pos) =>
+    case Ast.ValueDecl(name, t, pos) =>
       TypeExprAnalyzer(currentEnv).walkTypeExpr(t).flatMap { typ =>
         currentEnv.addOrShadowValue((name, typ), parentEnv, pos)
       }.map { nextEnv =>
@@ -69,15 +68,35 @@ case class BlockAnalyzer(parentEnv: Env) {
     //       map(nextEnv => (Terms.TypeDef(name), None, nextEnv))
     //   }
     // }
-    case Ast.TypeDef(typeDefKind, Ast.NameWithPos(name, namePos), typeParams, typeExpr, _) => {
-      TypeParamAnalyzer(currentEnv).walkTypeParams(typeParams).flatMap { case (paramTypes, withParamsEnv) =>
-        TypeExprAnalyzer(withParamsEnv).walkTypeExpr(typeExpr).map { typ =>
-          TypeCons.TypeDefCon(typeDefKind, name, paramTypes, typ, namePos)
+    case Ast.TypeDef(typeDefKind, Ast.NameWithPos(name, namePos), typeParams, maybeTypeExpr, pos) => typeDefKind match {
+      case Ast.TypeDefKind.Alias | Ast.TypeDefKind.Tagged | Ast.TypeDefKind.Boxed =>
+        lazy val missingStructureError = An.error(SourceMessage(pos,
+          safe"Structure needs to be defined for type $name")
+        )
+        val typeExprAn = maybeTypeExpr.map(An.result(_)).getOrElse(missingStructureError)
+
+        TypeParamAnalyzer(currentEnv).walkTypeParams(typeParams).zip(typeExprAn).
+          flatMap { case ((paramTypes, withParamsEnv), typeExpr) =>
+            TypeExprAnalyzer(withParamsEnv).walkTypeExpr(typeExpr).map { typ =>
+              TypeCons.TypeDefCon(typeDefKind, name, paramTypes, typ, namePos)
+            }
+          }.flatMap { typ =>
+            currentEnv.addOrShadowTypeCon((name, typ), parentEnv, namePos).
+              map(nextEnv => BlockContentStep(Terms.TypeDef(name), None, nextEnv))
+          }
+      case Ast.TypeDefKind.Opaque | Ast.TypeDefKind.Singleton =>
+        lazy val structureGivenError = An.error(SourceMessage(pos, safe"Cannot define structure for type $name"))
+        lazy val typeParamsGivenError = An.error(SourceMessage(pos, safe"Cannot define type parameters for type $name"))
+
+        (if (typeParams.length > 0) typeParamsGivenError else An.result(())).flatMap { case () =>
+          (if (maybeTypeExpr.isDefined) structureGivenError else An.result(()))
+        }.map { case () =>
+          TypeCons.TypeDefCon(typeDefKind, name, Nil, Types.Top /*FIXME*/, namePos)
+        }.flatMap { typ =>
+          // FIXME duplication
+          currentEnv.addOrShadowTypeCon((name, typ), parentEnv, namePos).
+            map(nextEnv => BlockContentStep(Terms.TypeDef(name), None, nextEnv))
         }
-      }.flatMap { typ =>
-        currentEnv.addOrShadowTypeCon((name, typ), parentEnv, namePos).
-          map(nextEnv => BlockContentStep(Terms.TypeDef(name), None, nextEnv))
-      }
     }
     // case Ast.MethodDeclSection(targetTypeName, methods, _) =>
     //   MethodSectionAnalyzer(currentEnv).walkDeclSection(targetTypeName, methods)

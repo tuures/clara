@@ -337,23 +337,21 @@ class ParserImplsSpec extends AnyFunSuite {
     TypeDef(TypeDefKind.Boxed, "Foo", Seq(TypeParam("A"), TypeParam("B")), abRecord)
   }
 
-  // FIXME
-  // parseAst(p.typeDef(_))("::opaque Foo")(
-  //   TypeDef(TypeDefKind.Opaque, "Foo", NamedType("Bar"))
-  // )
+  parseAst(p.typeDef(_))("::opaque Foo")(
+    TypeDef(TypeDefKind.Opaque, "Foo")
+  )
 
-  parseAst(p.typeDef(_))("::opaque Foo<A, B>: Nonsense")(
-    TypeDef(TypeDefKind.Opaque, "Foo", Seq(TypeParam("A"), TypeParam("B")), NamedType("Nonsense"))
+  parseAst(p.typeDef(_))("::opaque Foo<Nonsense>: Nonsense")(
+    TypeDef(TypeDefKind.Opaque, "Foo", Seq(TypeParam("Nonsense")), NamedType("Nonsense"))
   )
 
   parseAst(p.typeDef(_))("::singleton Foo: Bar")(
     TypeDef(TypeDefKind.Singleton, "Foo", NamedType("Bar"))
   )
 
-  // FIXME
-  // parseAst(p.typeDef(_))("::singleton Foo<Nonsense>: Bar")(
-  //   TypeDef(TypeDefKind.Singleton, "Foo", Seq(TypeParam("Nonsense"), NamedType("Bar"))
-  // )
+  parseAst(p.typeDef(_))("::singleton Foo<Nonsense>: Bar")(
+    TypeDef(TypeDefKind.Singleton, "Foo", Seq(TypeParam("Nonsense")), NamedType("Bar"))
+  )
 
   parseAst(p.methodDeclSection(_))("::declare ::methods Bar: {\n  foo: Bar\n}")(
     MethodDeclSection(NameWithPos("Bar"), Seq(

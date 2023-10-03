@@ -32,14 +32,13 @@ class BlockAnalyzerSpec extends AnyFunSuite with Inside with EitherValues {
     assert(term === expectedTerm)
   }
 
-  // test("::alias Pair<A>: (A, A)") {
+  test("invalid ::opaque Pair<A>: (A, A)") {
 
-  //   val typeDef = TypeDef(TypeDefKind.Alias, "Pair", UnitType())
-  //   val block = Ast.Block(Seq(typeDef))
+    val typeDef = TypeDef(TypeDefKind.Opaque, "Pair", UnitType())
+    val block = Ast.Block(Seq(typeDef))
 
-  //   val an = BlockAnalyzer(Env.empty).walkBlock(block.bcs, block.pos)
+    val an = BlockAnalyzer(Env.empty).walkBlock(block)
 
-  //   val expectedTerm = Terms.Block(Seq(Terms.UnitLiteral()), Types.Uni)
-  //   assert(an.resultOrErrors === Right(expectedTerm))
-  // }
+    assert(an.value.left.value.length === 1)
+  }
 }
