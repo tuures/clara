@@ -65,13 +65,16 @@ object Ast {
 
   case class Attribute(key: String, value: Option[String], pos: Pos = NoPos) extends Node
 
+  // TODO move?
   sealed trait TypeDefKind
   object TypeDefKind {
-    case object Alias extends TypeDefKind
-    case object Tagged extends TypeDefKind
-    case object Boxed extends TypeDefKind
-    case object Opaque extends TypeDefKind
-    case object Singleton extends TypeDefKind
+    sealed trait Wrapper extends TypeDefKind
+    sealed trait Solitary extends TypeDefKind
+    case object Alias extends Wrapper
+    case object Tagged extends Wrapper
+    case object Boxed extends Wrapper
+    case object Opaque extends Solitary
+    case object Singleton extends Solitary
   }
 
   // sealed trait Variance

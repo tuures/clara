@@ -23,7 +23,7 @@ class BlockAnalyzerSpec extends AnyFunSuite with Inside with EitherValues {
 
     inside(typ) {
       case TypeDefCon(typeDefKind, name, typeParams, wrappedType, _, _) =>
-        assert((typeDefKind, name, typeParams, wrappedType) === (TypeDefKind.Alias, "Unit", Nil, Types.Uni))
+        assert((typeDefKind, name, typeParams, wrappedType) === (TypeDefKind.Alias, "Unit", Vector(), Some(Types.Uni)))
     }
 
     val term = endState.flatMap(_.finishTerm(block.pos)).value.value

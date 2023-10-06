@@ -16,7 +16,7 @@ case class ValueExprAnalyzer(env: Env) {
     // case Ast.FloatLiteral(value, pos) => env.useTypeInst("Float", Nil, pos).map { typ =>
     //   Terms.FloatLiteral(value, typ)
     // }
-    // case Ast.StringLiteral(parts, pos) => env.useTypeInst("String", Nil, pos).map { typ =>
+    // case Ast.StringLiteral(parts, pos) => env.useTypeCon("String", Nil, pos).map { typ =>
     //   Terms.StringLiteral(parts, typ)
     // }
     case _: Ast.Tuple => ???
@@ -24,7 +24,7 @@ case class ValueExprAnalyzer(env: Env) {
     case Ast.NamedValue(name, pos) => env.useValue(name, pos).map(typ => Terms.NamedValue(name, typ))
     case Ast.ValueAs(e, t, pos) =>
       walkValueExpr(e).zip(TypeExprAnalyzer(env).walkTypeExpr(t)).flatMap { case (term, typ) =>
-        TypeAnalyzer.expectAssignable(term.typ, typ, pos).map((_: Unit) => term)
+        TypeInterpreter.expectAssignable(term.typ, typ, pos).map((_: Unit) => term)
       }
     case Ast.Record(fields, _) => {
       An.step(fields)(Namespace.empty[Terms.Field]){ case (ns, Ast.FieldDef(name, typeOpt, body, pos)) =>
@@ -50,7 +50,7 @@ case class ValueExprAnalyzer(env: Env) {
       walkValueExpr(callee).zip(walkValueExpr(argument)).flatMap { case (calleeTerm, argumentTerm) =>
         calleeTerm.typ match {
           case Types.Func(parameterType, resultType) =>
-            TypeAnalyzer.expectAssignable(argumentTerm.typ, parameterType, argument.pos).map { _: Unit =>
+            TypeInterpreter.expectAssignable(argumentTerm.typ, parameterType, argument.pos).map { _: Unit =>
               Terms.Call(calleeTerm, argumentTerm, resultType)
             }
           case _ => An.error(SourceMessage(callee.pos, safe"Cannot call type `${Types.toSource(calleeTerm.typ)}`"))

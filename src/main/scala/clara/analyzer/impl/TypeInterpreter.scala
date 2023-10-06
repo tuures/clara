@@ -1,21 +1,29 @@
 package clara.analyzer.impl
 
-import clara.asg.Types
+import clara.asg.{Types, TypeCons}
 import clara.asg.Types.{Param, Type}
 import clara.ast.{SourceMessage, Pos}
+import clara.ast.Ast.TypeDefKind
 
 import clara.util.Safe._
 
 // rename TypeInterpreter?
-object TypeAnalyzer {
+object TypeInterpreter {
   import Impl._
 
-  // def applyTypeArgs(typ: Type, typeArgs: Seq[Type], pos: Pos): An[Type] = typ match {
-  //   case TaggedCon(name, typeParams, wrappedType, constructible, uniq) =>
-  //     validateArgsAndSubstituteParams(typeParams, typeArgs, wrappedType, pos).map { wrappedTypeSubstituted =>
-  //       TaggedApplied(name, typeArgs, wrappedTypeSubstituted, constructible, uniq)
+  // def instantiate(typeCon: TypeCons.TypeCon, typeArgs: Seq[Type], pos: Pos): An[Type] = typeCon match {
+  //   case TypeCons.TypeDefCon(typeDefKind, name, typeParams, wrappedType, definedAt, uniq) =>
+  //     typeDefKind match {
+  //       case TypeDefKind.Alias =>
+  //         validateArgsAndSubstituteParams(typeParams, typeArgs, wrappedType.get, pos).map { wrappedTypeSubstituted =>
+  //           TaggedApplied(name, typeArgs, wrappedTypeSubstituted, constructible, uniq)
+  //         }
+  //       case TypeDefKind.Tagged =>
+  //       case TypeDefKind.Boxed =>
+  //       case TypeDefKind.Opaque =>
+  //       case TypeDefKind.Singleton =>
   //     }
-  //   case t: Type => doesNotTakeArgsError(t, typeArgs, pos)
+  //   case TypeCons.ParamCon(name, definedAt, uniq) =>
   // }
 
   def validateArgsAndSubstituteParams(params: Seq[Param], args: Seq[Type], typ: Type, pos: Pos): An[Type] = {

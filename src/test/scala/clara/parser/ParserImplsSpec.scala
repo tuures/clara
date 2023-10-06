@@ -345,12 +345,12 @@ class ParserImplsSpec extends AnyFunSuite {
     TypeDef(TypeDefKind.Opaque, "Foo", Seq(TypeParam("Nonsense")), NamedType("Nonsense"))
   )
 
-  parseAst(p.typeDef(_))("::singleton Foo: Bar")(
-    TypeDef(TypeDefKind.Singleton, "Foo", NamedType("Bar"))
+  parseAst(p.typeDef(_))("::singleton Foo")(
+    TypeDef(TypeDefKind.Singleton, "Foo")
   )
 
-  parseAst(p.typeDef(_))("::singleton Foo<Nonsense>: Bar")(
-    TypeDef(TypeDefKind.Singleton, "Foo", Seq(TypeParam("Nonsense")), NamedType("Bar"))
+  parseAst(p.typeDef(_))("::singleton Foo<Nonsense>: Nonsense")(
+    TypeDef(TypeDefKind.Singleton, "Foo", Seq(TypeParam("Nonsense")), NamedType("Nonsense"))
   )
 
   parseAst(p.methodDeclSection(_))("::declare ::methods Bar: {\n  foo: Bar\n}")(

@@ -18,7 +18,7 @@ object TypeCons {
     typeDefKind: TypeDefKind,
     name: String,
     typeParams: Seq[ParamCon],
-    wrappedType: Types.Type,
+    wrappedType: Option[Types.Type],
     definedAt: Pos,
     uniq: Uniq = Uniq(),
   ) extends TypeCon
