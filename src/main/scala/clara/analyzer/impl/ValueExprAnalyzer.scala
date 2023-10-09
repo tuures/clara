@@ -16,9 +16,11 @@ case class ValueExprAnalyzer(env: Env) {
     // case Ast.FloatLiteral(value, pos) => env.useTypeInst("Float", Nil, pos).map { typ =>
     //   Terms.FloatLiteral(value, typ)
     // }
-    // case Ast.StringLiteral(parts, pos) => env.useTypeCon("String", Nil, pos).map { typ =>
-    //   Terms.StringLiteral(parts, typ)
-    // }
+    case Ast.StringLiteral(parts, pos) => env.useTypeCon("String", pos).flatMap { typeCon =>
+      TypeInterpreter.instantiate(typeCon, Nil, pos).map { typ =>
+        Terms.StringLiteral(parts, typ)
+      }
+    }
     case _: Ast.Tuple => ???
     case b: Ast.Block => BlockAnalyzer(env).walkBlock(b)
     case Ast.NamedValue(name, pos) => env.useValue(name, pos).map(typ => Terms.NamedValue(name, typ))

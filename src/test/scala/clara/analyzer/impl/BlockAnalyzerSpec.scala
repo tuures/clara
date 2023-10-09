@@ -2,12 +2,11 @@ package clara.analyzer
 
 import clara.analyzer.impl.{BlockAnalyzer, Env}
 import clara.ast.Ast
-import clara.asg.{Terms, Types}
+import clara.asg.{Terms, Types, TypeCons}
 import clara.testutil.AstTestHelpers
 
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.{Inside, EitherValues}
-import clara.asg.TypeCons.TypeDefCon
 
 class BlockAnalyzerSpec extends AnyFunSuite with Inside with EitherValues {
   import Ast.{TypeDef => _, NamedType => _, _}
@@ -22,8 +21,8 @@ class BlockAnalyzerSpec extends AnyFunSuite with Inside with EitherValues {
     val typ = endState.value.value.currentEnv.typeCons.get("Unit").get
 
     inside(typ) {
-      case TypeDefCon(typeDefKind, name, typeParams, wrappedType, _, _) =>
-        assert((typeDefKind, name, typeParams, wrappedType) === (TypeDefKind.Alias, "Unit", Vector(), Some(Types.Uni)))
+      case TypeCons.WrapperTypeCon(typeDefKind, name, typeParams, wrappedType, _, _) =>
+        assert((typeDefKind, name, typeParams, wrappedType) === (TypeDefKind.Alias, "Unit", Vector(), Types.Uni))
     }
 
     val term = endState.flatMap(_.finishTerm(block.pos)).value.value
@@ -32,13 +31,15 @@ class BlockAnalyzerSpec extends AnyFunSuite with Inside with EitherValues {
     assert(term === expectedTerm)
   }
 
-  test("invalid ::opaque Pair<A>: (A, A)") {
+  test("invalid ::opaque Pair<A>: ()") {
 
-    val typeDef = TypeDef(TypeDefKind.Opaque, "Pair", UnitType())
+    val typeDef = TypeDef(TypeDefKind.Opaque, "Pair", Seq(Ast.TypeParam("A")), UnitType())
     val block = Ast.Block(Seq(typeDef))
 
     val an = BlockAnalyzer(Env.empty).walkBlock(block)
 
-    assert(an.value.left.value.length === 1)
+    val expectedErrors = Seq("Cannot define type parameters for type Pair", "Cannot define structure for type Pair")
+
+    assert(an.value.left.value.map(_.message) === expectedErrors)
   }
 }

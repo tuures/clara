@@ -70,7 +70,7 @@ case class BlockAnalyzer(parentEnv: Env) {
     // }
     case Ast.TypeDef(typeDefKind, Ast.NameWithPos(name, namePos), typeParams, maybeTypeExpr, pos) =>
       val typeConAn: An[TypeCons.TypeCon] = typeDefKind match {
-        case _: Ast.TypeDefKind.Wrapper =>
+        case wrapperTypeDefKind: Ast.TypeDefKind.Wrapper =>
           lazy val missingStructureError = An.error(SourceMessage(pos,
             safe"Structure needs to be defined for type $name")
           )
@@ -79,17 +79,20 @@ case class BlockAnalyzer(parentEnv: Env) {
           TypeParamAnalyzer(currentEnv).walkTypeParams(typeParams).zip(typeExprAn).
             flatMap { case ((paramTypes, withParamsEnv), typeExpr) =>
               TypeExprAnalyzer(withParamsEnv).walkTypeExpr(typeExpr).map { typ =>
-                TypeCons.TypeDefCon(typeDefKind, name, paramTypes, Some(typ), namePos)
+                TypeCons.WrapperTypeCon(wrapperTypeDefKind, name, paramTypes, typ, namePos)
               }
             }
-        case _: Ast.TypeDefKind.Solitary =>
-          lazy val structureGivenError = An.error(SourceMessage(pos, safe"Cannot define structure for type $name"))
-          lazy val typeParamsGivenError = An.error(SourceMessage(pos, safe"Cannot define type parameters for type $name"))
+        case solitaryTypeDefKind: Ast.TypeDefKind.Solitary =>
+          val rejectTypeParams = An.errorIf(typeParams.length > 0)(
+            SourceMessage(pos, safe"Cannot define type parameters for type $name")
+          )
 
-          (if (typeParams.length > 0) typeParamsGivenError else An.result(())).flatMap { case () =>
-            (if (maybeTypeExpr.isDefined) structureGivenError else An.result(()))
-          }.map { case () =>
-            TypeCons.TypeDefCon(typeDefKind, name, Nil, None, namePos)
+          val rejectStructure = An.errorIf(maybeTypeExpr.isDefined)(
+            SourceMessage(pos, safe"Cannot define structure for type $name")
+          )
+
+          rejectTypeParams.zip(rejectStructure).map { case _ =>
+            TypeCons.SolitaryTypeCon(solitaryTypeDefKind, name, namePos)
           }
       }
 

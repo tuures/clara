@@ -14,17 +14,24 @@ object Uniq {
 object TypeCons {
   sealed trait TypeCon
 
-  case class TypeDefCon(
-    typeDefKind: TypeDefKind,
+  // TODO: allow narrowing Param with boundaries/kind, now it's always "extends Top"
+  case class ParamCon(
     name: String,
-    typeParams: Seq[ParamCon],
-    wrappedType: Option[Types.Type],
     definedAt: Pos,
     uniq: Uniq = Uniq(),
   ) extends TypeCon
 
-  // TODO: allow narrowing Param with boundaries/kind, now it's always "extends Top"
-  case class ParamCon(
+  case class WrapperTypeCon(
+    typeDefKind: TypeDefKind.Wrapper,
+    name: String,
+    typeParams: Seq[ParamCon],
+    wrappedType: Types.Type,
+    definedAt: Pos,
+    uniq: Uniq = Uniq(),
+  ) extends TypeCon
+
+  case class SolitaryTypeCon(
+    typeDefKind: TypeDefKind.Solitary,
     name: String,
     definedAt: Pos,
     uniq: Uniq = Uniq(),
@@ -59,10 +66,30 @@ object Types {
   // to expected type
   //   ::tagged Foo (defined at anotherfoo.clara:123)
   case class Alias(
-    con: TypeCons.TypeDefCon,
+    con: TypeCons.WrapperTypeCon,
     typeArgs: Seq[Type],
+    wrappedType: Types.Type,
   ) extends Type
 
+  case class Tagged(
+    con: TypeCons.WrapperTypeCon,
+    typeArgs: Seq[Type],
+    wrappedType: Types.Type,
+  ) extends Type
+
+  case class Boxed(
+    con: TypeCons.WrapperTypeCon,
+    typeArgs: Seq[Type],
+    wrappedType: Types.Type,
+  ) extends Type
+
+  case class Opaque(
+    con: TypeCons.SolitaryTypeCon,
+  ) extends Type
+
+  case class Singleton(
+    con: TypeCons.SolitaryTypeCon,
+  ) extends Type
   // ::tagged Box<A>: { value: A }
   // TaggedCon(Box, Seq(a), Record("value" -> a))
 

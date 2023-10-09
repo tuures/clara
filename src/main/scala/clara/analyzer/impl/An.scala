@@ -59,6 +59,8 @@ object An {
   /** Builds a Failure with the error and no log. */
   def error(e: Message): An[Nothing] = Failure(Vector(e), Vector())
 
+  def errorIf(pred: Boolean)(e: Message): An[Unit] = if (pred) error(e) else result(())
+
   /**
    * Combines sequence of analyses together. Returns a combiend Failure if any of the analyses had failed.
    * All logs are always combined.
