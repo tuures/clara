@@ -3,9 +3,9 @@ package clara.analyzer.impl
 import clara.util.GeneralMessage
 import clara.util.Safe.SafeStringContext
 
-import org.scalatest.funsuite.AnyFunSuite
+import clara.testutil.BaseSpec
 
-class AnSpec extends AnyFunSuite {
+class AnSpec extends BaseSpec {
 
   val messageA = GeneralMessage("A")
   val messageB = GeneralMessage("B")

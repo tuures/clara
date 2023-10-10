@@ -1,8 +1,8 @@
 package clara.analyzer.impl
 
-import org.scalatest.funsuite.AnyFunSuite
+import clara.testutil.BaseSpec
 
-class WriterSpec extends AnyFunSuite {
+class WriterSpec extends BaseSpec {
 
   test(".flatMap") {
     val w = Writer(1, Vector("A")).flatMap(v => Writer(v + 1, Vector("B")))

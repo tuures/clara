@@ -5,9 +5,9 @@ import clara.ast.Ast
 import clara.asg.{Terms, Types}
 import clara.util.Safe.SafeStringContext
 
-import org.scalatest.funsuite.AnyFunSuite
+import clara.testutil.BaseSpec
 
-class AnalyzerSpec extends AnyFunSuite {
+class AnalyzerSpec extends BaseSpec {
 
   // test("foo") {
   //   val block = Ast.Block(Seq(Ast.UnitLiteral()))

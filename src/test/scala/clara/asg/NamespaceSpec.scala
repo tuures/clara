@@ -1,8 +1,8 @@
 package clara.asg
 
-import org.scalatest.funsuite.AnyFunSuite
+import clara.testutil.BaseSpec
 
-class NamespaceSpec extends AnyFunSuite {
+class NamespaceSpec extends BaseSpec {
 
   val ns1 = Namespace("foo" -> 1)
   val ns2 = Namespace("foo" -> 1, "bar" -> 2)

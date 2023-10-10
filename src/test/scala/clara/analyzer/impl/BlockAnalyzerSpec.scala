@@ -1,14 +1,10 @@
-package clara.analyzer
+package clara.analyzer.impl
 
-import clara.analyzer.impl.{BlockAnalyzer, Env}
 import clara.ast.Ast
 import clara.asg.{Terms, Types, TypeCons}
-import clara.testutil.AstTestHelpers
+import clara.testutil.{AstTestHelpers, BaseSpec}
 
-import org.scalatest.funsuite.AnyFunSuite
-import org.scalatest.{Inside, EitherValues}
-
-class BlockAnalyzerSpec extends AnyFunSuite with Inside with EitherValues {
+class BlockAnalyzerSpec extends BaseSpec {
   import Ast.{TypeDef => _, NamedType => _, _}
   import AstTestHelpers._
 

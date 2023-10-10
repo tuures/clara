@@ -2,12 +2,11 @@ package clara.parser
 
 import clara.util.Safe.SafeStringContext
 import clara.ast.{Ast, LiteralValue}
-import clara.testutil.AstTestHelpers
+import clara.testutil.{AstTestHelpers, BaseSpec}
 
-import org.scalatest.funsuite.AnyFunSuite
 import scala.reflect.ClassTag
 
-class ParserImplsSpec extends AnyFunSuite {
+class ParserImplsSpec extends BaseSpec {
   import Ast.{TypeDef => _, NamedType => _, _}
   import AstTestHelpers._
 

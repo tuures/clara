@@ -1,8 +1,8 @@
 package clara.ast
 
-import org.scalatest.funsuite.AnyFunSuite
+import clara.testutil.BaseSpec
 
-class PosSpec extends AnyFunSuite {
+class PosSpec extends BaseSpec {
 
   val sourceInfo = SourceInfo.fromString("foo.file", "abc\ndef\nghi")
 

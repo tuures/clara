@@ -2,9 +2,9 @@ package clara.ast
 
 import clara.util.Safe.SafeStringContext
 
-import org.scalatest.funsuite.AnyFunSuite
+import clara.testutil.BaseSpec
 
-class SourceInfoSpec extends AnyFunSuite {
+class SourceInfoSpec extends BaseSpec {
   def testSourceInfoFromString(testDesc: String)(
     content: String
   )(
