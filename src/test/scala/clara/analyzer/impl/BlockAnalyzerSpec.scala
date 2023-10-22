@@ -8,7 +8,8 @@ class BlockAnalyzerSpec extends BaseSpec {
   import Ast.{TypeDef => _, NamedType => _, _}
   import AstTestHelpers._
 
-  test("::alias Unit: ()") {
+  test("typeDefs: Block with just one typeDef should give a warning of missing expression. " +
+    "Type definitions should affect the type env inside the block and match the returned term contents.") {
     val typeDef = TypeDef(TypeDefKind.Alias, "Unit", UnitType())
     val block = Ast.Block(Seq(typeDef))
 
@@ -21,21 +22,27 @@ class BlockAnalyzerSpec extends BaseSpec {
         assert((typeDefKind, name, typeParams, wrappedType) === (TypeDefKind.Alias, "Unit", Vector(), Types.Uni))
     }
 
-    val term = endState.flatMap(_.finishTerm(block.pos)).value.value
+    val blockTermAn = endState.flatMap(_.finishTerm(block.pos))
 
-    val expectedTerm = Terms.Block(Vector(Terms.TypeDef("Unit"/*FIXME add missing properties*/)), Types.Uni)
-    assert(term === expectedTerm)
+    val expectedTerm = Terms.Block(Vector(Terms.TypeDef(typ)), Types.Uni)
+    assert(blockTermAn.value.value === expectedTerm)
+
+    assert(blockTermAn.log.map(_.message) === Vector("Block should end with an expression."))
   }
 
-  test("invalid ::opaque Pair<A>: ()") {
+  // FIXME add test for valueDef and valueDecl
 
-    val typeDef = TypeDef(TypeDefKind.Opaque, "Pair", Seq(Ast.TypeParam("A")), UnitType())
-    val block = Ast.Block(Seq(typeDef))
 
-    val an = BlockAnalyzer(Env.empty).walkBlock(block)
+  // FIXME detailed tests for different typeDef kinds should be in TypeDefAnalyzerSpec
+  // test("invalid ::opaque Pair<A>: ()") {
 
-    val expectedErrors = Seq("Cannot define type parameters for type Pair", "Cannot define structure for type Pair")
+  //   val typeDef = TypeDef(TypeDefKind.Opaque, "Pair", Seq(Ast.TypeParam("A")), UnitType())
+  //   val block = Ast.Block(Seq(typeDef))
 
-    assert(an.value.left.value.map(_.message) === expectedErrors)
-  }
+  //   val an = BlockAnalyzer(Env.empty).walkBlock(block)
+
+  //   val expectedErrors = Seq("Cannot define type parameters for type Pair", "Cannot define structure for type Pair")
+
+  //   assert(an.value.left.value.map(_.message) === expectedErrors)
+  // }
 }

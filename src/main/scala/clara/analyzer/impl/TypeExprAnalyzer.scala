@@ -11,8 +11,8 @@ case class TypeExprAnalyzer(env: Env) {
     case Ast.BottomType(_) => An.result(Types.Bottom)
     case Ast.UnitType(_) => An.result(Types.Uni)
     case Ast.TupleType(ts, pos) => ???
-    case Ast.NamedType(name, typeArgs, pos) =>
-      env.useTypeCon(name.name, name.pos).zip(An.seq(typeArgs.map(walkTypeExpr))).flatMap { case (typeCon, args) =>
+    case Ast.NamedType(Ast.NameWithPos(name, namePos), typeArgs, pos) =>
+      env.useTypeCon(name, namePos).zip(An.seq(typeArgs.map(walkTypeExpr))).flatMap { case (typeCon, args) =>
         TypeInterpreter.instantiate(typeCon, args, pos)
       }
     case Ast.RecordType(fields, _) =>
@@ -30,3 +30,11 @@ case class TypeExprAnalyzer(env: Env) {
     }
   }
 }
+
+// object TypeExprAnalyzer {
+//   def typ(env: Env)(typeExpr: Ast.TypeExpr): An[Types.Type] = {
+//     def typ = typ(env)(_)
+
+//     typeExpr match ...
+//   }
+// }

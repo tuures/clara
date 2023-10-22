@@ -2,6 +2,7 @@ package clara.asg
 
 import clara.asg.Attributes.MethodAttributes
 import clara.asg.Types.Type
+import clara.asg.TypeCons.TypeCon
 import clara.ast.LiteralValue
 
 object Terms {
@@ -41,7 +42,7 @@ object Terms {
   // FIMXE
   case class AliasTypeDef(name: String) extends InBlockDecl
   // FIXME
-  case class TypeDef(name: String) extends InBlockDecl
+  case class TypeDef(con: TypeCon) extends InBlockDecl
   // FIXME
   case class NewExpr(typ: Type) extends ValueExpr
 
