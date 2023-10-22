@@ -16,6 +16,11 @@ case class An[+A](w: An.Impl[A]) {
   def tell(ms: Seq[Message]) = An(w.tell(ms))
   def tell(m: Message): An[A] = tell(Vector(m))
 
+  /**
+   * Combines two analyses together.
+   * Returns a combined Failure if either one is a Failure.
+   * Returns a Success with the results tupled if both are Successes.
+   */
   def zip[B](b: An[B]): An[(A, B)] = {
     val Writer(value, log) = w.zip(b.w)
     val zippedValue = value match {

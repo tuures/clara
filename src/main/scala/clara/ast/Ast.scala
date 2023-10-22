@@ -69,12 +69,11 @@ object Ast {
   sealed trait TypeDefKind
   object TypeDefKind {
     sealed trait Wrapper extends TypeDefKind
-    sealed trait Solitary extends TypeDefKind
     case object Alias extends Wrapper
     case object Tagged extends Wrapper
     case object Boxed extends Wrapper
-    case object Opaque extends Solitary
-    case object Singleton extends Solitary
+    case object Opaque extends TypeDefKind
+    case object Singleton extends TypeDefKind
   }
 
   // sealed trait Variance

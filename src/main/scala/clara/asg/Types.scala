@@ -35,8 +35,14 @@ object TypeCons {
     uniq: Uniq = Uniq(),
   ) extends TypeCon
 
-  case class SolitaryTypeCon(
-    typeDefKind: TypeDefKind.Solitary,
+  case class OpaqueTypeCon(
+    name: String,
+    typeParams: Seq[ParamCon],
+    definedAt: Pos,
+    uniq: Uniq = Uniq(),
+  ) extends TypeCon
+
+  case class SingletonTypeCon(
     name: String,
     definedAt: Pos,
     uniq: Uniq = Uniq(),
@@ -74,32 +80,32 @@ object Types {
   //   ::tagged Foo (defined at firstfoo.clara:123)
   // to expected type
   //   ::tagged Foo (defined at anotherfoo.clara:123)
-  sealed trait Wrapper extends Nominal
 
   case class Alias(
     con: TypeCons.WrapperTypeCon,
     typeArgs: Seq[Type],
     wrappedType: Types.Type,
-  ) extends Wrapper
+  ) extends Nominal
 
   case class Tagged(
     con: TypeCons.WrapperTypeCon,
     typeArgs: Seq[Type],
     wrappedType: Types.Type,
-  ) extends Wrapper
+  ) extends Nominal
 
   case class Boxed(
     con: TypeCons.WrapperTypeCon,
     typeArgs: Seq[Type],
     wrappedType: Types.Type,
-  ) extends Wrapper
+  ) extends Nominal
 
   case class Opaque(
-    con: TypeCons.SolitaryTypeCon,
+    con: TypeCons.OpaqueTypeCon,
+    typeArgs: Seq[Type],
   ) extends Nominal
 
   case class Singleton(
-    con: TypeCons.SolitaryTypeCon,
+    con: TypeCons.SingletonTypeCon,
   ) extends Nominal
   // ::tagged Box<A>: { value: A }
   // TaggedCon(Box, Seq(a), Record("value" -> a))
@@ -173,7 +179,7 @@ object Types {
     case Alias(con, typeArgs, _) => con.name + typeArgs.map(toSource).safeString("<", " ,", ">")
     case Tagged(con, typeArgs, _) => con.name + typeArgs.map(toSource).safeString("<", " ,", ">")
     case Boxed(con, typeArgs, _) => con.name + typeArgs.map(toSource).safeString("<", " ,", ">")
-    case Opaque(con) => con.name
+    case Opaque(con, typeArgs) => con.name + typeArgs.map(toSource).safeString("<", " ,", ">")
     case Singleton(con) => con.name
   }
 
