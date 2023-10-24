@@ -1,9 +1,10 @@
 package clara.analyzer.impl
 
-import clara.asg.{Terms, Types, TypeCons}
+import clara.asg.{Terms, Types}
 import clara.ast.{Ast, Pos, SourceMessage}
 
 import clara.util.Safe._
+
 
 case class BlockAnalyzerState(
   currentEnv: Env,
@@ -20,13 +21,13 @@ object BlockAnalyzerState {
   def begin(parentEnv: Env) = BlockAnalyzerState(parentEnv, Nil.toVector, None)
 }
 
-case class BlockAnalyzer(parentEnv: Env) {
+case class BlockAnalyzerImpl(parentEnv: Env) {
 
   case class BlockContentStep(nextEnv: Env, contentTerm: Terms.BlockContent, nextReturnType: Option[Types.Type])
 
   def walkBlockContent(currentEnv: Env, bc: Ast.BlockContent, isLast: Boolean): An[BlockContentStep] = bc match {
     case valueExprAst: Ast.ValueExpr =>
-      ValueExprAnalyzer(currentEnv).walkValueExpr(valueExprAst).flatMap { valueExprTerm =>
+      ValueExprAnalyzer.valueExprTerm(currentEnv, valueExprAst).flatMap { valueExprTerm =>
         val isUnit = valueExprTerm.typ === Types.Uni
 
         lazy val discardWarning = SourceMessage(bc.pos, "Non-unit value discarded in block")
@@ -35,41 +36,20 @@ case class BlockAnalyzer(parentEnv: Env) {
         An.result(BlockContentStep(currentEnv, valueExprTerm, Some(valueExprTerm.typ))).tell(maybeDiscardWarning)
       }
     case Ast.ValueDecl(name, t, pos) =>
-      TypeExprAnalyzer(currentEnv).walkTypeExpr(t).flatMap { typ =>
+      TypeExprAnalyzer.typeExprType(currentEnv, t).flatMap { typ =>
         // FIXME use namePos to be consistent with valueDef and typeDef
         currentEnv.addOrShadowValue((name, typ), parentEnv, pos)
       }.map { nextEnv =>
         BlockContentStep(nextEnv, Terms.ValueDecl(name), None)
       }
     case Ast.ValueDef(target, e, _) =>
-      ValueExprAnalyzer(currentEnv).walkValueExpr(e).flatMap { valueExprTerm =>
+      ValueExprAnalyzer.valueExprTerm(currentEnv, e).flatMap { valueExprTerm =>
         PatternAnalyzer(currentEnv, parentEnv).walkAssignment(target, valueExprTerm.typ).
           map { case (targetTerm, nextEnv) =>
             BlockContentStep(nextEnv, Terms.ValueDef(targetTerm, valueExprTerm), None)
           }
       }
-    // TODO remove duplication between alias and typedef
-    // case Ast.AliasTypeDef(name, typeParams, typeExpr, pos) => {
-    //   TypeParamAnalyzer(currentEnv).walkTypeParams(typeParams).flatMap { case (paramTypes, withParamsEnv) =>
-    //     TypeExprAnalyzer(withParamsEnv).walkTypeExpr(typeExpr).map { typ =>
-    //       Types.maybeForAll(paramTypes, Types.Alias(name, typ))
-    //     }
-    //   }.flatMap { aliasType =>
-    //     currentEnv.addOrShadowType((name, aliasType), parentEnv, pos).
-    //       map(nextEnv => (Terms.AliasTypeDef(name), None, nextEnv))
-    //   }
-    // }
-    // case Ast.TypeDef(typeDefKind, name, typeParams, typeExpr, pos) => {
-    //   TypeParamAnalyzer(currentEnv).walkTypeParams(typeParams).flatMap { case (paramTypes, withParamsEnv) =>
-    //     TypeExprAnalyzer(withParamsEnv).walkTypeExpr(typeExpr).map { typ =>
-    //       Types.maybeForAll(paramTypes, Types.Alias(name, Types.Unique(constructible = !isDecl, typ)))
-    //     }
-    //   }.flatMap { uniqueType =>
-    //     currentEnv.addOrShadowType((name, uniqueType), parentEnv, pos).
-    //       map(nextEnv => (Terms.TypeDef(name), None, nextEnv))
-    //   }
-    // }
-    case typeDef: Ast.TypeDef => TypeDefAnalyzer.walkTypeDef(currentEnv, typeDef).flatMap { typeDefTerm =>
+    case typeDef: Ast.TypeDef => TypeDefAnalyzer.typeDefTerm(currentEnv, typeDef).flatMap { typeDefTerm =>
       val Ast.NameWithPos(name, namePos) = typeDef.name
 
       currentEnv.addOrShadowTypeCon((name, typeDefTerm.con), parentEnv, namePos).
@@ -93,55 +73,9 @@ case class BlockAnalyzer(parentEnv: Env) {
         }
     }
 
-  def walkBlock(block: Ast.Block): An[Terms.Block] = walkBlockContents(block.bcs).flatMap(_.finishTerm(block.pos))
+  def blockTerm(block: Ast.Block): An[Terms.Block] = walkBlockContents(block.bcs).flatMap(_.finishTerm(block.pos))
 }
 
-// FIXME move
-case class TypeParamAnalyzer(parentEnv: Env) {
-  def walkTypeParams(typeParams: Seq[Ast.TypeParam]): An[(Env, Seq[TypeCons.ParamCon])] =
-    An.step(typeParams)((parentEnv, Vector[TypeCons.ParamCon]())) { case ((currentEnv, currentParams), Ast.TypeParam(name, pos)) =>
-      val paramCon = TypeCons.ParamCon(name, pos)
-
-      currentEnv.addOrShadowTypeCon((name, paramCon), parentEnv, pos).map { nextEnv =>
-        (nextEnv, currentParams :+ paramCon)
-      }
-    }
-}
-
-// FIXME move
-object TypeDefAnalyzer {
-  def walkTypeDef(env: Env, typeDef: Ast.TypeDef): An[Terms.TypeDef] = {
-    val Ast.TypeDef(typeDefKind, Ast.NameWithPos(name, namePos), typeParams, maybeTypeExpr, pos) = typeDef
-
-    lazy val rejectTypeParams = An.errorIf(typeParams.length > 0)(
-      SourceMessage(pos, safe"Cannot define type parameters for type $name")
-    )
-
-    lazy val rejectStructure = An.errorIf(maybeTypeExpr.isDefined)(
-      SourceMessage(pos, safe"Cannot define structure for type $name")
-    )
-
-    lazy val structureTypeExpr = An.fromSomeOrError(
-      maybeTypeExpr,
-      SourceMessage(pos, safe"Structure needs to be defined for type $name")
-    )
-
-    (typeDefKind match {
-      case wrapperTypeDefKind: Ast.TypeDefKind.Wrapper =>
-        TypeParamAnalyzer(env).walkTypeParams(typeParams).zip(structureTypeExpr).
-          flatMap { case ((withParamsEnv, paramTypes), typeExpr) =>
-            TypeExprAnalyzer(withParamsEnv).walkTypeExpr(typeExpr).map { typ =>
-              TypeCons.WrapperTypeCon(wrapperTypeDefKind, name, paramTypes, typ, namePos)
-            }
-          }
-      case Ast.TypeDefKind.Opaque =>
-        TypeParamAnalyzer(env).walkTypeParams(typeParams).zip(rejectStructure).map { case ((_, paramTypes), _) =>
-          TypeCons.OpaqueTypeCon(name, paramTypes, namePos)
-        }
-      case Ast.TypeDefKind.Singleton =>
-        rejectTypeParams.zip(rejectStructure).map { case _ =>
-          TypeCons.SingletonTypeCon(name, namePos)
-        }
-    }).map(Terms.TypeDef(_))
-  }
+object BlockAnalyzer {
+  def blockTerm(parentEnv: Env, block: Ast.Block): An[Terms.Block] = BlockAnalyzerImpl(parentEnv).blockTerm(block)
 }

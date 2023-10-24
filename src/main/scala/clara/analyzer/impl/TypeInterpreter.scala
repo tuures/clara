@@ -1,32 +1,31 @@
 package clara.analyzer.impl
 
-import clara.asg.{Types, TypeCons}
-import clara.asg.Types.{Param, Type}
+import clara.asg.Types
+import clara.asg.Types.{Nominal, Alias, Tagged, Boxed, Opaque, Singleton, Param, Type}
 import clara.asg.TypeCons.{TypeCon, WrapperTypeCon, OpaqueTypeCon, SingletonTypeCon, ParamCon}
 import clara.ast.{SourceMessage, Pos}
 import clara.ast.Ast.TypeDefKind
 
 import clara.util.Safe._
-import clara.asg.TypeCons.SingletonTypeCon
 
-// rename TypeInterpreter?
+
 object TypeInterpreter {
   import Impl._
 
-  def instantiate(typeCon: TypeCon, typeArgs: Seq[Type], pos: Pos): An[Type] = typeCon match {
+  def instantiate(typeCon: TypeCon, typeArgs: Seq[Type], pos: Pos): An[Nominal] = typeCon match {
     case con @ WrapperTypeCon(typeDefKind, _, typeParams, wrappedType, _, _) => {
       matchTypeArgs(typeParams, typeArgs, con, pos).
         map(substitutions => Types.substituteParams(substitutions, wrappedType)).map { wrappedTypeSubstituted =>
           typeDefKind match {
-            case TypeDefKind.Alias => Types.Alias(con, typeArgs, wrappedTypeSubstituted)
-            case TypeDefKind.Tagged => Types.Tagged(con, typeArgs, wrappedTypeSubstituted)
-            case TypeDefKind.Boxed => Types.Boxed(con, typeArgs, wrappedTypeSubstituted)
+            case TypeDefKind.Alias => Alias(con, typeArgs, wrappedTypeSubstituted)
+            case TypeDefKind.Tagged => Tagged(con, typeArgs, wrappedTypeSubstituted)
+            case TypeDefKind.Boxed => Boxed(con, typeArgs, wrappedTypeSubstituted)
           }
         }
     }
     case con @ OpaqueTypeCon(_, typeParams, _, _) =>
-      matchTypeArgs(typeParams, typeArgs, con, pos).map(_ => Types.Opaque(con, typeArgs))
-    case con: SingletonTypeCon => An.result(Types.Singleton(con))
+      matchTypeArgs(typeParams, typeArgs, con, pos).map(_ => Opaque(con, typeArgs))
+    case con: SingletonTypeCon => An.result(Singleton(con))
     case paramCon: ParamCon => An.result(instantiateParam(paramCon))
   }
 
@@ -36,7 +35,7 @@ object TypeInterpreter {
   }
 
   object Impl {
-    def instantiateParam(paramCon: ParamCon): Types.Param = Types.Param(paramCon)
+    def instantiateParam(paramCon: ParamCon): Param = Param(paramCon)
 
     def mismatchingTypeArgsMessage(params: Seq[Param], args: Seq[Type], con: TypeCon, pos: Pos) = {
       // FIXME better error message: print out params and args

@@ -1,31 +1,32 @@
 package clara.analyzer.impl
 
-import clara.asg.{Attributes, Terms, Types, Namespace}
+import clara.asg.{Terms, Types, Namespace}
 import clara.ast.{Ast, Pos, SourceMessage}
 
 import clara.util.Safe._
-// import clara.asg.Types.Alias
 
 
-case class ValueExprAnalyzer(env: Env) {
-  def walkValueExpr(valueExpr: Ast.ValueExpr): An[Terms.ValueExpr] = valueExpr match {
+case class ValueExprAnalyzerImpl(env: Env) {
+  def useNullaryType(name: String, pos: Pos): An[Types.Type] = env.useTypeCon(name, pos).flatMap { typeCon =>
+    TypeInterpreter.instantiate(typeCon, Nil, pos)
+  }
+
+  def valueExprTerm(valueExpr: Ast.ValueExpr): An[Terms.ValueExpr] = valueExpr match {
     case Ast.UnitLiteral(_) => An.result(Terms.UnitLiteral())
-    // case Ast.IntegerLiteral(value, pos) => env.useTypeInst("Int", Nil, pos).map { typ =>
-    //   Terms.IntegerLiteral(value, typ)
-    // }
-    // case Ast.FloatLiteral(value, pos) => env.useTypeInst("Float", Nil, pos).map { typ =>
-    //   Terms.FloatLiteral(value, typ)
-    // }
-    case Ast.StringLiteral(parts, pos) => env.useTypeCon("String", pos).flatMap { typeCon =>
-      TypeInterpreter.instantiate(typeCon, Nil, pos).map { typ =>
-        Terms.StringLiteral(parts, typ)
-      }
+    case Ast.IntegerLiteral(value, pos) => useNullaryType("Int", pos).map { typ =>
+      Terms.IntegerLiteral(value, typ)
+    }
+    case Ast.FloatLiteral(value, pos) => useNullaryType("Float", pos).map { typ =>
+      Terms.FloatLiteral(value, typ)
+    }
+    case Ast.StringLiteral(parts, pos) => useNullaryType("String", pos).map { typ =>
+      Terms.StringLiteral(parts, typ)
     }
     case _: Ast.Tuple => ???
-    case b: Ast.Block => BlockAnalyzer(env).walkBlock(b)
+    case b: Ast.Block => BlockAnalyzer.blockTerm(env, b)
     case Ast.NamedValue(name, pos) => env.useValue(name, pos).map(typ => Terms.NamedValue(name, typ))
     case Ast.ValueAs(e, t, pos) =>
-      walkValueExpr(e).zip(TypeExprAnalyzer(env).walkTypeExpr(t)).flatMap { case (term, typ) =>
+      valueExprTerm(e).zip(TypeExprAnalyzer.typeExprType(env, t)).flatMap { case (term, typ) =>
         TypeInterpreter.expectAssignable(term.typ, typ, pos).map((_: Unit) => term)
       }
     case Ast.Record(fields, _) => {
@@ -34,7 +35,7 @@ case class ValueExprAnalyzer(env: Env) {
 
         typeOpt.foreach(_ => ???) // FIXME
 
-        walkValueExpr(body).flatMap { bodyTerm =>
+        valueExprTerm(body).flatMap { bodyTerm =>
           An.fromSomeOrError(ns.add((name, Terms.Field(bodyTerm))), duplicateName)
         }
       }.map { fields =>
@@ -43,21 +44,26 @@ case class ValueExprAnalyzer(env: Env) {
     }
     case Ast.Lambda(parameter, body, pos) => ???
     case Ast.MemberSelection(obj, Ast.NamedMember(name/*, typeArgs*/, memberPos), pos) =>
-      walkValueExpr(obj).flatMap { objectTerm =>
+      valueExprTerm(obj).flatMap { objectTerm =>
         MemberSelectionAnalyzer(env, name, memberPos).walkMemberSelection(objectTerm).map { case (selectedMember, typ) =>
           Terms.MemberSelection(objectTerm, name, selectedMember, typ)
         }
       }
     case Ast.Call(callee, argument, pos) =>
-      walkValueExpr(callee).zip(walkValueExpr(argument)).flatMap { case (calleeTerm, argumentTerm) =>
+      valueExprTerm(callee).zip(valueExprTerm(argument)).flatMap { case (calleeTerm, argumentTerm) =>
         calleeTerm.typ match {
           case Types.Func(parameterType, resultType) =>
-            TypeInterpreter.expectAssignable(argumentTerm.typ, parameterType, argument.pos).map { _: Unit =>
+            TypeInterpreter.expectAssignable(argumentTerm.typ, parameterType, argument.pos).map { case () =>
               Terms.Call(calleeTerm, argumentTerm, resultType)
             }
-          case _ => An.error(SourceMessage(callee.pos, safe"Cannot call type `${Types.toSource(calleeTerm.typ)}`"))
+          case _ =>
+            An.error(SourceMessage(callee.pos, safe"Cannot call value of type `${Types.toSource(calleeTerm.typ)}`"))
         }
       }
   }
+}
 
+object ValueExprAnalyzer {
+  def valueExprTerm(env: Env, valueExpr: Ast.ValueExpr): An[Terms.ValueExpr] =
+    ValueExprAnalyzerImpl(env).valueExprTerm(valueExpr)
 }

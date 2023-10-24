@@ -10,6 +10,8 @@ object AstTestHelpers {
 
     def TypeDef(typeDefKind: TypeDefKind, name: String) =
       new TypeDef(typeDefKind, NameWithPos(name), Nil, None)
+    def TypeDef(typeDefKind: TypeDefKind, name: String, typeParams: Seq[TypeParam]) =
+      new TypeDef(typeDefKind, NameWithPos(name), typeParams, None)
     def TypeDef(typeDefKind: TypeDefKind, name: String, t: TypeExpr) =
       new TypeDef(typeDefKind, NameWithPos(name), Nil, Some(t))
     def TypeDef(typeDefKind: TypeDefKind, name: String, typeParams: Seq[TypeParam], t: TypeExpr) =

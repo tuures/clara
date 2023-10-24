@@ -11,7 +11,7 @@ case class PatternAnalyzer(env: Env, allowShadow: Env) {
       (Terms.NamePattern(name), nextEnv)
     }
     case Ast.PatternAs(p, t, pos) =>
-      TypeExprAnalyzer(env).walkTypeExpr(t).flatMap { typ =>
+      TypeExprAnalyzer.typeExprType(env, t).flatMap { typ =>
         TypeInterpreter.expectAssignable(fromType, typ, pos).flatMap { case () =>
           walkAssignment(p, typ)
         }

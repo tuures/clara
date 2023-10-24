@@ -8,12 +8,12 @@ class BlockAnalyzerSpec extends BaseSpec {
   import Ast.{TypeDef => _, NamedType => _, _}
   import AstTestHelpers._
 
-  test("typeDefs: Block with just one typeDef should give a warning of missing expression. " +
+  test("typeDef: Block with just one typeDef should give a warning of missing expression. " +
     "Type definitions should affect the type env inside the block and match the returned term contents.") {
     val typeDef = TypeDef(TypeDefKind.Alias, "Unit", UnitType())
-    val block = Ast.Block(Seq(typeDef))
+    val block = Block(Seq(typeDef))
 
-    val endState = BlockAnalyzer(Env.empty).walkBlockContents(block.bcs)
+    val endState = BlockAnalyzerImpl(Env.empty).walkBlockContents(block.bcs)
 
     val typ = endState.value.value.currentEnv.typeCons.get("Unit").get
 
@@ -30,19 +30,28 @@ class BlockAnalyzerSpec extends BaseSpec {
     assert(blockTermAn.log.map(_.message) === Vector("Block should end with an expression."))
   }
 
-  // FIXME add test for valueDef and valueDecl
+  test("typeDef: Allow shadowing from parent scope.") {
+    ???
+  }
 
+  test("valueDef and valueDecl: Should affect the value env inside the block and match the returned term contents.") {
+    ???
 
-  // FIXME detailed tests for different typeDef kinds should be in TypeDefAnalyzerSpec
-  // test("invalid ::opaque Pair<A>: ()") {
+    //   ve("Block yields type of the last expression", "String") {
+//     Block(Seq(UnitLiteral(), StringLiteral(Seq(LiteralValue.StringPlainPart("foo")))))
+//   }
+//
+  }
 
-  //   val typeDef = TypeDef(TypeDefKind.Opaque, "Pair", Seq(Ast.TypeParam("A")), UnitType())
-  //   val block = Ast.Block(Seq(typeDef))
+  test("valueDef and valueDecl: Allow shadowing from parent scope.") {
+    ???
+  }
 
-  //   val an = BlockAnalyzer(Env.empty).walkBlock(block)
+  test("valueExpr: Non-unit returning expression should give warning unless it's the last item in the block") {
+    ???
+  }
 
-  //   val expectedErrors = Seq("Cannot define type parameters for type Pair", "Cannot define structure for type Pair")
-
-  //   assert(an.value.left.value.map(_.message) === expectedErrors)
-  // }
+  test("methods: ???") {
+    ???
+  }
 }

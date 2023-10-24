@@ -13,20 +13,15 @@ import clara.asg.Attributes.MethodAttributes
 case class EnvMethod(attributes: MethodAttributes, typ: Type)
 
 case class Env(typeCons: Namespace[TypeCon], values: Namespace[Type], methods: UniqInfo[Namespace[EnvMethod]]) {
-  // def getValue(name: String): Option[Type] = values.get(name)
   def useValue(name: String, pos: Pos): An[Type] = An.fromSomeOrError(values.get(name), SourceMessage(pos, safe"Not found: value `$name`"))
-  // def getType(name: String): Option[Type] = types.get(name)
   def useTypeCon(name: String, pos: Pos): An[TypeCon] =
     An.fromSomeOrError(typeCons.get(name), SourceMessage(pos, safe"Not found: type `$name`"))
-
-  // def addValue(binding: (String, Type), pos: Pos) = addOrShadowValue(binding, Env.empty, pos)
   def addOrShadowValue(binding: (String, Type), allowShadow: Env, pos: Pos): An[Env] = {
     val ns = values.addOrShadow(binding, allowShadow.values)
     lazy val error = SourceMessage(pos, safe"Cannot shadow existing value with same name `${binding._1}`")
 
     An.fromSomeOrError(ns, error).map(v => this.copy(values = v))
   }
-  // def addType(binding: (String, Type), pos: Pos) = addOrShadowType(binding, Env.empty, pos)
   def addOrShadowTypeCon(binding: (String, TypeCon), allowShadow: Env, pos: Pos): An[Env] = {
     val ns = typeCons.addOrShadow(binding, allowShadow.typeCons)
     lazy val error = SourceMessage(pos, safe"Cannot shadow existing type with same name `${binding._1}`")
