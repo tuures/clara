@@ -1,6 +1,7 @@
 package clara.analyzer.impl
 
-import clara.ast.{Ast, NoPos}
+import clara.ast.NoPos
+import clara.ast.Ast.TypeDefKind
 import clara.asg.{Types, TypeCons}
 import clara.testutil.BaseSpec
 import clara.util.Safe.{SafeStringContext, StringsSafeString}
@@ -31,18 +32,18 @@ class TypeInterpreterSpec extends BaseSpec {
   testInstantiate(aParamCon, Nil)(Some(aParamExpected))
   testInstantiate(aParamCon, Seq(Uni))(None)
 
-  val unitAliasCon = WrapperTypeCon(Ast.TypeDefKind.Alias, "UnitAlias", Nil, Uni, NoPos)
+  val unitAliasCon = WrapperTypeCon(TypeDefKind.Alias, "UnitAlias", Nil, Uni, NoPos)
   val unitAliasExpected = Alias(unitAliasCon, Nil, Uni)
   testInstantiate(unitAliasCon, Nil)(Some(unitAliasExpected))
   testInstantiate(unitAliasCon, Seq(Uni))(None)
 
-  val functionAliasCon = WrapperTypeCon(Ast.TypeDefKind.Alias, "Function", Seq(aParamCon, bParamCon), Func(aParamExpected, bParamExpected), NoPos)
+  val functionAliasCon = WrapperTypeCon(TypeDefKind.Alias, "Function", Seq(aParamCon, bParamCon), Func(aParamExpected, bParamExpected), NoPos)
   val functionAliasExpected = Alias(functionAliasCon, Seq(Uni, cParamExpected), Func(Uni, cParamExpected))
   testInstantiate(functionAliasCon, Seq(Uni, cParamExpected))(Some(functionAliasExpected))
   testInstantiate(functionAliasCon, Seq(Uni))(None)
   testInstantiate(functionAliasCon, Nil)(None)
 
-  val aliasOfAliasCon = WrapperTypeCon(Ast.TypeDefKind.Alias, "AliasOfFunction", Seq(cParamCon, dParamCon), Alias(functionAliasCon, Seq(cParamExpected, dParamExpected), Func(cParamExpected, dParamExpected)), NoPos)
+  val aliasOfAliasCon = WrapperTypeCon(TypeDefKind.Alias, "AliasOfFunction", Seq(cParamCon, dParamCon), Alias(functionAliasCon, Seq(cParamExpected, dParamExpected), Func(cParamExpected, dParamExpected)), NoPos)
   val aliasOfAliasExpected = Alias(aliasOfAliasCon, Seq(Uni, Uni), Alias(functionAliasCon, Seq(Uni, Uni), Func(Uni, Uni)))
   testInstantiate(aliasOfAliasCon, Seq(Uni, Uni))(Some(aliasOfAliasExpected))
   testInstantiate(aliasOfAliasCon, Seq(Uni, Uni, Uni))(None)
