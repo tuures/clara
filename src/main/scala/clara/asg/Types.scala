@@ -87,6 +87,7 @@ object Types {
     def apply(fields: (String, Type)*): Record = Record(Namespace(fields:_*))
     def empty: Record = apply()
   }
+
   // TODO case class Tuple(ts: Seq[Type]) extends Type
 
   sealed trait Nominal extends Type {

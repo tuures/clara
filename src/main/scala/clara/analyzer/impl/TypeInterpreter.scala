@@ -7,6 +7,7 @@ import clara.ast.{SourceMessage, Pos}
 import clara.ast.Ast.TypeDefKind
 
 import clara.util.Safe._
+import clara.asg.TypeCons
 
 
 object TypeInterpreter {
@@ -41,9 +42,9 @@ object TypeInterpreter {
       // FIXME better error message: print out params and args
 
       val message = if (params.length === 0) {
-        safe"Type `${con.name}` does not take any type arguments, but ${args.length.toString} given"
+        safe"Type `${TypeCons.toSource(con)}` does not take any type arguments, but ${args.length.toString} given"
       } else {
-        safe"Type `${con.name}` expects ${params.length.toString} type arguments, but ${args.length.toString} given"
+        safe"Type `${TypeCons.toSource(con)}` expects ${params.length.toString} type arguments, but ${args.length.toString} given"
       }
 
       SourceMessage(pos, message)

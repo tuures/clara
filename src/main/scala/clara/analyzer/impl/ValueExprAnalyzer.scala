@@ -30,13 +30,17 @@ case class ValueExprAnalyzerImpl(env: Env) {
         TypeInterpreter.expectAssignable(term.typ, typ, pos).map((_: Unit) => term)
       }
     case Ast.Record(fields, _) => {
-      An.step(fields)(Namespace.empty[Terms.Field]){ case (ns, Ast.FieldDef(name, typeOpt, body, pos)) =>
+      An.step(fields)(Namespace.empty[Terms.Field]){ case (ns, Ast.FieldDef(name, typeExprOpt, body, pos)) =>
         lazy val duplicateName = SourceMessage(pos, safe"Duplicate field name `$name`")
 
-        typeOpt.foreach(_ => ???) // FIXME
-
         valueExprTerm(body).flatMap { bodyTerm =>
-          An.fromSomeOrError(ns.add((name, Terms.Field(bodyTerm))), duplicateName)
+          typeExprOpt.fold(An.result(())) { typExpr =>
+            TypeExprAnalyzer.typeExprType(env, typExpr).flatMap { typ =>
+              TypeInterpreter.expectAssignable(bodyTerm.typ, typ, pos)
+            }
+          }.flatMap { case () =>
+            An.fromSomeOrError(ns.add((name, Terms.Field(bodyTerm))), duplicateName)
+          }
         }
       }.map { fields =>
         Terms.Record(fields, Types.Record(fields.mapValues(_.body.typ)))

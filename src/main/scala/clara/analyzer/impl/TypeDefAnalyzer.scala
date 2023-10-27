@@ -23,16 +23,16 @@ object TypeDefAnalyzer {
     val Ast.TypeDef(typeDefKind, Ast.NameWithPos(name, namePos), typeParams, maybeTypeExpr, pos) = typeDef
 
     lazy val rejectTypeParams = An.errorIf(typeParams.length > 0)(
-      SourceMessage(pos, safe"Cannot define type parameters for type $name")
+      SourceMessage(pos, safe"Cannot define type parameters for type `$name`")
     )
 
     lazy val rejectStructure = An.errorIf(maybeTypeExpr.isDefined)(
-      SourceMessage(pos, safe"Cannot define structure for type $name")
+      SourceMessage(pos, safe"Cannot define structure for type `$name`")
     )
 
     lazy val structureTypeExpr = An.fromSomeOrError(
       maybeTypeExpr,
-      SourceMessage(pos, safe"Structure needs to be defined for type $name")
+      SourceMessage(pos, safe"Structure needs to be defined for type `$name`")
     )
 
     (typeDefKind match {
