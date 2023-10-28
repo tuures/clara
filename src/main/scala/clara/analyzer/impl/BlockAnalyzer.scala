@@ -55,12 +55,12 @@ case class BlockAnalyzerImpl(parentEnv: Env) {
       currentEnv.addOrShadowTypeCon((name, typeDefTerm.con), parentEnv, namePos).
         map(nextEnv => BlockContentStep(nextEnv, typeDefTerm, None))
     }
-    // case Ast.MethodDeclSection(targetTypeName, methods, _) =>
-    //   MethodSectionAnalyzer(currentEnv).walkDeclSection(targetTypeName, methods)
-    //     .map { case (term, nextEnv) => (term, None, nextEnv) }
-    // case Ast.MethodDefSection(targetTypeName, selfPattern, methods, _) =>
-    //   MethodSectionAnalyzer(currentEnv).walkDefSection(targetTypeName, selfPattern, methods)
-    //     .map { case (term, nextEnv) => (term, None, nextEnv) }
+    case Ast.MethodDeclSection(targetTypeName, methods, _) => ???
+      // MethodSectionAnalyzer(currentEnv).walkDeclSection(targetTypeName, methods)
+      //   .map { case (term, nextEnv) => (term, None, nextEnv) }
+    case Ast.MethodDefSection(targetTypeName, selfPattern, methods, _) => ???
+      // MethodSectionAnalyzer(currentEnv).walkDefSection(targetTypeName, selfPattern, methods)
+      //   .map { case (term, nextEnv) => (term, None, nextEnv) }
   }
 
   def walkBlockContents(bcs: Seq[Ast.BlockContent]): An[BlockAnalyzerState] =

@@ -1,4 +1,5 @@
 package clara.util
+// TODO move to clara?
 
 trait Message {
   def message: String

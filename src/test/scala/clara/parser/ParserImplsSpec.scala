@@ -183,9 +183,6 @@ class ParserImplsSpec extends BaseSpec {
 
   reject(p.block(_))("()")
 
-  parseAst(p.invalidBlockContent(_))("::foobar")(InvalidBlockContent("::foobar"))
-  reject(p.invalidBlockContent(_))("::foobar\n")
-
   parseAst(p.namedValue(_))("foo")(NamedValue("foo"))
 
   parseAst(p.namedType(_))("Foo")(NamedType("Foo"))

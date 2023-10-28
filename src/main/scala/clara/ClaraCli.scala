@@ -5,7 +5,7 @@ import clara.ast.AstPrinter
 import clara.jsemitter.JsEmitter
 import clara.jsemitter.impl.JsPrinter
 import clara.parser.Parser
-import clara.util.FileIo
+import clara.util.{FileIo, Message}
 
 import clara.util.Safe._
 
@@ -40,7 +40,10 @@ object ClaraCli {
   |  ${OutputPath}\toutput path
   """.stripMargin
 
-  def run(options: Options): Unit = FileIo.readFile(options.inputPath).map { input =>
+  def printMessages(prefix: String, messages: Seq[Message]): Unit =
+    messages.map(_.humanFormat.replaceAll("(^|\n)", "$1" + prefix)).foreach(println)
+
+  def run(options: Options): Unit = (FileIo.readFile(options.inputPath).flatMap { input =>
     Parser.parseString(options.inputPath, input)
   }.flatMap { programBlock =>
     if (options.printAst) {
@@ -48,21 +51,23 @@ object ClaraCli {
       println()
     }
 
-    Analyzer.analyzeProgramBlock(programBlock)
+    val (asgOrErrors, warnings) = Analyzer.analyzeProgramBlock(programBlock)
+
+    printMessages("WARN: ", warnings)
+
+    asgOrErrors
   }.map { asg =>
     JsEmitter.emitProgram(asg)
   }.map { jsAst =>
     JsPrinter.emitString(jsAst)
-  } match {
-    case Right(out) => options.outputPath match {
-      case Some(outputPath) => FileIo.writeFile(outputPath, out) match {
-        case Left(errors) => println(errors.map(_.humanFormat).safeString("\n"))
-        case Right(()) => ()
-      }
-      case None => println(out)
+  }.flatMap { jsSource =>
+    options.outputPath match {
+      case Some(outputPath) => FileIo.writeFile(outputPath, jsSource)
+      case None => Right(println(jsSource))
     }
-    case Left(errors) =>
-      println(errors.map(_.humanFormat).safeString("\n"))
+  }) match {
+    case Right(()) => ()
+    case Left(errors) => printMessages("ERROR: ", errors)
   }
 
   def main(args: Array[String]): Unit = {

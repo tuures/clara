@@ -1,4 +1,5 @@
 package clara.util
+// TODO move to clara.fs?
 
 import java.nio.file.{Files, Paths}
 import java.nio.charset.StandardCharsets

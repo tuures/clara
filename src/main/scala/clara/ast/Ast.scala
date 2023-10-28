@@ -97,6 +97,4 @@ object Ast {
   // TODO: add attributes?
   case class ValueDecl(name: String, t: TypeExpr, pos: Pos = NoPos) extends InBlockDecl
   case class ValueDef(target: Pattern, e: ValueExpr, pos: Pos = NoPos) extends InBlockDecl
-
-  case class InvalidBlockContent(invalidSyntax: String, pos: Pos = NoPos) extends BlockContent
 }

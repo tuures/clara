@@ -212,15 +212,10 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
 
   def blockItemSep[X: P] = P(nl | semi)
 
-  def invalidBlockContent[X: P]: P[InvalidBlockContent] =
-    P(pp(CharsWhile(c => !nlPred(c) && c.toString() != semi).!)(InvalidBlockContent.apply _))
-
   def blockContents[X: P](isProgramBlock: Boolean): P[Seq[BlockContent]] = P {
     val min = if (isProgramBlock) 1 else 2
 
-    def maybeInvalidBlockContent = P(if (isProgramBlock) invalidBlockContent else Fail)
-
-    def blockContent = P(inBlockDecl | valueExpr | maybeInvalidBlockContent)
+    def blockContent = P(inBlockDecl | valueExpr)
 
     P(blockItemSep.rep ~ blockContent.rep(min=min, sep=blockItemSep.rep(1)) ~ blockItemSep.rep)
   }
@@ -231,7 +226,7 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   // Names
 
   // FIXME allow numbers and other symbols in name
-  def name[X: P] = CharsWhile(c => Character.isLetter(c)).! // NOTE: Character.isLetter works only with BMP characters
+  def name[X: P] = CharsWhile(c => Character.isLetter(c)).!.opaque("name") // NOTE: Character.isLetter works only with BMP characters
 
   def nameWithPos[X: P]: P[NameWithPos] = P(pp(name)(NameWithPos.apply _))
 
@@ -363,7 +358,7 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   //////
   // In-block defs
   val doubleColon = "::"
-  def keywordSyntax[T, X: P](word: => P[T]): P[T] = P(doubleColon ~ word ~ nl.rep)
+  def keywordSyntax[T, X: P](word: => P[T]): P[T] = P(doubleColon ~/ word ~ nl.rep)
 
   def keyword[X: P](word: String) = P(keywordSyntax(word))
 
