@@ -81,6 +81,7 @@ object Types {
   // primitive structural composite types
   // every instance of case class corresponds to a type
   case class Func(parameter: Type, result: Type) extends Type
+  case class PolyFunc(typeParams: Seq[TypeCons.ParamCon], parameter: Type, result: Type) extends Type
 
   case class Record(fields: Namespace[Type]) extends Type
   object Record {
@@ -180,6 +181,9 @@ object Types {
     case Uni    => "()"
     case Func(parameter, result) =>
       safe"${toSource(parameter)} => ${toSource(result)}"
+    case PolyFunc(typeParams, parameter, result) =>
+      val paramsList = ToSourceImpl.typeListSource(typeParams.map(TypeCons.toSource))
+      safe"$paramsList${toSource(parameter)} => ${toSource(result)}"
     case Record(fields) =>
       fields
         .mapValues(toSource)

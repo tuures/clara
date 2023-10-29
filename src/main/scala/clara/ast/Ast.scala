@@ -41,25 +41,32 @@ object Ast {
   case class ValueAs(e: ValueExpr, t: TypeExpr, pos: Pos = NoPos) extends ValueExpr
   case class PatternAs(p: Pattern, t: TypeExpr, pos: Pos = NoPos) extends Pattern
 
-  case class Record(fields: Seq[FieldDef], pos: Pos = NoPos) extends ValueExpr
   // FIXME NameWithPos
   case class FieldDef(name: String, t: Option[TypeExpr], body: ValueExpr, pos: Pos = NoPos) extends Node
+  case class Record(fields: Seq[FieldDef], pos: Pos = NoPos) extends ValueExpr
+  // FIXME NameWithPos
+  case class FieldDecl(name: String, t: TypeExpr, pos: Pos = NoPos) extends Node
   case class RecordType(fields: Seq[FieldDecl], pos: Pos = NoPos) extends TypeExpr
   // FIXME add sign
-  case class FieldDecl(name: String, t: TypeExpr, pos: Pos = NoPos) extends Node
   // TODO case class RecordPattern(fields: Seq[FieldPattern], pos: Pos = NoPos) extends Pattern
   // TODO FieldPattern = NamePattern | PatternTyped(NamePattern, t)
   // TODO support nested patterns? like: {point: Point {x, y}, size: Int} => ...
   // TODO support renaming? like: {point @ p, size: Int} => ...
   // TODO how to support default values in patterns? {size: Int = 1}
 
-  case class Lambda(/*typeParams: Seq[TypeParam], */parameter: Pattern, body: ValueExpr, pos: Pos = NoPos) extends ValueExpr
-  case class FuncType(/*typeParams: Seq[TypeParam], */parameter: TypeExpr, result: TypeExpr, pos: Pos = NoPos) extends TypeExpr
+  // sealed trait Variance
+  // case object Covariant extends Variance
+  // case object Contravariant extends Variance
+  // case object Invariant extends Variance
+  // case class TypeParam(variance: Variance, name: String, arity: Int, pos: Pos = NoPos) extends Node
+  case class TypeParam(name: String, pos: Pos = NoPos) extends Node
+  case class Lambda(typeParams: Seq[TypeParam], parameter: Pattern, body: ValueExpr, pos: Pos = NoPos) extends ValueExpr
+  case class FuncType(typeParams: Seq[TypeParam], parameter: TypeExpr, result: TypeExpr, pos: Pos = NoPos) extends TypeExpr
 
   case class NamedMember(name: String, pos: Pos = NoPos) extends Node
   case class MemberSelection(obj: ValueExpr, member: NamedMember, pos: Pos = NoPos) extends ValueExpr
 
-  case class Call(callee: ValueExpr, argument: ValueExpr/*, typeArgs: Seq[TypeExpr]*/, pos: Pos = NoPos) extends ValueExpr
+  case class Call(callee: ValueExpr, argument: ValueExpr, pos: Pos = NoPos) extends ValueExpr
 
   //case class ConstructPattern(targetType: TypeName, selfPattern: Pattern, pos: Pos = NoPos) extends Pattern
 
@@ -75,13 +82,6 @@ object Ast {
     case object Opaque extends TypeDefKind
     case object Singleton extends TypeDefKind
   }
-
-  // sealed trait Variance
-  // case object Covariant extends Variance
-  // case object Contravariant extends Variance
-  // case object Invariant extends Variance
-  // case class TypeParam(variance: Variance, name: String, arity: Int, pos: Pos = NoPos) extends Node
-  case class TypeParam(name: String, pos: Pos = NoPos) extends Node
 
   // TODO: add attributes?
   case class TypeDef(typeDefKind: TypeDefKind, name: NameWithPos, typeParams: Seq[TypeParam], t: Option[TypeExpr], pos: Pos = NoPos) extends InBlockDecl

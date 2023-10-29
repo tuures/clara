@@ -8,7 +8,9 @@ import clara.ast.LiteralValue
 object Terms {
   // program structure
   sealed trait BlockContent
-  sealed trait Pattern
+  sealed trait Pattern {
+    def typ: Type
+  }
   sealed trait ValueExpr extends BlockContent {
     def typ: Type
   }
@@ -20,6 +22,9 @@ object Terms {
   case class UnitLiteral() extends ValueExpr {
     def typ = Types.Uni
   }
+  case class UnitPattern() extends Pattern {
+    def typ = Types.Uni
+  }
   case class IntegerLiteral(value: LiteralValue.Integer, typ: Type) extends ValueExpr
   case class FloatLiteral(value: LiteralValue.Float, typ: Type) extends ValueExpr
   case class StringLiteral(parts: Seq[LiteralValue.StringPart], typ: Type) extends ValueExpr
@@ -27,10 +32,12 @@ object Terms {
   case class Block(bcs: Seq[BlockContent], typ: Type) extends ValueExpr
 
   case class NamedValue(name: String, typ: Type) extends ValueExpr
-  case class NamePattern(name: String) extends Pattern
+  case class NamePattern(name: String, typ: Type) extends Pattern
 
-  case class Record(fields: Namespace[Field], typ: Types.Record) extends ValueExpr
   case class Field(body: ValueExpr)
+  case class Record(fields: Namespace[Field], typ: Types.Record) extends ValueExpr
+
+  case class Lambda(parameter: Pattern, body: ValueExpr, typ: Type) extends ValueExpr
 
   sealed trait SelectedMember
   case object SelectedField extends SelectedMember

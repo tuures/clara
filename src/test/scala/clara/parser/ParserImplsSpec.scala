@@ -7,7 +7,7 @@ import clara.testutil.{AstTestHelpers, BaseSpec}
 import scala.reflect.ClassTag
 
 class ParserImplsSpec extends BaseSpec {
-  import Ast.{TypeDef => _, NamedType => _, _}
+  import Ast.{TypeDef => _, NamedType => _, Lambda => _, FuncType => _, _}
   import AstTestHelpers._
 
   import fastparse._
@@ -20,7 +20,7 @@ class ParserImplsSpec extends BaseSpec {
     test(safe"${typeName} ${escapeInputForName(input)}") {
       parse(input, parser) match {
         case f: Parsed.Failure =>
-          fail("Failed to parse: " + f.trace().msg)
+          fail("Failed to parse: " + f.trace().longMsg)
         case s: Parsed.Success[_] =>
           assert(s.value === expected)
           assert(s.index === input.length, "Did not parse the whole input")
@@ -52,19 +52,22 @@ class ParserImplsSpec extends BaseSpec {
 
   parseAst(p.floatLiteral(_))("3.14")(FloatLiteral(LiteralValue.Float("3", "14")))
   parseAst(p.floatLiteral(_))("1_000.123_456")(FloatLiteral(LiteralValue.Float("1000", "123456")))
-  // FIXME parseAst(p.floatLiteral(_))("-1.1")(FloatLiteral(LiteralValue.Float("1", "1")))
+  parseAst(p.floatLiteral(_))("-1.1")(FloatLiteral(LiteralValue.Float("-1", "1")))
   reject(p.floatLiteral(_))("1._2")
+  reject(p.floatLiteral(_))("1.-2")
+  reject(p.floatLiteral(_))("--1.2")
+  reject(p.floatLiteral(_))("- 1.2")
   reject(p.floatLiteral(_))("1_.2")
 
   parseAst(p.integerLiteral(_))("123")(IntegerLiteral(LiteralValue.IntegerDec("123")))
-  // FIXME parse(p.integerLiteral, "-123")(IntegerLiteral(LiteralValue.IntegerDec("123")))
+  parseAst(p.integerLiteral(_))("-123")(IntegerLiteral(LiteralValue.IntegerDec("-123")))
   parseAst(p.integerLiteral(_))("1_000")(IntegerLiteral(LiteralValue.IntegerDec("1000")))
   parseAst(p.integerLiteral(_))("1_\n000")(IntegerLiteral(LiteralValue.IntegerDec("1000")))
   parseAst(p.integerLiteral(_))("#x1a")(IntegerLiteral(LiteralValue.IntegerHex("1a")))
-  // FIXME parse(p.integerLiteral, "-#x1a")(IntegerLiteral(LiteralValue.IntegerHex("1a")))
+  parseAst(p.integerLiteral(_))("-#x1a")(IntegerLiteral(LiteralValue.IntegerHex("-1a")))
   parseAst(p.integerLiteral(_))("#x1A")(IntegerLiteral(LiteralValue.IntegerHex("1A")))
   parseAst(p.integerLiteral(_))("#b0010")(IntegerLiteral(LiteralValue.IntegerBin("0010")))
-  // FIXME parse(p.integerLiteral, "-#b0010")(IntegerLiteral(LiteralValue.IntegerBin("0010")))
+  parseAst(p.integerLiteral(_))("-#b0010")(IntegerLiteral(LiteralValue.IntegerBin("-0010")))
   reject(p.integerLiteral(_))("1 0")
   reject(p.integerLiteral(_))("1_")
   reject(p.integerLiteral(_))("1__2")
@@ -73,6 +76,8 @@ class ParserImplsSpec extends BaseSpec {
   reject(p.integerLiteral(_))("#x1G")
   reject(p.integerLiteral(_))("#x1ö")
   reject(p.integerLiteral(_))("#b2")
+  reject(p.integerLiteral(_))("#b-2")
+  reject(p.integerLiteral(_))("- #b2")
 
   parseAst(p.processedStringLiteral(_))(""""str($foo)"""")(StringLiteral(Seq(
     LiteralValue.StringPlainPart("str("),
@@ -130,71 +135,31 @@ class ParserImplsSpec extends BaseSpec {
   parseAst(p.tuplePattern(_))("(\n(),\n(),\n)")(
     TuplePattern(Seq(UnitPattern(), UnitPattern()))
   )
-  // nt("multi-line tuple")(
-  //   """|(
-  //      |  1,
-  //      |  2
-  //      |)""".stripMargin
-  // )
-  // nt("multi-line tuple, trailing comma")(
-  //   """|(
-  //      |  1,
-  //      |  2,
-  //      |)""".stripMargin,
-  //   Some(Block(Seq(Tuple(Seq(IntegerLiteral("1"), IntegerLiteral("2"))))))
-  // )
 
 
   parseAst(p.parens(_))("((()))")(UnitLiteral())
   parseAst(p.parens(_))("((\n\n  ())\n)")(UnitLiteral())
-  // nt("multi-line parens")(
-  //   """|(
-  //      |  1
-  //      |)
-  //      |""".stripMargin
-  // )
   parseAst(p.typeParens(_))("((()))")(UnitType())
   parseAst(p.patternParens(_))("((()))")(UnitPattern())
 
   parseAst(p.block(_))("(\n\n// comment\n()\n;\n()\n();();;)")(
     Block(Seq.fill(4)(UnitLiteral()))
   )
-  // nt("simple block")(
-  //   """|(
-  //      |  foo
-  //      |  bar
-  //      |)""".stripMargin,
-  //   Some(Block(Seq(Block(Seq(NamedValue("foo"), NamedValue("bar"))))))
-  // )
-  // nt("semicolon block")(
-  //   """|(
-  //      |  foo; bar;
-  //      |  baz;;
-  //      |  xyzzy
-  //      |)""".stripMargin
-  // )
-
-  // nt("block as argument")(
-  //   """|foo (
-  //      |  bar
-  //      |  baz
-  //      |)""".stripMargin
-  // )
-
+  reject(p.block(_))("(foo)")
   reject(p.block(_))("()")
 
   parseAst(p.namedValue(_))("foo")(NamedValue("foo"))
 
   parseAst(p.namedType(_))("Foo")(NamedType("Foo"))
-  // FIXME parse(p.namedType, "Foo[Bar]")(
-  //   NamedType("Foo", Seq(NamedType("Bar"/*, Nil*/)))
-  // )
-  // FIXME parse(p.namedType, "Foo[Bar, Baz[Zot]]")(
-  //   NamedType("Foo", Seq(
-  //     NamedType("Bar", Nil),
-  //     NamedType("Baz", Seq(NamedType("Zot"/*, Nil*/))))
-  //   )
-  // )
+  parseAst(p.namedType(_))("Foo<Bar>")(
+    NamedType("Foo", Seq(NamedType("Bar")))
+  )
+  parseAst(p.namedType(_))("Foo<Bar, Baz<Zot>>")(
+    NamedType("Foo", Seq(
+      NamedType("Bar", Nil),
+      NamedType("Baz", Seq(NamedType("Zot"))))
+    )
+  )
 
   parseAst(p.namePattern(_))("foo")(NamePattern("foo"))
 
@@ -228,26 +193,29 @@ class ParserImplsSpec extends BaseSpec {
   parseAst(p.lambda(_))("() => ()")(
     Lambda(UnitPattern(), UnitLiteral())
   )
+  parseAst(p.lambda(_))("a => a")(
+    Lambda(NamePattern("a"), NamedValue("a"))
+  )
+  parseAst(p.lambda(_))("<A>() => ()")(
+    Lambda(Seq(TypeParam("A")), UnitPattern(), UnitLiteral())
+  )
   parseAst(p.lambda(_))("() =>\n  ()")(
+    Lambda(UnitPattern(), UnitLiteral())
+  )
+  // TODO accept or reject?
+  parseAst(p.lambda(_))("() =>\n\n  ()")(
     Lambda(UnitPattern(), UnitLiteral())
   )
   parseAst(p.lambda(_))("() =>//comment\n  ()")(
     Lambda(UnitPattern(), UnitLiteral())
   )
-  // nt("multi-line function")(
-  //   """|a = () =>
-  //      |  1.squared
-  //      |2
-  //      |""".stripMargin
-  // )
-  // t("(a: Int, b: String) => (b, a, 1, 'foobar')")
-  // t("(a, b): (Int, Int) => 1")
-  // t("(a: Int, (b: Int, c: Int)) => 'str'")
-  // t("() => foo()")
-  // t("() => bar")
+  reject(p.lambda(_))("()\n=> ()")
 
   parseAst(p.funcType(_))("() => ()")(
     FuncType(UnitType(), UnitType())
+  )
+  parseAst(p.funcType(_))("<A>() => ()")(
+    FuncType(Seq(TypeParam("A")), UnitType(), UnitType())
   )
 
   parseAst(p.memberOrCall(_))("foo.length.toString")(
@@ -256,13 +224,6 @@ class ParserImplsSpec extends BaseSpec {
   parseAst(p.memberOrCall(_))("foo.\n  length.\n  toString")(
     MemberSelection(MemberSelection(NamedValue("foo"), NamedMember("length")), NamedMember("toString"))
   )
-  // nt("multi-line member")(
-  //   """|123.
-  //      |  squared.
-  //      |  doubled.
-  //      |  sqrt
-  //      |""".stripMargin
-  // )
   parseAst(p.memberOrCall(_))("foo()")(
     Call(NamedValue("foo"), UnitLiteral())
   )
@@ -279,14 +240,14 @@ class ParserImplsSpec extends BaseSpec {
 
     Call(foobar, zotbaz)
   }
-  // TODO: call with space should have lower precedence than call without space?
-  // parseAst(p.memberOrCall(_))("foo.bar zot.baz buz(qux)"){
-  //   val foobar = MemberSelection(NamedValue("foo"), NamedMember("bar"))
-  //   val zotbaz = MemberSelection(NamedValue("zot"), NamedMember("baz"))
-  //   val buzqux = Call(NamedValue("buz"), NamedValue("qux"))
+  // TODO: call with space should have lower precedence than call without space
+  parseAst(p.memberOrCall(_))("foo.bar zot.baz buz(qux)"){
+    val foobar = MemberSelection(NamedValue("foo"), NamedMember("bar"))
+    val zotbaz = MemberSelection(NamedValue("zot"), NamedMember("baz"))
+    val buzqux = Call(NamedValue("buz"), NamedValue("qux"))
 
-  //   Call(Call(foobar, zotbaz), buzqux)
-  // }
+    Call(Call(foobar, zotbaz), buzqux)
+  }
   parseAst(p.memberOrCall(_))("foo.bar(zot).baz"){
     val foobar = MemberSelection(NamedValue("foo"), NamedMember("bar"))
     val zot = NamedValue("zot")
@@ -435,6 +396,8 @@ class ParserImplsSpec extends BaseSpec {
   // )
 
   parseAst(p.valueExpr(_))("1234")(IntegerLiteral(LiteralValue.IntegerDec("1234")))
+  parseAst(p.valueExpr(_))("(a = (); a)")(Block(Seq(ValueDef(NamePattern("a"), UnitLiteral()), NamedValue("a"))))
+  parseAst(p.valueExpr(_))("(a => a)")(Lambda(NamePattern("a"), NamedValue("a")))
   reject(p.valueExpr(_))("foo square = 1")
-  reject(p.valueExpr(_))("1square = 1")
+  reject(p.valueExpr(_))("square = 1")
 }

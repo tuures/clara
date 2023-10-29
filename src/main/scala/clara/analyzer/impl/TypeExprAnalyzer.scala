@@ -4,6 +4,7 @@ import clara.asg.{Types, Namespace}
 import clara.ast.{Ast, SourceMessage}
 
 import clara.util.Safe._
+import clara.asg.TypeCons
 
 case class TypeExprAnalyzerImpl(env: Env) {
   def typeExprType(typeExpr: Ast.TypeExpr): An[Types.Type] = typeExpr match {
@@ -26,12 +27,21 @@ case class TypeExprAnalyzerImpl(env: Env) {
           An.fromSomeOrError(ns.add((name, typ)), duplicateName)
         }
       }.map(Types.Record(_))
-    case Ast.FuncType(parameter, result, pos) => {
-      typeExprType(parameter).zip(typeExprType(result)).map { case (parameterTyp, resultTyp) =>
-        Types.Func(parameterTyp, resultTyp)
+    case Ast.FuncType(typeParams, parameter, result, _) => {
+      TypeParamAnalyzer(env).walkTypeParams(typeParams).flatMap { case (withParamsEnv, typeParamCons) =>
+        TypeExprAnalyzerImpl(withParamsEnv).funcType(typeParamCons, parameter, result)
       }
     }
   }
+
+  def funcType(typeParamCons: Seq[TypeCons.ParamCon], parameter: Ast.TypeExpr, result: Ast.TypeExpr): An[Types.Type] =
+    typeExprType(parameter).zip(typeExprType(result)).map { case (parameterTyp, resultTyp) =>
+      typeParamCons match {
+        // FIXME ugly
+        case Nil => Types.Func(parameterTyp, resultTyp)
+        case _ => Types.PolyFunc(typeParamCons, parameterTyp, resultTyp)
+      }
+    }
 }
 
 object TypeExprAnalyzer {

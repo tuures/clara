@@ -84,6 +84,7 @@ case class JsPrinterImpl() {
   }
 
   def walkPattern(pattern: Pattern): String = pattern match {
+    case UnitPattern => "()"
     case NamePattern(name) => name
   }
 

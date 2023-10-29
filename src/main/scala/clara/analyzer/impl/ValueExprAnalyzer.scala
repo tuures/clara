@@ -46,24 +46,48 @@ case class ValueExprAnalyzerImpl(env: Env) {
         Terms.Record(fields, Types.Record(fields.mapValues(_.body.typ)))
       }
     }
-    case Ast.Lambda(parameter, body, pos) => ???
-    case Ast.MemberSelection(obj, Ast.NamedMember(name/*, typeArgs*/, memberPos), pos) =>
+    case l: Ast.Lambda => lambdaTerm(l, None)
+    case Ast.MemberSelection(obj, Ast.NamedMember(name, memberPos), _) =>
       valueExprTerm(obj).flatMap { objectTerm =>
         MemberSelectionAnalyzer(env, name, memberPos).walkMemberSelection(objectTerm).map { case (selectedMember, typ) =>
           Terms.MemberSelection(objectTerm, name, selectedMember, typ)
         }
       }
-    case Ast.Call(callee, argument, pos) =>
-      valueExprTerm(callee).zip(valueExprTerm(argument)).flatMap { case (calleeTerm, argumentTerm) =>
+    case Ast.Call(callee, argument, _) => {
+      valueExprTerm(callee).flatMap { calleeTerm =>
         calleeTerm.typ match {
           case Types.Func(parameterType, resultType) =>
-            TypeInterpreter.expectAssignable(argumentTerm.typ, parameterType, argument.pos).map { case () =>
-              Terms.Call(calleeTerm, argumentTerm, resultType)
+            ((parameterType, argument) match {
+              case (Types.Func(p, _), l: Ast.Lambda) => lambdaTerm(l, Some(p))
+              case _ => valueExprTerm(argument)
+            }).flatMap { argumentTerm =>
+              TypeInterpreter.expectAssignable(argumentTerm.typ, parameterType, argument.pos).map { case () =>
+                Terms.Call(calleeTerm, argumentTerm, resultType)
+              }
             }
           case _ =>
             An.error(SourceMessage(callee.pos, safe"Cannot call value of type `${Types.toSource(calleeTerm.typ)}`"))
         }
       }
+    }
+  }
+
+  def lambdaTerm(lambda: Ast.Lambda, expectedParameterType: Option[Types.Type]): An[Terms.Lambda] = {
+    val Ast.Lambda(typeParams, parameter, body, _) = lambda
+
+    TypeParamAnalyzer(env).walkTypeParams(typeParams).flatMap { case (withParamsEnv, typeParamCons) =>
+        PatternAnalyzer(withParamsEnv, withParamsEnv).walkAssignment(parameter, expectedParameterType).
+        flatMap { case (funcBodyEnv, parameterTerm) =>
+          ValueExprAnalyzerImpl(funcBodyEnv).valueExprTerm(body).map { bodyTerm =>
+            val typ: Types.Type = typeParamCons match {
+              // FIXME ugly
+              case Nil => Types.Func(parameterTerm.typ, bodyTerm.typ)
+              case _ => Types.PolyFunc(typeParamCons, parameterTerm.typ, bodyTerm.typ)
+            }
+            Terms.Lambda(parameterTerm, bodyTerm, typ)
+          }
+        }
+    }
   }
 }
 

@@ -44,16 +44,14 @@ case class BlockAnalyzerImpl(parentEnv: Env) {
       }
     case Ast.ValueDef(target, e, _) =>
       ValueExprAnalyzer.valueExprTerm(currentEnv, e).flatMap { valueExprTerm =>
-        PatternAnalyzer(currentEnv, parentEnv).walkAssignment(target, valueExprTerm.typ).
-          map { case (targetTerm, nextEnv) =>
+        PatternAnalyzer(currentEnv, parentEnv).walkAssignment(target, Some(valueExprTerm.typ)).
+          map { case (nextEnv, targetTerm) =>
             BlockContentStep(nextEnv, Terms.ValueDef(targetTerm, valueExprTerm), None)
           }
       }
-    case typeDef: Ast.TypeDef => TypeDefAnalyzer.typeDefTerm(currentEnv, typeDef).flatMap { typeDefTerm =>
-      val Ast.NameWithPos(name, namePos) = typeDef.name
-
-      currentEnv.addOrShadowTypeCon((name, typeDefTerm.con), parentEnv, namePos).
-        map(nextEnv => BlockContentStep(nextEnv, typeDefTerm, None))
+    case typeDef: Ast.TypeDef =>
+      TypeDefAnalyzer.typeDefTerm(currentEnv, parentEnv, typeDef).map { case (nextEnv, typeDefTerm) =>
+        BlockContentStep(nextEnv, typeDefTerm, None)
     }
     case Ast.MethodDeclSection(targetTypeName, methods, _) => ???
       // MethodSectionAnalyzer(currentEnv).walkDeclSection(targetTypeName, methods)

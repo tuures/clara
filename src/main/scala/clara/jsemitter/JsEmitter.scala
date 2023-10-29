@@ -8,6 +8,7 @@ import clara.ast.LiteralValue
 import impl._
 
 import clara.util.Safe._
+import clara.asg.Terms.UnitPattern
 
 
 object JsEmitter {
@@ -32,6 +33,7 @@ object JsEmitter {
     case Terms.Record(fields, _) => JsAst.ObjectLiteral(fields.mapValues { case Terms.Field(body) =>
         emitValueExpr(body)
       }.entries)
+    case Terms.Lambda(parameter, body, _) => JsAst.UnaryArrowFunc(emitPattern(parameter), Seq(emitValueExpr(body)))
     case Terms.MemberSelection(obj, memberName, selectedMember, _) =>
       emitMemberSelection(obj, memberName, selectedMember)
     case Terms.Call(callee @ Terms.MemberSelection(obj, memberName, selectedMember, _), argument, _) =>
@@ -76,7 +78,7 @@ object JsEmitter {
   }
 
   def emitValueDef(target: Terms.Pattern, e: Terms.ValueExpr) = target match {
-    case Terms.NamePattern(name) => JsAst.Const(JsAst.NamePattern(name), emitValueExpr(e))
+    case Terms.NamePattern(name, _) => JsAst.Const(JsAst.NamePattern(name), emitValueExpr(e))
   }
 
   def emitMethodDefSection(targetType: Types.Type, selfPattern: Terms.Pattern, methodDefs: Namespace[Terms.MethodDef]) = {
@@ -120,8 +122,9 @@ object JsEmitter {
   def emitCall(callee: Terms.ValueExpr, argument: Terms.ValueExpr) =
     JsAst.UnaryCall(emitValueExpr(callee), emitValueExpr(argument))
 
-  def emitPattern(pattern: Terms.Pattern) = pattern match {
-    case Terms.NamePattern(name) => JsAst.NamePattern(name)
+  def emitPattern(pattern: Terms.Pattern): JsAst.Pattern = pattern match {
+    case UnitPattern() => JsAst.UnitPattern
+    case Terms.NamePattern(name, _) => JsAst.NamePattern(name)
   }
 }
 

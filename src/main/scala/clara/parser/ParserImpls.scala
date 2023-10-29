@@ -281,7 +281,7 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
 
   val funcArrow = "=>"
 
-  def funcSyntax[T1, T2, X: P](in: => P[T1], out: => P[T2]) = P(in ~ funcArrow ~ nl.rep ~ out)
+  def funcSyntax[T1, T2, X: P](in: => P[T1], out: => P[T2]) = P(maybeTypeParams ~ in ~ funcArrow ~ nl.rep ~ out)
 
   def lambda[X: P]: P[Lambda] = P(pp(funcSyntax(pattern, valueExpr))(Lambda.apply _))
 
@@ -333,6 +333,7 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   def typeListSyntax[T, X: P](item: => P[T]): P[Seq[T]] = P(angleOpen ~ commaSeparatedRep(1, item) ~ angleClose)
 
   def typeParam[X: P]: P[TypeParam] = P {
+    // TODO variance
     // val plusOrMinusVariance: P[Variance] = P(plus.map(_ => Covariant) | minus.map(_ => Contravariant))
     // val variance = P(plusOrMinusVariance.?.map(_.getOrElse(Invariant)))
 
@@ -395,7 +396,7 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
 
   def valueDecl[X: P]: P[ValueDecl] = P(pp(keyword("declare") ~ name ~ typed)(ValueDecl.apply _))
 
-  def valueDef[X: P]: P[ValueDef] = P(pp(pattern ~ equalsSign ~/ nl.rep ~ valueExpr)(ValueDef.apply _))
+  def valueDef[X: P]: P[ValueDef] = P(pp(pattern ~ equalsSign ~ nl.rep ~ valueExpr)(ValueDef.apply _))
 
   def inBlockDecl[X: P]: P[InBlockDecl] = P(typeDef | methodDefSection | methodDeclSection | valueDecl | valueDef)
 

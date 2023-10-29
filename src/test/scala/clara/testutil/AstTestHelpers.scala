@@ -16,4 +16,14 @@ object AstTestHelpers {
       new TypeDef(typeDefKind, NameWithPos(name), Nil, Some(t))
     def TypeDef(typeDefKind: TypeDefKind, name: String, typeParams: Seq[TypeParam], t: TypeExpr) =
       new TypeDef(typeDefKind, NameWithPos(name), typeParams, Some(t))
+
+    def Lambda(parameter: Pattern, body: ValueExpr) =
+      new Lambda(Nil, parameter, body)
+    def Lambda(typeParams: Seq[TypeParam], parameter: Pattern, body: ValueExpr) =
+      new Lambda(typeParams, parameter, body)
+
+    def FuncType(parameter: TypeExpr, result: TypeExpr) =
+      new FuncType(Nil, parameter, result)
+    def FuncType(typeParams: Seq[TypeParam], parameter: TypeExpr, result: TypeExpr) =
+      new FuncType(typeParams, parameter, result)
 }

@@ -14,6 +14,7 @@ object JsAst {
   case class ArrayLiteral(values: Seq[Expr]) extends Expr
   case class ObjectLiteral(entries: Seq[(String, Expr)]) extends Expr
   case class Named(name: String) extends Expr
+  case object UnitPattern extends Pattern
   case class NamePattern(name: String) extends Pattern
   sealed trait ArrowFunc extends Expr
   case class NullaryArrowFunc(body: Seq[Content]) extends ArrowFunc

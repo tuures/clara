@@ -1,25 +1,12 @@
 package clara.analyzer.impl
 
-import clara.asg.{Terms, TypeCons}
+import clara.asg.{Terms, Types, TypeCons}
 import clara.ast.{Ast, SourceMessage}
 
 import clara.util.Safe._
 
-
-// FIXME move
-case class TypeParamAnalyzer(parentEnv: Env) {
-  def walkTypeParams(typeParams: Seq[Ast.TypeParam]): An[(Env, Seq[TypeCons.ParamCon])] =
-    An.step(typeParams)((parentEnv, Vector[TypeCons.ParamCon]())) { case ((currentEnv, currentParams), Ast.TypeParam(name, pos)) =>
-      val paramCon = TypeCons.ParamCon(name, pos)
-
-      currentEnv.addOrShadowTypeCon((name, paramCon), parentEnv, pos).map { nextEnv =>
-        (nextEnv, currentParams :+ paramCon)
-      }
-    }
-}
-
 object TypeDefAnalyzer {
-  def typeDefTerm(env: Env, typeDef: Ast.TypeDef): An[Terms.TypeDef] = {
+  def typeDefTerm(env: Env, allowShadow: Env, typeDef: Ast.TypeDef): An[(Env, Terms.TypeDef)] = {
     val Ast.TypeDef(typeDefKind, Ast.NameWithPos(name, namePos), typeParams, maybeTypeExpr, pos) = typeDef
 
     lazy val rejectTypeParams = An.errorIf(typeParams.length > 0)(
@@ -35,7 +22,7 @@ object TypeDefAnalyzer {
       SourceMessage(pos, safe"Structure needs to be defined for type `$name`")
     )
 
-    (typeDefKind match {
+    val typeConAn: An[TypeCons.TypeCon] = typeDefKind match {
       case wrapperTypeDefKind: Ast.TypeDefKind.Wrapper =>
         TypeParamAnalyzer(env).walkTypeParams(typeParams).zip(structureTypeExpr).
           flatMap { case ((withParamsEnv, paramTypes), typeExpr) =>
@@ -51,7 +38,23 @@ object TypeDefAnalyzer {
         rejectTypeParams.zip(rejectStructure).map { case _ =>
           TypeCons.SingletonTypeCon(name, namePos)
         }
-    }).map(Terms.TypeDef(_))
+    }
+
+    // TODO extract to separate method?
+    typeConAn.flatMap { typeCon =>
+      (typeCon match {
+        case con: TypeCons.SingletonTypeCon =>
+          val typ = Types.Singleton(con)
+
+          env.addOrShadowTypeCon((name, con), allowShadow, namePos).
+            flatMap(_.addOrShadowValue((name, typ), allowShadow, namePos))
+
+        case con =>
+          // FIXME add constructor function to value env
+          env.addOrShadowTypeCon((name, con), allowShadow, namePos)
+
+      }).map(nextEnv => (nextEnv, Terms.TypeDef(typeCon)))
+    }
   }
 }
 
