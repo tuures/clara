@@ -80,8 +80,10 @@ object Types {
 
   // primitive structural composite types
   // every instance of case class corresponds to a type
-  case class Func(parameter: Type, result: Type) extends Type
-  case class PolyFunc(typeParams: Seq[TypeCons.ParamCon], parameter: Type, result: Type) extends Type
+  case class Func(typeParams: Seq[TypeCons.ParamCon], parameter: Type, result: Type) extends Type
+  object Func {
+    def apply(parameter: Type, result: Type): Func = Func(Nil, parameter, result)
+  }
 
   case class Record(fields: Namespace[Type]) extends Type
   object Record {
@@ -139,8 +141,10 @@ object Types {
     case (_, Top)    => true
     case (Bottom, _) => true
     case (Uni, Uni)  => true
-    case (Func(p1, r1), Func(p2, r2)) =>
-      isAssignable(r1, r2) && isAssignable(p2, p1)
+    case (Func(typeParams1, p1, r1), Func(typeParams2, p2, r2)) =>
+      // FIXME handle type params: <A>A => A should be assignable to <B>B => B
+      // substitute A for B in t2 an then check if r and p types are compatible
+      isAssignable(p2, p1) && isAssignable(r1, r2)
     case (r1: Record, r2: Record) =>
       r2.fields.entries.forall { case (name, t2) =>
         r1.fields.get(name).exists(t1 => isAssignable(t1, t2))
@@ -158,13 +162,44 @@ object Types {
     case _ => false
   }
 
-  def substituteParams(substitutions: Map[Param, Type], typ: Type) = {
+  // def leastCommonSupertype(t1: Type, t2: Type): Type = (t1, t2) match {
+  //   case (_, Top)    => Top
+  //   case (Top, _)    => Top
+  //   case (t1, Bottom) => t1
+  //   case (Bottom, t2) => t2
+  //   case _  => Top // &
+  // }
+
+  def findSubstitutions(params: Set[Uniq], t1: Type, t2: Type): Map[Uniq, Type] = {
+    def candidates(t1: Type, t2: Type): Seq[(Uniq, Type)] = (t1, t2) match {
+      case (p: Param, t2) if params(p.con.uniq) => Seq(p.con.uniq -> t2)
+      case (Func(Nil, p1, r1), Func(Nil, p2, r2)) => candidates(p1, p2) ++ candidates(r1, r2)
+      case (r1: Record, r2: Record) =>
+        r2.fields.entries.flatMap { case (name, t2) =>
+          r1.fields.get(name).map(t1 => candidates(t1, t2)).getOrElse(Nil) // FIXME or should be error?
+        }
+      case _ => Nil
+    }
+
+    val candidatesByParam = candidates(t1, t2).groupBy(_._1).map { case(_, candidateGroup) =>
+      (candidateGroup.head._1, candidateGroup.map(_._2))
+    }
+
+    candidatesByParam.map { case(param, candidates) =>
+      // FIXME
+      // (param, leastCommonSupertype(candidates))
+      (param, candidates.head)
+    }
+  }
+
+  def substituteParams(substitutions: Map[Uniq, Type], typ: Type) = {
     def substitute(typ: Type): Type = typ match {
       case t @ (Top | Bottom | Uni) => t
-      case Func(parameter, result) =>
-        Func(substitute(parameter), substitute(result))
+      case Func(typeParams, parameter, result) =>
+        // NOTE typeParams is not touched. If you are instantiating this func with type args, remember to Nil params
+        Func(typeParams, substitute(parameter), substitute(result))
       case Record(fields)           => Record(fields.mapValues(substitute))
-      case p: Param => substitutions.getOrElse(p, p)
+      case p: Param => substitutions.getOrElse(p.con.uniq, p)
       case Alias(con, typeArgs, wrappedType) => Alias(con, typeArgs.map(substitute), substitute(wrappedType))
       case Tagged(con, typeArgs, wrappedType) => Tagged(con, typeArgs.map(substitute), substitute(wrappedType))
       case Boxed(con, typeArgs, wrappedType) => Boxed(con, typeArgs.map(substitute), substitute(wrappedType))
@@ -179,9 +214,7 @@ object Types {
     case Top    => "*" // Anything
     case Bottom => "!" // Nothing
     case Uni    => "()"
-    case Func(parameter, result) =>
-      safe"${toSource(parameter)} => ${toSource(result)}"
-    case PolyFunc(typeParams, parameter, result) =>
+    case Func(typeParams, parameter, result) =>
       val paramsList = ToSourceImpl.typeListSource(typeParams.map(TypeCons.toSource))
       safe"$paramsList${toSource(parameter)} => ${toSource(result)}"
     case Record(fields) =>

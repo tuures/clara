@@ -1,6 +1,6 @@
 package clara.analyzer.impl
 
-import clara.asg.Types
+import clara.asg.{Uniq, Types}
 import clara.asg.Types.{Nominal, Alias, Tagged, Boxed, Opaque, Singleton, Param, Type}
 import clara.asg.TypeCons.{TypeCon, WrapperTypeCon, OpaqueTypeCon, SingletonTypeCon, ParamCon}
 import clara.ast.{SourceMessage, Pos}
@@ -26,8 +26,10 @@ object TypeInterpreter {
     }
     case con @ OpaqueTypeCon(_, typeParams, _, _) =>
       matchTypeArgs(typeParams, typeArgs, con, pos).map(_ => Opaque(con, typeArgs))
-    case con: SingletonTypeCon => An.result(Singleton(con))
-    case paramCon: ParamCon => An.result(instantiateParam(paramCon))
+    case con: SingletonTypeCon =>
+      matchTypeArgs(Nil, typeArgs, con, pos).map(_ => Singleton(con))
+    case con: ParamCon =>
+      matchTypeArgs(Nil, typeArgs, con, pos).map(_ => Param(con))
   }
 
   def expectAssignable(t1: Type, t2: Type, pos: Pos): An[Unit] = Types.isAssignable(t1, t2) match {
@@ -36,30 +38,23 @@ object TypeInterpreter {
   }
 
   object Impl {
-    def instantiateParam(paramCon: ParamCon): Param = Param(paramCon)
-
-    def mismatchingTypeArgsMessage(params: Seq[Param], args: Seq[Type], con: TypeCon, pos: Pos) = {
+    def mismatchingTypeArgsMessage(paramCons: Seq[ParamCon], args: Seq[Type], con: TypeCon, pos: Pos) = {
       // FIXME better error message: print out params and args
 
-      val message = if (params.length === 0) {
+      val message = if (paramCons.length === 0) {
         safe"Type `${TypeCons.toSource(con)}` does not take any type arguments, but ${args.length.toString} given"
       } else {
-        safe"Type `${TypeCons.toSource(con)}` expects ${params.length.toString} type arguments, but ${args.length.toString} given"
+        safe"Type `${TypeCons.toSource(con)}` expects ${paramCons.length.toString} type arguments, but ${args.length.toString} given"
       }
 
       SourceMessage(pos, message)
     }
 
-    def matchTypeArgs(paramCons: Seq[ParamCon], args: Seq[Type], con: TypeCon, pos: Pos): An[Map[Param, Type]] = {
-      val params = paramCons.map(instantiateParam(_))
-      if (params.length === args.length) {
-        if (params.length === 0) {
-          An.result(Map.empty)
-        } else {
-          An.result(params.zip(args).toMap)
-        }
+    def matchTypeArgs(paramCons: Seq[ParamCon], args: Seq[Type], con: TypeCon, pos: Pos): An[Map[Uniq, Type]] = {
+      if (paramCons.length === args.length) {
+        An.result(paramCons.map(_.uniq).zip(args).toMap)
       } else {
-        An.error(mismatchingTypeArgsMessage(params, args, con, pos))
+        An.error(mismatchingTypeArgsMessage(paramCons, args, con, pos))
       }
     }
   }

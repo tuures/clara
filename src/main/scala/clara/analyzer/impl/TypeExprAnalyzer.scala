@@ -36,11 +36,7 @@ case class TypeExprAnalyzerImpl(env: Env) {
 
   def funcType(typeParamCons: Seq[TypeCons.ParamCon], parameter: Ast.TypeExpr, result: Ast.TypeExpr): An[Types.Type] =
     typeExprType(parameter).zip(typeExprType(result)).map { case (parameterTyp, resultTyp) =>
-      typeParamCons match {
-        // FIXME ugly
-        case Nil => Types.Func(parameterTyp, resultTyp)
-        case _ => Types.PolyFunc(typeParamCons, parameterTyp, resultTyp)
-      }
+      Types.Func(typeParamCons, parameterTyp, resultTyp)
     }
 }
 
