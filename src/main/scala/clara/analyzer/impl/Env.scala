@@ -13,10 +13,6 @@ import clara.asg.Attributes.MethodAttributes
 case class EnvMethod(attributes: MethodAttributes, typ: Type)
 
 case class Env(typeCons: Namespace[TypeCon], values: Namespace[Type], methods: UniqInfo[Namespace[EnvMethod]]) {
-  def useValue(name: String, pos: Pos): An[Type] =
-    An.fromSomeOrError(values.get(name), SourceMessage(pos, safe"Unknown value `$name`"))
-  def useTypeCon(name: String, pos: Pos): An[TypeCon] =
-    An.fromSomeOrError(typeCons.get(name), SourceMessage(pos, safe"Unknown type `$name`"))
   def addOrShadowValue(binding: (String, Type), allowShadow: Env, pos: Pos): An[Env] = {
     val ns = values.addOrShadow(binding, allowShadow.values)
     lazy val error = SourceMessage(pos, safe"Cannot shadow existing value with same name `${binding._1}`")

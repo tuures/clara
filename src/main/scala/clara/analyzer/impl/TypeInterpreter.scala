@@ -1,7 +1,7 @@
 package clara.analyzer.impl
 
 import clara.asg.{Uniq, Types}
-import clara.asg.Types.{Nominal, Alias, Tagged, Boxed, Opaque, Singleton, Param, Type}
+import clara.asg.Types.{Func, Nominal, Alias, Tagged, Boxed, Opaque, Singleton, Param, Type}
 import clara.asg.TypeCons.{TypeCon, WrapperTypeCon, OpaqueTypeCon, SingletonTypeCon, ParamCon}
 import clara.ast.{SourceMessage, Pos}
 import clara.ast.Ast.TypeDefKind
@@ -12,6 +12,18 @@ import clara.asg.TypeCons
 
 object TypeInterpreter {
   import Impl._
+
+  def wrapperConstructorFunc(con: WrapperTypeCon): Func = {
+    val typeArgs = con.typeParams.map(con => Param(con))
+
+    val resultType = con.typeDefKind match {
+      case TypeDefKind.Alias => Alias(con, typeArgs, con.wrappedType)
+      case TypeDefKind.Tagged => Tagged(con, typeArgs, con.wrappedType)
+      case TypeDefKind.Boxed => Boxed(con, typeArgs, con.wrappedType)
+    }
+
+    Func(con.typeParams, con.wrappedType, resultType)
+  }
 
   def instantiate(typeCon: TypeCon, typeArgs: Seq[Type], pos: Pos): An[Nominal] = typeCon match {
     case con @ WrapperTypeCon(typeDefKind, _, typeParams, wrappedType, _, _) => {

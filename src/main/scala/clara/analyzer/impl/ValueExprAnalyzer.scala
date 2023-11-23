@@ -1,15 +1,14 @@
 package clara.analyzer.impl
 
-import clara.asg.{Terms, Types, Namespace}
+import clara.asg.{Terms, Types, TypeCons, Namespace}
 import clara.ast.{Ast, Pos, SourceMessage}
 
 import clara.util.Safe._
 
 
 case class ValueExprAnalyzerImpl(env: Env) {
-  def useNullaryType(name: String, pos: Pos): An[Types.Type] = env.useTypeCon(name, pos).flatMap { typeCon =>
-    TypeInterpreter.instantiate(typeCon, Nil, pos)
-  }
+  def namedNullaryType(name: String, pos: Pos): An[Types.Type] =
+    TypeExprAnalyzer.namedNullaryType(env, name, pos)
 
   def lambdaTerm(lambda: Ast.Lambda, expectedParameterType: Option[Types.Type]): An[Terms.Lambda] = {
     val Ast.Lambda(typeParams, parameter, body, _) = lambda
@@ -50,9 +49,9 @@ case class ValueExprAnalyzerImpl(env: Env) {
 
   def functionCall(calleeFunc: Types.Func, argument: Ast.ValueExpr): An[(Terms.ValueExpr, Types.Type)] = {
     functionCallArgumentTerm(calleeFunc.parameter, argument).flatMap { argumentTerm =>
-      val Types.Func(_, inferredParameterType, inferredResultType) = calleeFunc match {
-        case monoFunc @ Types.Func(Nil, _, _) => monoFunc
-        case polyFunc => inferFuncTypeArgs(polyFunc, argumentTerm.typ)
+      val Types.Func(_, inferredParameterType, inferredResultType) = calleeFunc.typeParams match {
+        case Nil => calleeFunc
+        case _ => inferFuncTypeArgs(calleeFunc, argumentTerm.typ)
       }
 
       TypeInterpreter.expectAssignable(argumentTerm.typ, inferredParameterType, argument.pos).map { case () =>
@@ -63,18 +62,28 @@ case class ValueExprAnalyzerImpl(env: Env) {
 
   def valueExprTerm(valueExpr: Ast.ValueExpr): An[Terms.ValueExpr] = valueExpr match {
     case Ast.UnitLiteral(_) => An.result(Terms.UnitLiteral())
-    case Ast.IntegerLiteral(value, pos) => useNullaryType("Int", pos).map { typ =>
+    case Ast.IntegerLiteral(value, pos) => namedNullaryType("Int", pos).map { typ =>
       Terms.IntegerLiteral(value, typ)
     }
-    case Ast.FloatLiteral(value, pos) => useNullaryType("Float", pos).map { typ =>
+    case Ast.FloatLiteral(value, pos) => namedNullaryType("Float", pos).map { typ =>
       Terms.FloatLiteral(value, typ)
     }
-    case Ast.StringLiteral(parts, pos) => useNullaryType("String", pos).map { typ =>
+    case Ast.StringLiteral(parts, pos) => namedNullaryType("String", pos).map { typ =>
       Terms.StringLiteral(parts, typ)
     }
     case _: Ast.Tuple => ???
     case b: Ast.Block => BlockAnalyzer.blockTerm(env, b)
-    case Ast.NamedValue(name, pos) => env.useValue(name, pos).map(typ => Terms.NamedValue(name, typ))
+    case Ast.NamedValue(name, pos) => {
+      env.values.get(name).map(typ => An.result(Terms.NamedValue(name, typ))).orElse {
+        env.typeCons.get(name).map { con =>
+          con match {
+            case con: TypeCons.WrapperTypeCon =>
+              An.result(Terms.NamedValue(name, TypeInterpreter.wrapperConstructorFunc(con)))
+            case _ => An.error(SourceMessage(pos, safe"Unknown value `$name`. Type `$name` cannot be used as a value."))
+          }
+        }
+      }.getOrElse(An.error(SourceMessage(pos, safe"Unknown value `$name`")))
+    }
     case Ast.ValueAs(e, t, pos) =>
       valueExprTerm(e).zip(TypeExprAnalyzer.typeExprType(env, t)).flatMap { case (term, typ) =>
         TypeInterpreter.expectAssignable(term.typ, typ, pos).map((_: Unit) => term)
