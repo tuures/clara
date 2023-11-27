@@ -29,6 +29,9 @@ object Terms {
   case class FloatLiteral(value: LiteralValue.Float, typ: Type) extends ValueExpr
   case class StringLiteral(parts: Seq[LiteralValue.StringPart], typ: Type) extends ValueExpr
 
+  case class Tuple(es: Seq[ValueExpr], typ: Type) extends ValueExpr
+  case class TuplePattern(ps: Seq[Pattern], typ: Type) extends Pattern
+
   case class Block(bcs: Seq[BlockContent], typ: Type) extends ValueExpr
 
   case class NamedValue(name: String, typ: Type) extends ValueExpr

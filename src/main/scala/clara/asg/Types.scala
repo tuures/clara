@@ -91,7 +91,7 @@ object Types {
     def empty: Record = apply()
   }
 
-  // TODO case class Tuple(ts: Seq[Type]) extends Type
+  case class Tuple(ts: Seq[Type]) extends Type
 
   sealed trait Nominal extends Type {
     def con: TypeCons.TypeCon
@@ -149,6 +149,9 @@ object Types {
       r2.fields.entries.forall { case (name, t2) =>
         r1.fields.get(name).exists(t1 => isAssignable(t1, t2))
       }
+    case (Tuple(ts1), Tuple(ts2)) => ts1.length == ts2.length && ts1.zip(ts2).forall { case (t1, t2) =>
+      isAssignable(t1, t2)
+    }
     case (p1: Param, p2: Param) => sameCon(p1, p2)
     case (Alias(_, _, wrappedType), t2) => isAssignable(wrappedType, t2)
     case (t1, Alias(_, _, wrappedType)) => isAssignable(t1, wrappedType)
@@ -178,6 +181,9 @@ object Types {
         r2.fields.entries.flatMap { case (name, t2) =>
           r1.fields.get(name).map(t1 => candidates(t1, t2)).getOrElse(Nil) // FIXME or should be error?
         }
+      case (Tuple(ts1), Tuple(ts2)) => ts1.zip(ts2).flatMap { case (t1, t2) =>
+        candidates(t1, t2)
+      }
       case _ => Nil
     }
 
@@ -198,7 +204,8 @@ object Types {
       case Func(typeParams, parameter, result) =>
         // NOTE typeParams is not touched. If you are instantiating this func with type args, remember to Nil params
         Func(typeParams, substitute(parameter), substitute(result))
-      case Record(fields)           => Record(fields.mapValues(substitute))
+      case Record(fields) => Record(fields.mapValues(substitute))
+      case Tuple(ts) => Tuple(ts.map(substitute))
       case p: Param => substitutions.getOrElse(p.con.uniq, p)
       case Alias(con, typeArgs, wrappedType) => Alias(con, typeArgs.map(substitute), substitute(wrappedType))
       case Tagged(con, typeArgs, wrappedType) => Tagged(con, typeArgs.map(substitute), substitute(wrappedType))
@@ -226,6 +233,7 @@ object Types {
             safe"$name: $v"
         }
         .safeString("{", ", ", "}")
+    case Tuple(ts) => ts.map(toSource).safeString("(", ", ", ")")
     case Param(con) => con.name
     case Alias(con, typeArgs, _) => nominalToSource(con, typeArgs)
     case Tagged(con, typeArgs, _) => nominalToSource(con, typeArgs)

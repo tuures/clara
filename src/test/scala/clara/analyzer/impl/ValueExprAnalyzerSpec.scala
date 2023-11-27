@@ -34,4 +34,6 @@ class ValueExprAnalyzerSpec extends BaseSpec {
 //   }
 
 
+// TODO: add test for type arg inference of calling polymorphic function
+
 }

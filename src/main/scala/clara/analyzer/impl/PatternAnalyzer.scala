@@ -14,7 +14,23 @@ case class PatternAnalyzer(env: Env, allowShadow: Env) {
       }).map { case () =>
         (env, Terms.UnitPattern())
       }
-    case _: Ast.TuplePattern => ???
+    case Ast.TuplePattern(ps, pos) =>
+      (fromType match {
+        case None => An.result(ps.map(_ => None))
+        case Some(Types.Tuple(fromTypes)) if fromTypes.length == ps.length => An.result(fromTypes.map(Some(_)))
+        // FIXME instead of expectAssignable use something that returns the error directly
+        case Some(typ) => TypeInterpreter.expectAssignable(typ, Types.Tuple(ps.map(_ => Types.Top)), pos).map(_ => ???)
+      }).flatMap { fromTypes =>
+          val initialState = (env, Vector.empty[Terms.Pattern])
+
+          An.step(ps.zip(fromTypes))(initialState){ case ((currentEnv, currentPatternTerms), (pattern, fromType)) =>
+            PatternAnalyzer(currentEnv, env).walkAssignment(pattern, fromType).map { case (nextEnv, patternTerm) =>
+              (nextEnv, currentPatternTerms :+ patternTerm)
+            }
+          }.map { case(env, patternTerms) =>
+            (env, Terms.TuplePattern(patternTerms, Types.Tuple(patternTerms.map(_.typ))))
+          }
+      }
     case Ast.NamePattern(name, pos) =>
       // FIXME default to Bottom type and just give warning?
       An.fromSomeOrError(fromType, SourceMessage(pos, "Could not infer type")).flatMap { fromType =>

@@ -71,7 +71,9 @@ case class ValueExprAnalyzerImpl(env: Env) {
     case Ast.StringLiteral(parts, pos) => namedNullaryType("String", pos).map { typ =>
       Terms.StringLiteral(parts, typ)
     }
-    case _: Ast.Tuple => ???
+    case Ast.Tuple(es, _) => An.seq(es.map(valueExprTerm)).map { terms =>
+      Terms.Tuple(terms, Types.Tuple(terms.map(_.typ)))
+    }
     case b: Ast.Block => BlockAnalyzer.blockTerm(env, b)
     case Ast.NamedValue(name, pos) => {
       env.values.get(name).map(typ => An.result(Terms.NamedValue(name, typ))).orElse {

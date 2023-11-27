@@ -8,7 +8,6 @@ import clara.ast.LiteralValue
 import impl._
 
 import clara.util.Safe._
-import clara.asg.Terms.UnitPattern
 
 
 object JsEmitter {
@@ -28,12 +27,13 @@ object JsEmitter {
     case Terms.IntegerLiteral(value, _) => emitIntegerLiteral(value)
     case Terms.FloatLiteral(LiteralValue.Float(whole, fraction), _) => emitFloatLiteral(whole, fraction)
     case Terms.StringLiteral(parts, _) => emitStringLiteral(parts)
+    case Terms.Tuple(es, _) => JsAst.ArrayLiteral(es.map(emitValueExpr))
     case Terms.Block(bcs, _) => emitBlock(bcs)
     case Terms.NamedValue(name, _) => JsAst.Named(name)
     case Terms.Record(fields, _) => JsAst.ObjectLiteral(fields.mapValues { case Terms.Field(body) =>
         emitValueExpr(body)
       }.entries)
-    case Terms.Lambda(parameter, body, _) => JsAst.UnaryArrowFunc(emitPattern(parameter), Seq(emitValueExpr(body)))
+    case Terms.Lambda(parameter, body, _) => JsAst.UnaryArrowFunc(emitParameters(parameter), Seq(emitValueExpr(body)))
     case Terms.MemberSelection(obj, memberName, selectedMember, _) =>
       emitMemberSelection(obj, memberName, selectedMember)
     case Terms.Call(callee @ Terms.MemberSelection(obj, memberName, selectedMember, _), argument, _) =>
@@ -70,20 +70,22 @@ object JsEmitter {
   def emitBlockContent(blockContent: Terms.BlockContent): Option[JsAst.Content] = blockContent match {
     case e: Terms.ValueExpr => Some(emitValueExpr(e))
     case _: Terms.ValueDecl => None
-    case Terms.ValueDef(target, e) => Some(emitValueDef(target, e))
+    case Terms.ValueDef(target, e) => Some(JsAst.Const(emitValueDefTarget(target), emitValueExpr(e)))
     case _: Terms.AliasTypeDef => None
     case _: Terms.TypeDef => None
     case _: Terms.MethodDeclSection => None
     case Terms.MethodDefSection(targetType, selfPattern, methodDefs) => Some(emitMethodDefSection(targetType, selfPattern, methodDefs))
   }
 
-  def emitValueDef(target: Terms.Pattern, e: Terms.ValueExpr) = target match {
-    case Terms.NamePattern(name, _) => JsAst.Const(JsAst.NamePattern(name), emitValueExpr(e))
+  def emitValueDefTarget(target: Terms.Pattern): JsAst.Pattern = target match {
+    case Terms.UnitPattern() => ???
+    case Terms.TuplePattern(ps, _) => JsAst.ArrayPattern(ps.map(emitValueDefTarget))
+    case Terms.NamePattern(name, _) => JsAst.NamePattern(name)
   }
 
   def emitMethodDefSection(targetType: Types.Type, selfPattern: Terms.Pattern, methodDefs: Namespace[Terms.MethodDef]) = {
     val entries = methodDefs.mapValues { case Terms.MethodDef(attributes, body) =>
-      JsAst.UnaryArrowFunc(emitPattern(selfPattern), Seq(emitValueExpr(body)))
+      JsAst.UnaryArrowFunc(emitParameters(selfPattern), Seq(emitValueExpr(body)))
     }.entries
 
     JsAst.Const(
@@ -122,8 +124,9 @@ object JsEmitter {
   def emitCall(callee: Terms.ValueExpr, argument: Terms.ValueExpr) =
     JsAst.UnaryCall(emitValueExpr(callee), emitValueExpr(argument))
 
-  def emitPattern(pattern: Terms.Pattern): JsAst.Pattern = pattern match {
-    case UnitPattern() => JsAst.UnitPattern
+  def emitParameters(pattern: Terms.Pattern): JsAst.Pattern = pattern match {
+    case Terms.UnitPattern() => JsAst.UnitPattern
+    case Terms.TuplePattern(ps, _) => JsAst.ArrayPattern(ps.map(emitParameters))
     case Terms.NamePattern(name, _) => JsAst.NamePattern(name)
   }
 }

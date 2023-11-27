@@ -14,13 +14,15 @@ case class JsPrinterImpl() {
 
   import JsAst._
 
-  def walkModule(module: Module) = module.nodes.map(walkNode).safeString("\n\n")
+  def walkModule(module: Module) = module.nodes.map(walkContent).safeString("\n\n")
 
-  def walkNode(node: Node): String = node match {
+  def walkContent(c: Content): String = c match {
     case e: Expr => walkExpr(e)
     case s: Stmt => walkStmt(s)
     case d: Defi => walkDefi(d)
   }
+
+  def arraySyntax(elements: Seq[String]) = elements.safeString("[", ", ", "]")
 
   def walkExpr(expr: Expr): String = expr match {
     case Undefined => "undefined"
@@ -30,7 +32,7 @@ case class JsPrinterImpl() {
 
       safe"""${quoteChar}${value.replace(quoteChar, safe"\\${quoteChar}")}${quoteChar}"""
     }
-    case ArrayLiteral(values) => ???
+    case ArrayLiteral(values) => arraySyntax(values.map(walkExpr))
     case ObjectLiteral(entries) => walkObjectLiteral(entries)
     case Named(name) => name
     case NullaryArrowFunc(body) => walkArrowFunc(None, body)
@@ -44,13 +46,13 @@ case class JsPrinterImpl() {
   def walkObjectLiteral(entries: Seq[(String, Expr)]): String =
     entries.map { case (name, expr) => indented(safe"$name: ${walkExpr(expr)}") }.safeString("{\n", ",\n", "\n}")
 
-  def walkArrowFunc(param: Option[Pattern], body: Seq[Node]): String = {
+  def walkArrowFunc(param: Option[Pattern], body: Seq[Content]): String = {
     val paramPrinted = param.map(walkPattern).getOrElse("()")
 
     body match {
       case Seq((e: JsAst.Expr)) => safe"$paramPrinted =>\n" + indented(walkExpr(e))
       case _ => {
-        safe"$paramPrinted => {\n" + indented(body.map(walkNode).safeString("\n")) + "\n}"
+        safe"$paramPrinted => {\n" + indented(body.map(walkContent).safeString("\n")) + "\n}"
       }
     }
   }
@@ -85,6 +87,7 @@ case class JsPrinterImpl() {
 
   def walkPattern(pattern: Pattern): String = pattern match {
     case UnitPattern => "()"
+    case ArrayPattern(ps) => arraySyntax(ps.map(walkPattern))
     case NamePattern(name) => name
   }
 

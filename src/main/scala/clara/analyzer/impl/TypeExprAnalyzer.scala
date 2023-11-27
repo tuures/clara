@@ -19,10 +19,9 @@ case class TypeExprAnalyzerImpl(env: Env) {
     case Ast.TopType(_) => An.result(Types.Top)
     case Ast.BottomType(_) => An.result(Types.Bottom)
     case Ast.UnitType(_) => An.result(Types.Uni)
-    case Ast.TupleType(ts, pos) => ???
-    // case Ast.TupleType(ts, pos) => An.seq(ts.map(typeExprType)).flatMap { types =>
-    //   Types.Tuple(types)
-    // }
+    case Ast.TupleType(ts, _) => An.seq(ts.map(typeExprType)).map { types =>
+      Types.Tuple(types)
+    }
     case Ast.NamedType(nameWithPos, typeArgs, pos) =>
       namedType(nameWithPos, typeArgs, pos)
     case Ast.RecordType(fields, _) =>

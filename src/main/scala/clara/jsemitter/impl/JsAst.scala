@@ -12,6 +12,7 @@ object JsAst {
   case class NumberLiteral(value: String) extends Expr
   case class StringLiteral(value: String) extends Expr
   case class ArrayLiteral(values: Seq[Expr]) extends Expr
+  case class ArrayPattern(ps: Seq[Pattern]) extends Pattern
   case class ObjectLiteral(entries: Seq[(String, Expr)]) extends Expr
   case class Named(name: String) extends Expr
   case object UnitPattern extends Pattern
