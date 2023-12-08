@@ -53,6 +53,7 @@ class ParserImplsSpec extends BaseSpec {
   parseAst(p.floatLiteral(_))("3.14")(FloatLiteral(LiteralValue.Float("3", "14")))
   parseAst(p.floatLiteral(_))("1_000.123_456")(FloatLiteral(LiteralValue.Float("1000", "123456")))
   parseAst(p.floatLiteral(_))("-1.1")(FloatLiteral(LiteralValue.Float("-1", "1")))
+  reject(p.floatLiteral(_))("_100.0")
   reject(p.floatLiteral(_))("1._2")
   reject(p.floatLiteral(_))("1.-2")
   reject(p.floatLiteral(_))("--1.2")
@@ -69,6 +70,7 @@ class ParserImplsSpec extends BaseSpec {
   parseAst(p.integerLiteral(_))("#b0010")(IntegerLiteral(LiteralValue.IntegerBin("0010")))
   parseAst(p.integerLiteral(_))("-#b0010")(IntegerLiteral(LiteralValue.IntegerBin("-0010")))
   reject(p.integerLiteral(_))("1 0")
+  reject(p.integerLiteral(_))("_100")
   reject(p.integerLiteral(_))("1_")
   reject(p.integerLiteral(_))("1__2")
   reject(p.integerLiteral(_))("#\nx\n1")
@@ -149,6 +151,8 @@ class ParserImplsSpec extends BaseSpec {
   reject(p.block(_))("()")
 
   parseAst(p.namedValue(_))("foo")(NamedValue("foo"))
+  parseAst(p.namedValue(_))("foo1")(NamedValue("foo1"))
+  parseAst(p.namedValue(_))("_1")(NamedValue("_1"))
 
   parseAst(p.namedType(_))("Foo")(NamedType("Foo"))
   parseAst(p.namedType(_))("Foo<Bar>")(
@@ -162,6 +166,8 @@ class ParserImplsSpec extends BaseSpec {
   )
 
   parseAst(p.namePattern(_))("foo")(NamePattern("foo"))
+  parseAst(p.namePattern(_))("foo1")(NamePattern("foo1"))
+  parseAst(p.namePattern(_))("_1")(NamePattern("_1"))
 
   parseAst(p.valueAs(_))("foo: String")(
     ValueAs(NamedValue("foo"), NamedType("String"))
@@ -211,6 +217,18 @@ class ParserImplsSpec extends BaseSpec {
   )
   reject(p.lambda(_))("()\n=> ()")
 
+  parseAst(p.piecewise(_))("(|() => ())")(
+    Piecewise(Seq(UnitPattern() -> UnitLiteral()))
+  )
+  parseAst(p.piecewise(_))("(\n  | () =>\n    ()\n)")(
+    Piecewise(Seq(UnitPattern() -> UnitLiteral()))
+  )
+  parseAst(p.piecewise(_))("(| A => a | B => b)")(
+    Piecewise(Seq(NamePattern("A") -> NamedValue("a"), NamePattern("B") -> NamedValue("b")))
+  )
+  reject(p.piecewise(_))("()")
+  reject(p.piecewise(_))("(|)")
+
   parseAst(p.funcType(_))("() => ()")(
     FuncType(UnitType(), UnitType())
   )
@@ -218,45 +236,80 @@ class ParserImplsSpec extends BaseSpec {
     FuncType(Seq(TypeParam("A")), UnitType(), UnitType())
   )
 
-  parseAst(p.memberOrCall(_))("foo.length.toString")(
-    MemberSelection(MemberSelection(NamedValue("foo"), NamedMember("length")), NamedMember("toString"))
+  parseAst(p.memberOrJuxtaCall(_))("foo.length.toString")(
+    MemberSelection(MemberSelection(NamedValue("foo"), NamedValue("length")), NamedValue("toString"))
   )
-  parseAst(p.memberOrCall(_))("foo.\n  length.\n  toString")(
-    MemberSelection(MemberSelection(NamedValue("foo"), NamedMember("length")), NamedMember("toString"))
+  parseAst(p.memberOrJuxtaCall(_))("{}.a")(
+    MemberSelection(Record(Nil), NamedValue("a"))
   )
-  parseAst(p.memberOrCall(_))("foo()")(
+  parseAst(p.memberOrJuxtaCall(_))("foo()")(
     Call(NamedValue("foo"), UnitLiteral())
   )
-  parseAst(p.memberOrCall(_))("foo ()")(
-    Call(NamedValue("foo"), UnitLiteral())
-  )
-  parseAst(p.memberOrCall(_))("foo bar")(
-    Call(NamedValue("foo"), NamedValue("bar"))
-  )
-
-  parseAst(p.memberOrCall(_))("foo.bar(zot.baz)"){
-    val foobar = MemberSelection(NamedValue("foo"), NamedMember("bar"))
-    val zotbaz = MemberSelection(NamedValue("zot"), NamedMember("baz"))
-
-    Call(foobar, zotbaz)
-  }
-  // TODO: call with space should have lower precedence than call without space
-  parseAst(p.memberOrCall(_))("foo.bar zot.baz buz(qux)"){
-    val foobar = MemberSelection(NamedValue("foo"), NamedMember("bar"))
-    val zotbaz = MemberSelection(NamedValue("zot"), NamedMember("baz"))
+  parseAst(p.memberOrJuxtaCall(_))("foo.bar(zot.baz)(buz(qux))"){
+    val foobar = MemberSelection(NamedValue("foo"), NamedValue("bar"))
+    val zotbaz = MemberSelection(NamedValue("zot"), NamedValue("baz"))
     val buzqux = Call(NamedValue("buz"), NamedValue("qux"))
 
     Call(Call(foobar, zotbaz), buzqux)
   }
-  parseAst(p.memberOrCall(_))("foo.bar(zot).baz"){
-    val foobar = MemberSelection(NamedValue("foo"), NamedMember("bar"))
-    val zot = NamedValue("zot")
-
-    MemberSelection(Call(foobar, zot), NamedMember("baz"))
-  }
-  parseAst(p.memberOrCall(_))("foo .bar baz")(
-    Call(MemberSelection(NamedValue("foo"), NamedMember("bar")), NamedValue("baz"))
+  parseAst(p.memberOrJuxtaCall(_))("foo.\n  length.\n  toString")(
+    MemberSelection(MemberSelection(NamedValue("foo"), NamedValue("length")), NamedValue("toString"))
   )
+  parseAst(p.memberOrJuxtaCall(_))("foo\n  .length\n  .toString")(
+    MemberSelection(MemberSelection(NamedValue("foo"), NamedValue("length")), NamedValue("toString"))
+  )
+  parseAst(p.memberOrJuxtaCall(_))("foo/**/\n  ./**/length/**/./**/toString")(
+    MemberSelection(MemberSelection(NamedValue("foo"), NamedValue("length")), NamedValue("toString"))
+  )
+  reject(p.memberOrJuxtaCall(_))("foo ()")
+  parseAst(p.spaceCall(_))("foo ()")(
+    Call(NamedValue("foo"), UnitLiteral())
+  )
+  parseAst(p.spaceCall(_))("foo bar")(
+    Call(NamedValue("foo"), NamedValue("bar"))
+  )
+  parseAst(p.spaceCall(_))("foo bar baz")(
+    Call(Call(NamedValue("foo"), NamedValue("bar")), NamedValue("baz"))
+  )
+  parseAst(p.spaceCall(_))("foo bar.baz")(
+    Call(NamedValue("foo"), MemberSelection(NamedValue("bar"), NamedValue("baz")))
+  )
+  parseAst(p.spaceCall(_))("foo .bar baz")(
+    Call(MemberSelection(NamedValue("foo"), NamedValue("bar")), NamedValue("baz"))
+  )
+  parseAst(p.spaceCall(_))("foo.bar zot.baz buz(qux)"){
+    val foobar = MemberSelection(NamedValue("foo"), NamedValue("bar"))
+    val zotbaz = MemberSelection(NamedValue("zot"), NamedValue("baz"))
+    val buzqux = Call(NamedValue("buz"), NamedValue("qux"))
+
+    Call(Call(foobar, zotbaz), buzqux)
+  }
+  parseAst(p.spaceCall(_))("foo.bar zot/**/(baz) buz(qux)"){
+    val foobar = MemberSelection(NamedValue("foo"), NamedValue("bar"))
+    val zotbaz = Call(NamedValue("zot"), NamedValue("baz"))
+    val buzqux = Call(NamedValue("buz"), NamedValue("qux"))
+
+    Call(Call(foobar, zotbaz), buzqux)
+  }
+  parseAst(p.pipe(_))("bar @ foo")(
+    Pipe(NamedValue("bar"), NamedValue("foo"))
+  )
+  parseAst(p.pipe(_))("bar @ foo @ baz")(
+    Pipe(Pipe(NamedValue("bar"), NamedValue("foo")), NamedValue("baz"))
+  )
+  parseAst(p.pipe(_))("foo @ bar.zot baz")(
+    Pipe(NamedValue("foo"), Call(MemberSelection(NamedValue("bar"), NamedValue("zot")), NamedValue("baz")))
+  )
+  parseAst(p.pipe(_))("foo bar.zot @ baz")(
+    Pipe(Call(NamedValue("foo"), MemberSelection(NamedValue("bar"), NamedValue("zot"))), NamedValue("baz"))
+  )
+  parseAst(p.pipe(_))("foo\n  .bar\n  @ bas baz.qux\n  @ zot()\n  .noz"){
+    val foobar = MemberSelection(NamedValue("foo"), NamedValue("bar"))
+    val bazqux = MemberSelection(NamedValue("baz"), NamedValue("qux"))
+    val zotnoz = MemberSelection(Call(NamedValue("zot"), UnitLiteral()), NamedValue("noz"))
+
+    Pipe(Pipe(foobar, Call(NamedValue("bas"), bazqux)), zotnoz)
+  }
 
   //////
   // Declarations

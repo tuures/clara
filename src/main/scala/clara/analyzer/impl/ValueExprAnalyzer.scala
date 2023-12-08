@@ -108,7 +108,7 @@ case class ValueExprAnalyzerImpl(env: Env) {
       }
     }
     case l: Ast.Lambda => lambdaTerm(l, None)
-    case Ast.MemberSelection(obj, Ast.NamedMember(name, memberPos), _) =>
+    case Ast.MemberSelection(obj, Ast.NamedValue(name, memberPos), _) =>
       valueExprTerm(obj).flatMap { objectTerm =>
         MemberSelectionAnalyzer(env, name, memberPos).walkMemberSelection(objectTerm).map { case (selectedMember, typ) =>
           Terms.MemberSelection(objectTerm, name, selectedMember, typ)

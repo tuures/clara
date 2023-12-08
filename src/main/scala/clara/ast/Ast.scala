@@ -33,6 +33,7 @@ object Ast {
   case class Block(bcs: Seq[BlockContent], pos: Pos = NoPos) extends ValueExpr
 
   case class NameWithPos(name: String, pos: Pos = NoPos) extends Node
+  // FIXME typeArgs
   case class NamedValue(name: String, pos: Pos = NoPos) extends ValueExpr
   case class NamedType(name: NameWithPos, typeArgs: Seq[TypeExpr], pos: Pos = NoPos) extends TypeExpr
   case class NamePattern(name: String, pos: Pos = NoPos) extends Pattern // rename to CapturePattern?
@@ -61,12 +62,13 @@ object Ast {
   // case class TypeParam(variance: Variance, name: String, arity: Int, pos: Pos = NoPos) extends Node
   case class TypeParam(name: String, pos: Pos = NoPos) extends Node
   case class Lambda(typeParams: Seq[TypeParam], parameter: Pattern, body: ValueExpr, pos: Pos = NoPos) extends ValueExpr
+  case class Piecewise(pieces: Seq[(Pattern, ValueExpr)], pos: Pos = NoPos) extends ValueExpr
   case class FuncType(typeParams: Seq[TypeParam], parameter: TypeExpr, result: TypeExpr, pos: Pos = NoPos) extends TypeExpr
 
-  case class NamedMember(name: String, pos: Pos = NoPos) extends Node
-  case class MemberSelection(obj: ValueExpr, member: NamedMember, pos: Pos = NoPos) extends ValueExpr
+  case class MemberSelection(obj: ValueExpr, member: NamedValue, pos: Pos = NoPos) extends ValueExpr
 
   case class Call(callee: ValueExpr, argument: ValueExpr, pos: Pos = NoPos) extends ValueExpr
+  case class Pipe(argument: ValueExpr, callee: ValueExpr, pos: Pos = NoPos) extends ValueExpr
 
   //case class ConstructPattern(targetType: TypeName, selfPattern: Pattern, pos: Pos = NoPos) extends Pattern
 

@@ -1,16 +1,4 @@
-// MVP TODO
-// - List/Array type (Parametric polymorphism / Generics)
-// - equality
-// - (pattern matching?)
-// - Module system (extracting standard library into a separate file)
-
-// - fix all warnings and ???s
-
-// // TODO should it be * or ::top?
-// ::alias Any: ⊤
-
-// // TODO should it be ! or ::bottom?
-// ::alias Nothing: ⊥
+// using various language features to test they work end-to-end
 
 ::declare ::type Float: Any
 
@@ -61,10 +49,6 @@
   length: Int
 }
 
-
-/// -------------
-
-
 // ::declare ::type BrowserConsole = {
 //   log: String => ()
 // }
@@ -79,50 +63,6 @@
 
 // console.log("Hello World!")
 
-::type UserOrdinal: Int
-
-::methods UserOrdinal o: {
-  next = o .plus 1
-}
-
-
-
-// FIXME allow numbers (and other non letters) in names:
-// r1 = 1
-
-// uo = UserOrdinal 2
-
-// r = {
-//   a = 1: Int
-//   b = 2
-// }.a
-
-// ::type Rect = { x: Int, y: Int }
-
-// ::methods {x, y}: Rect {
-//   area = x .* y
-// }
-// ::methods r: Rect {
-//   area = r.x.multiply(r.y)
-// }
-// ::methods Rect = r => {
-
-// }
-
-// makeRect = ::new Rect
-// fooRect: Rect = ::new Rect { x = 2, y = 3 }
-// // ::enum Option A = Some A | None
-
-// area = fooRect.area
-
-
-
-// ::type Box<A>: { x: A }
-
-// ::methods Box a: {
-//   get: A = a.x
-//   map: <B>(A => B) => Box<B> = <B>(f: A => B) => Box{ x = f a.x }
-// }
 
 // ::methods Maybe {
 //   map<B>: Maybe<B> = (f: A => B) => this ??
@@ -135,8 +75,4 @@
 // boxedInt.get
 
 
-// ::alias Foo<T> = { foo: T }
-
-// asd: Foo<String> = { foo = 1 } // should fail
-
-() // TODO program should return Nothing
+()

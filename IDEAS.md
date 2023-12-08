@@ -1,4 +1,6 @@
-### module support
+# Ideas to consider
+
+## module support
 
 start from the "entry point" file
 source -> AST -> dependencyAnalyzer -> list of filenames
@@ -13,7 +15,7 @@ all value and type declarations from the top level block of a module are "export
 imports can appear any level of the code
 
 
-### operators
+## operators
 
 operators are methods with non-letter name
 // a b c
@@ -29,18 +31,14 @@ examples:
 `foo asd bar` -> apply (foo, apply asd, apply bar)
 
 
--------------------
-functional type system, case class keyword implemented as macro that is a "template" for making new types
-macro is a function in type level
-
-
-----
-
-std lib
+## std lib
 
 - list.soleHead return the head if list has just one item (combined head + assert length == 1)
 
----
+Option https://github.com/scala/scala/blob/2.13.x/src/library/scala/Option.scala
+
+
+## pattern matching, control structures, equality
 
 if-else, ::match
 
@@ -48,60 +46,66 @@ x < 5 then 1 else 0
 
 x < 5 ::match { true => 1, false => 0}
 
+--
 
----
+pattern matching block
+https://github.com/topshell-language/topshell#sum-types-and-pattern-matching
 
-Option
+{| <pat1> => expr1 | <pat2> => expr2 | ...}
 
-https://github.com/scala/scala/blob/2.13.x/src/library/scala/Option.scala
+--
+
+piecewise-defined function:
+  (| true => 1 | false => 2)
 
 
----
+### reverse call / pipe syntax
+dir @ sort @ uniq
 
-Repl
+users @(
+  | Bar =>
+  | Foo =>
+)
+
+1 @ Euro
+
+
+pipe syntax
+
+1 | repeat 3 | _.length
+
+
+### no-space call precedence?
+
+a b(c)  <=>  a (b c)  not: (a b) c
+a(b) c  <=>  (a b) c
+
+
+### equality and friends
+=~ (equivalence, for example rational numbers 2/4 =~ 1/2)
+== equality (structural equality)
+=_= identity (reference equality)
+
+- Do not define equality for floats
+- How to define equality for structural types if not all values have equality?
+
+
+## Repl
 
 https://60devs.com/executing-js-code-with-nodes-vm-module.html
 
 
----
+## Linting / compiler errors
 
-Nullary methods:
+Warn about unused values (and types?)
 
-::methods Boolean {
-  not: => Boolean
-}
-
----
-
-default type for any type (in pattern)
-might only make sense for records
-
-(a = 1, b = 1) = fooTuple2
-
-{ a = 1, b = 2 } = fooRecord
-
-(a = 1) = ()
-
-
----
+## Constructor calls
 
 Constructor is a first class function
 
 - `::new T` expression returns the function
 
----
-
-List of languages to look at for inspiration
-
-Scala, Dotty, TypeScript, Reason/Ocaml, Rust, Swift, Nim, Python, PureScript, JS++
-
----
-
-Warn about unused values (and types?)
-
----
-
-implicit ::new
+### implicit ::new
 
 `A` means
 
@@ -119,7 +123,8 @@ because if the logic is bound to call, then it would not simply work in somethin
 
 but the apply rule is also useful (points 1, 2, but not 3)
 
----
+
+## Defining types
 
 replace ::declare ::type / ::declare ::methods with ::trait (determines how methods should be implement elsewhere)
 
@@ -156,9 +161,9 @@ Bar = {
   ... // akin to Scala's object
 }
 
----
+## Tuples and records
 
-tuples are nested pairs
+### tuples as nested pairs
 
 a <=> (a, ())
 (a, b) => (a, (b, ()))
@@ -167,38 +172,14 @@ etc.
 
 this should simply implementation as analyzer only has to deal with pairs/2-tuples
 
----
 
-{} vs ()
+### {} == () ?
 
 mathemathically it would be fair to consider empty record and 0-tuple the same but in order to prevent accidents,
 they are not assignable to each other
 
----
 
-things that are written often should have terse syntax
-
----
-
-http://www.inquisition.ca/en/info/gepsypl/rules.htm
-https://proglangdesign.net/
-
----
-
-MVP usefulness check:
-
-can we implement Option monad like this:
-
-::data Maybe[A] {
-  map[B] = (f: A => B) => ::match {
-    ::case Just(value) => Just(f(value))
-    ::case None => None
-  } ::this
-} = Just(value: A) | None
-
----
-
-deep copy
+## Records deep copy
 how to make this composable? function returning keyword?
 
 ::type Address = {
@@ -226,9 +207,8 @@ updatedUser = ::copy user {
 //   email = 'foo@bar.invalid'
 // }
 
----
 
-TypeScript output
+## TypeScript output
 
 interface Foo {
   x: number
@@ -267,31 +247,33 @@ const foo1: Foo = {
 //   y: 2,
 // }
 
----
 
-### equality and friends
-=~ (equivalence, for example rational numbers 2/4 =~ 1/2)
-== equality (structural equality)
-=_= identity (reference equality)
-
-- Do not define equality for floats
-- How to define equality for structural types if not all values have equality?
-
----
+## Tail call elimination
 
 tail call elimination using @[tailCall]
 
----
 
-pattern matching block
-https://github.com/topshell-language/topshell#sum-types-and-pattern-matching
+## Nullary methods:
 
-{| <pat1> => expr1 | <pat2> => expr2 | ...}
+::methods Boolean {
+  not: => Boolean
+}
 
 
----
+## default type for any type (in pattern)
+might only make sense for records
 
-potentially useful resources
+(a = 1, b = 1) = fooTuple2
+
+{ a = 1, b = 2 } = fooRecord
+
+(a = 1) = ()
+
+
+## Potentially useful resources
+
+List of languages to look at for inspiration: Scala, Dotty, TypeScript, Reason/Ocaml, Rust, Swift, Nim, Python, PureScript, JS++
+
 
 https://www.cl.cam.ac.uk/~jdy22/papers/lightweight-higher-kinded-polymorphism.pdf
 Jeremy Yallop and Leo White University of Cambridge
@@ -305,19 +287,7 @@ http://learnyouahaskell.com/making-our-own-types-and-typeclasses
 
 https://www.reddit.com/r/rust/comments/4jh8hv/question_about_rust_vs_haskell_type_systems/
 
----
+http://www.inquisition.ca/en/info/gepsypl/rules.htm
 
-pipe syntax
+https://proglangdesign.net/
 
-1 | repeat 3 | _.length
-
----
-
-no-space call precedence?
-
-a b(c)  <=>  a (b c)  not: (a b) c
-a(b) c  <=>  (a b) c
-
----
-
-gradually nominal typing: start with structural types, add nominal types as you go

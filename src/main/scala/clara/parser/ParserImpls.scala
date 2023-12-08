@@ -11,21 +11,25 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
 
   val nlPred: Char => Boolean = (_: Char) === '\n'
 
+  val space = " "
+
+  def lineComment[X: P] = P("//" ~~ CharsWhile(c => !nlPred(c)).? ~~ (End | CharPred(nlPred)))
+
+  def blockComment[X: P] = P {
+    val (start, end) = ("/*", "*/")
+
+    start ~~ (!end ~~ AnyChar).repX ~~ (End | end)
+  }
+
+  def comment[X: P] = P(lineComment | blockComment)
+
+  def noSpaceWhitespace[X: P] = P(comment).repX
+
+  def leastOneSpaceWhitespace[X: P] = P(comment.repX ~~ space.repX(1) ~~ (comment | space).repX)
+
   implicit object whitespace extends Whitespace {
     override def apply(ctx: P[_]): P[Unit] = {
       implicit val ctx0 = ctx
-
-      def lineComment[X: P] = P("//" ~~ CharsWhile(c => !nlPred(c)).? ~~ (End | CharPred(nlPred)))
-
-      def blockComment[X: P] = P {
-        val (start, end) = ("/*", "*/")
-
-        start ~~ (!end ~~ AnyChar).repX ~~ (End | end)
-      }
-
-      val space = " "
-
-      def comment[X: P] = P(lineComment | blockComment)
 
       P(comment | space).repX
     }
@@ -35,7 +39,7 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
     sourceInfo.map(SourcePos(_, from, until)).getOrElse(NoPos)
 
   def withPos[T, X: P](p: => P[T]): P[(T, Pos)] = P {
-    (Index ~ p ~ Index).map { case (from, t, until) =>
+    (Index ~~ p ~~ Index).map { case (from, t, until) =>
       (t, makePos(from, Some(until)))
     }
   }
@@ -281,46 +285,76 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
 
   val funcArrow = "=>"
 
-  def funcSyntax[T1, T2, X: P](in: => P[T1], out: => P[T2]) = P(maybeTypeParams ~ in ~ funcArrow ~ nl.rep ~ out)
+  def funcSyntax[T1, T2, X: P](in: => P[T1], out: => P[T2]) = P(in ~ funcArrow ~ nl.rep ~ out)
+  def polyFuncSyntax[T1, T2, X: P](in: => P[T1], out: => P[T2]) =
+    P(maybeTypeParams ~ funcSyntax(in, out)).map { case (p, (in, out)) => (p, in, out) }
 
-  def lambda[X: P]: P[Lambda] = P(pp(funcSyntax(pattern, valueExpr))(Lambda.apply _))
+  def lambda[X: P]: P[Lambda] = P(pp(polyFuncSyntax(pattern, valueExpr))(Lambda.apply _))
 
-  def funcType[X: P]: P[FuncType] = P(pp(funcSyntax(simpleType, typeExpr))(FuncType.apply _))
+  def piecewise[X: P]: P[Piecewise] = {
+    def piece = "|" ~ funcSyntax(pattern, valueExpr) ~ nl.rep
+    def pieces = piece.rep(1)
+
+    P(pp(openParens ~ nl.rep ~ pieces ~ nl.rep ~ closeParens)(Piecewise.apply _))
+  }
+
+  def funcType[X: P]: P[FuncType] = P(pp(polyFuncSyntax(simpleType, typeExpr))(FuncType.apply _))
 
   //////
   // Member selection / call
 
-  object MemberOrCallImpl {
-    type MemberPart = (Int, String/*, Seq[TypeExpr]*/)
-    type CallPart = ValueExpr
-    type Part = Either[MemberPart, CallPart]
-
-    def makeNode(startIndex: Int)(e: ValueExpr, partWithEndIndex: (Part, Int)): ValueExpr = {
-      val (part, endIndex) = partWithEndIndex
-      def posFrom(fromIndex: Int) = makePos(fromIndex, Some(endIndex))
-      val pos = posFrom(startIndex)
-
-      part match {
-        case Left((dotIndex, name/*, typeArgs*/)) =>
-          MemberSelection(e, NamedMember(name/*, typeArgs*/, posFrom(dotIndex)), pos)
-        case Right(argument) =>
-          Call(e, argument, pos)
-      }
+  def memberOrJuxtaCall[X: P]: P[ValueExpr] = P {
+    type Part = Either[NamedValue, ValueExpr]
+    def makeNode(prevNode: ValueExpr, nextPart: Part) = nextPart match {
+      case Left(namedValue) => MemberSelection(prevNode, namedValue, prevNode.pos.join(namedValue.pos))
+      case Right(argument) => Call(prevNode, argument, prevNode.pos.join(argument.pos))
     }
 
-    def memberPart[X: P] = P(Index ~ dot ~ nl.rep ~ name /*~ maybeTypeArgs*/).map(Left(_))
-    def callPart[X: P] = simple.map(Right(_))
+    def memberPart = (space.rep ~ nl.? ~ dot ~ nl.rep ~ namedValue).map(Left(_))
+    def juxtaCallPart = simple.map(Right(_))
+    def part = memberPart | juxtaCallPart
 
-    def part[X: P] = P((memberPart | callPart) ~ Index)
-    def oneOrMoreParts[X: P] = P(part.rep(1))
+    (simple ~~ noSpaceWhitespace ~~ part.repX(1)).map { case (base, parts) =>
+      val firstNode = makeNode(base, parts.head)
 
-    def impl[X: P] = NoCut(Index ~ simple ~ oneOrMoreParts).map { case (startIndex, base, parts) =>
-      val mk = makeNode(startIndex) _
-      parts.tail.foldLeft(mk(base, parts.head))(mk)
+      parts.tail.foldLeft(firstNode){ case (prevNode, nextPart) =>
+        makeNode(prevNode, nextPart)
+      }
     }
   }
 
-  def memberOrCall[X: P]: P[ValueExpr] = P(MemberOrCallImpl.impl)
+  def spaceCallPart[X: P] = P(memberOrJuxtaCall | simple)
+  def spaceCall[X: P]: P[Call] = P {
+    def makeNode(callee: ValueExpr, argument: ValueExpr) = {
+      Call(callee, argument, callee.pos.join(argument.pos))
+    }
+
+    (spaceCallPart.repX(min=2, sep=leastOneSpaceWhitespace)).map { parts =>
+      val firstNode = makeNode(parts.head, parts.tail.head)
+
+      parts.tail.tail.foldLeft(firstNode){ case (prevNode, nextArgument) =>
+        makeNode(prevNode, nextArgument)
+      }
+    }
+  }
+
+  def pipePart[X: P] = P(spaceCall | piecewise | lambda | valueAs | spaceCallPart)
+  def pipe[X: P]: P[Pipe] = P {
+    def pipeSep = nl.? ~ at ~ nl.rep
+
+    def makeNode(argument: ValueExpr, callee: ValueExpr) = {
+      Pipe(argument, callee, argument.pos.join(callee.pos))
+    }
+
+    (pipePart.rep(min=2, sep=pipeSep)).map { parts =>
+      val firstNode = makeNode(parts.head, parts.tail.head)
+
+      parts.tail.tail.foldLeft(firstNode){ case (prevNode, nextCallee) =>
+        makeNode(prevNode, nextCallee)
+      }
+    }
+  }
+
 
   //////
   // Type parameters
@@ -403,7 +437,7 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   //////
   // Top level rules
 
-  def valueExpr[X: P]: P[ValueExpr] = P(memberOrCall | lambda | valueAs | simple)
+  def valueExpr[X: P]: P[ValueExpr] = P(pipe | pipePart)
 
   def typeExpr[X: P]: P[TypeExpr] = P(funcType | simpleType)
 
