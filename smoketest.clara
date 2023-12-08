@@ -1,14 +1,8 @@
 // using various language features to test they work end-to-end
 
-::declare ::type Float: Any
-
-::declare ::type Int: Any
-
-::declare ::type String: Any
-
-::declare ::type Boolean: Any
-::declare true: Boolean
-::declare false: Boolean
+::opaque Float
+::opaque Int
+::opaque String
 
 // ::tagged True: ()
 // True: True = True ()
@@ -16,38 +10,38 @@
 // False: False = False ()
 // ::alias Boolean: True | False
 
-::declare ::methods Float: {
-  @[emitKind binaryOperator] @[emitName +]
-  plus: Float => Float
+// ::declare ::methods Float: {
+//   @[emitKind binaryOperator] @[emitName +]
+//   plus: Float => Float
 
-  @[emitKind binaryOperator] @[emitName -]
-  minus: Float => Float
+//   @[emitKind binaryOperator] @[emitName -]
+//   minus: Float => Float
 
-  @[emitKind binaryOperator] @[emitName *]
-  multiply: Float => Float
+//   @[emitKind binaryOperator] @[emitName *]
+//   multiply: Float => Float
 
-  @[emitKind binaryOperator] @[emitName /]
-  divideBy: Float => Float
-}
+//   @[emitKind binaryOperator] @[emitName /]
+//   divideBy: Float => Float
+// }
 
-::declare ::methods Int: {
-  @[emitKind binaryOperator] @[emitName +]
-  plus: Int => Int
+// ::declare ::methods Int: {
+//   @[emitKind binaryOperator] @[emitName +]
+//   plus: Int => Int
 
-  @[emitKind binaryOperator] @[emitName -]
-  minus: Int => Int
+//   @[emitKind binaryOperator] @[emitName -]
+//   minus: Int => Int
 
-  @[emitKind binaryOperator] @[emitName *]
-  multiply: Int => Int
+//   @[emitKind binaryOperator] @[emitName *]
+//   multiply: Int => Int
 
-  @[emitKind binaryOperator] @[emitName /]
-  divideBy: Int => Float
-}
+//   @[emitKind binaryOperator] @[emitName /]
+//   divideBy: Int => Float
+// }
 
-::declare ::methods String: {
-  @[emitKind instanceProperty]
-  length: Int
-}
+// ::declare ::methods String: {
+//   @[emitKind instanceProperty]
+//   length: Int
+// }
 
 // ::declare ::type BrowserConsole = {
 //   log: String => ()
@@ -69,10 +63,5 @@
 //     | None => None
 //     | Some(value) => f(value)
 // }
-
-
-// boxedInt = ::new Box { x = 1 }
-// boxedInt.get
-
 
 ()

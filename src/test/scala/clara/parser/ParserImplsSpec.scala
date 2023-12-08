@@ -147,6 +147,12 @@ class ParserImplsSpec extends BaseSpec {
   parseAst(p.block(_))("(\n\n// comment\n()\n;\n()\n();();;)")(
     Block(Seq.fill(4)(UnitLiteral()))
   )
+  parseAst(p.block(_))("(();()//\n)")(
+    Block(Seq(UnitLiteral(), UnitLiteral()))
+  )
+  parseAst(p.block(_))("(//first\n\n\n();()//\n)")(
+    Block(Seq(UnitLiteral(), UnitLiteral()))
+  )
   reject(p.block(_))("(foo)")
   reject(p.block(_))("()")
 
@@ -432,6 +438,9 @@ class ParserImplsSpec extends BaseSpec {
   )
   parseAst(p.programBlock(_))("foo//")(
     Block(Seq(NamedValue("foo")))
+  )
+  parseAst(p.programBlock(_))("//first\n\n()")(
+    Block(Seq(UnitLiteral()))
   )
 
   // nt("one block program")(

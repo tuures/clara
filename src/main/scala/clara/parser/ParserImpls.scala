@@ -216,12 +216,12 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
 
   def blockItemSep[X: P] = P(nl | semi)
 
+  def blockContent[X: P] = P(inBlockDecl | valueExpr)
+
   def blockContents[X: P](isProgramBlock: Boolean): P[Seq[BlockContent]] = P {
     val min = if (isProgramBlock) 1 else 2
 
-    def blockContent = P(inBlockDecl | valueExpr)
-
-    P(blockItemSep.rep ~ blockContent.rep(min=min, sep=blockItemSep.rep(1)) ~ blockItemSep.rep)
+    blockItemSep.rep ~ blockContent.rep(min=min, sep=blockItemSep.rep(1)) ~ blockItemSep.rep
   }
 
   def block[X: P]: P[Block] = P(pp(openParens ~ blockContents(false) ~ closeParens)(Block.apply _))
@@ -303,18 +303,22 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   //////
   // Member selection / call
 
-  def memberOrJuxtaCall[X: P]: P[ValueExpr] = P {
+  object MemberOrJuxtaCallImpl {
     type Part = Either[NamedValue, ValueExpr]
+
     def makeNode(prevNode: ValueExpr, nextPart: Part) = nextPart match {
       case Left(namedValue) => MemberSelection(prevNode, namedValue, prevNode.pos.join(namedValue.pos))
       case Right(argument) => Call(prevNode, argument, prevNode.pos.join(argument.pos))
     }
 
-    def memberPart = (space.rep ~ nl.? ~ dot ~ nl.rep ~ namedValue).map(Left(_))
-    def juxtaCallPart = simple.map(Right(_))
-    def part = memberPart | juxtaCallPart
+    def memberPart[X: P] = P(space.rep ~ nl.? ~ dot ~ nl.rep ~ namedValue).map(Left(_))
+    def juxtaCallPart[X: P] = P(simple.map(Right(_)))
+  }
 
-    (simple ~~ noSpaceWhitespace ~~ part.repX(1)).map { case (base, parts) =>
+  def memberOrJuxtaCall[X: P] = P {
+    import MemberOrJuxtaCallImpl._
+
+    (simple ~~ noSpaceWhitespace ~~ (memberPart | juxtaCallPart).repX(1)).map { case (base, parts) =>
       val firstNode = makeNode(base, parts.head)
 
       parts.tail.foldLeft(firstNode){ case (prevNode, nextPart) =>
@@ -324,6 +328,7 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   }
 
   def spaceCallPart[X: P] = P(memberOrJuxtaCall | simple)
+
   def spaceCall[X: P]: P[Call] = P {
     def makeNode(callee: ValueExpr, argument: ValueExpr) = {
       Call(callee, argument, callee.pos.join(argument.pos))
@@ -339,9 +344,9 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   }
 
   def pipePart[X: P] = P(spaceCall | piecewise | lambda | valueAs | spaceCallPart)
-  def pipe[X: P]: P[Pipe] = P {
-    def pipeSep = nl.? ~ at ~ nl.rep
+  def pipeSep[X: P] = P(nl.? ~ at ~ nl.rep)
 
+  def pipe[X: P]: P[Pipe] = P {
     def makeNode(argument: ValueExpr, callee: ValueExpr) = {
       Pipe(argument, callee, argument.pos.join(callee.pos))
     }
@@ -446,5 +451,5 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   //////
   // Start here
 
-  def programBlock[X: P] = P(pp(blockContents(true) ~ End)(Block.apply _))
+  def programBlock[X: P] = P(pp(Start ~ blockContents(true) ~ End)(Block.apply _))
 }
