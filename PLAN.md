@@ -13,6 +13,10 @@ should feel like functional programming in JS without fighting
 
 - pattern matching and destructuring
   - "pattern matching expression" is actually piecewise-defined function, which is immediately invoked
+    - #(A => a, B => b) syntax is terse but visually distinctive
+    - rejected (| A => a | B => b) syntax to save `|` for or-patterns and operators in expressions. also difficult to read inline
+    - rejected {A => a, B => b} syntax because could be confusing with record syntax especially when writing an starting with empty braces
+    - rejected composability #(func1, func2) in order to prioritise simplicity
   - destructuring (patterns) should work the same everywhere (function paramter, assignment, pattern matching expression)
   - no other built-in control flow syntax (e.g. if-else)
 

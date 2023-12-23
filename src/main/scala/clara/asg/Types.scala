@@ -73,13 +73,11 @@ object Types {
   sealed trait Type
 
   // primitive non-composite types
-  // each object corresponds directly to the type§
   case object Top extends Type
   case object Bottom extends Type
-  case object Uni extends Type // Unit
+  case object Uni extends Type // the unit type
 
   // primitive structural composite types
-  // every instance of case class corresponds to a type
   case class Func(typeParams: Seq[TypeCons.ParamCon], parameter: Type, result: Type) extends Type
   object Func {
     def apply(parameter: Type, result: Type): Func = Func(Nil, parameter, result)
@@ -91,16 +89,36 @@ object Types {
     def empty: Record = apply()
   }
 
-  case class Tuple(ts: Seq[Type]) extends Type
+  case class Tuple(types: Seq[Type]) extends Type
 
+  case class Union(types: Seq[Type]) extends Type
+  object Union {
+    def apply(types: Seq[Type]): Union = new Union(types.flatMap {
+      case nested: Union => nested.types
+      case Bottom => Seq()
+      case t => Seq(t)
+    })
+  }
+
+  case class Intersection(types: Seq[Type]) extends Type
+  object Intersection {
+    def apply(types: Seq[Type]): Intersection = new Intersection(types.flatMap {
+      case nested: Intersection => nested.types
+      case Top => Seq()
+      case t => Seq(t)
+    })
+  }
+
+  // user defined nominal types
   sealed trait Nominal extends Type {
     def con: TypeCons.TypeCon
   }
 
+  // type variable
   // TODO: allow narrowing Param with boundaries/kind, now it's always "extends Top"
   case class Param(con: TypeCons.ParamCon) extends Nominal
 
-  // user defined nominal types
+  // nominal composite types
   // TODO: drop `name`s and lazily get name from Env?
   // TODO: add `definedAt: Pos` ?
   // Unable to assign type
@@ -125,6 +143,8 @@ object Types {
     typeArgs: Seq[Type],
     wrappedType: Types.Type,
   ) extends Nominal
+
+  // nominal non-composite types
 
   case class Opaque(
     con: TypeCons.OpaqueTypeCon,
@@ -152,6 +172,10 @@ object Types {
     case (Tuple(ts1), Tuple(ts2)) => ts1.length == ts2.length && ts1.zip(ts2).forall { case (t1, t2) =>
       isAssignable(t1, t2)
     }
+    case (Union(ts1), t2) => ts1.forall(t1 => isAssignable(t1, t2))
+    case (t1, Union(ts2)) => ts2.exists(t2 => isAssignable(t1, t2))
+    case (Intersection(ts1), t2) => ts1.exists(t1 => isAssignable(t1, t2))
+    case (t1, Intersection(ts2)) => ts2.forall(t2 => isAssignable(t1, t2))
     case (p1: Param, p2: Param) => sameCon(p1, p2)
     case (Alias(_, _, wrappedType), t2) => isAssignable(wrappedType, t2)
     case (t1, Alias(_, _, wrappedType)) => isAssignable(t1, wrappedType)
@@ -206,6 +230,8 @@ object Types {
         Func(typeParams, substitute(parameter), substitute(result))
       case Record(fields) => Record(fields.mapValues(substitute))
       case Tuple(ts) => Tuple(ts.map(substitute))
+      case Union(ts) => Union(ts.map(substitute))
+      case Intersection(ts) => Intersection(ts.map(substitute))
       case p: Param => substitutions.getOrElse(p.con.uniq, p)
       case Alias(con, typeArgs, wrappedType) => Alias(con, typeArgs.map(substitute), substitute(wrappedType))
       case Tagged(con, typeArgs, wrappedType) => Tagged(con, typeArgs.map(substitute), substitute(wrappedType))
@@ -218,8 +244,8 @@ object Types {
   }
 
   def toSource(typ: Type): String = typ match {
-    case Top    => "*" // Anything
-    case Bottom => "!" // Nothing
+    case Top    => "*"
+    case Bottom => "!"
     case Uni    => "()"
     case Func(typeParams, parameter, result) =>
       val paramsList = ToSourceImpl.typeListSource(typeParams.map(TypeCons.toSource))
@@ -234,6 +260,8 @@ object Types {
         }
         .safeString("{", ", ", "}")
     case Tuple(ts) => ts.map(toSource).safeString("(", ", ", ")")
+    case Union(ts) => ts.map(toSource).safeString(" | ")
+    case Intersection(ts) => ts.map(toSource).safeString(" & ")
     case Param(con) => con.name
     case Alias(con, typeArgs, _) => nominalToSource(con, typeArgs)
     case Tagged(con, typeArgs, _) => nominalToSource(con, typeArgs)

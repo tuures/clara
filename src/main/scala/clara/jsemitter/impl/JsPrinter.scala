@@ -46,13 +46,15 @@ case class JsPrinterImpl() {
   def walkObjectLiteral(entries: Seq[(String, Expr)]): String =
     entries.map { case (name, expr) => indented(safe"$name: ${walkExpr(expr)}") }.safeString("{\n", ",\n", "\n}")
 
+  def walkBlock(body: Seq[Content]) = "{\n" + indented(body.map(walkContent).safeString("\n"))+ "\n}"
+
   def walkArrowFunc(param: Option[Pattern], body: Seq[Content]): String = {
     val paramPrinted = param.map(walkPattern).getOrElse("()")
 
     body match {
       case Seq((e: JsAst.Expr)) => safe"$paramPrinted =>\n" + indented(walkExpr(e))
       case _ => {
-        safe"$paramPrinted => {\n" + indented(body.map(walkContent).safeString("\n")) + "\n}"
+        safe"$paramPrinted => ${walkBlock(body)}"
       }
     }
   }
@@ -79,6 +81,17 @@ case class JsPrinterImpl() {
 
   def walkStmt(stmt: Stmt): String = stmt match {
     case Return(expr) => safe"return ${walkExpr(expr)}"
+    case If(ifBranches, elseBranch) => {
+      val ifs = ifBranches.zipWithIndex.map { case (IfBranch(predicate, body), index) =>
+        val keyword = if (index > 0) "else if" else "if"
+        safe"$keyword (${walkExpr(predicate)}) ${walkBlock(body)}"
+      }
+      val els = if (elseBranch.nonEmpty) {
+        safe"else ${walkBlock(elseBranch)}"
+      } else ""
+
+      (ifs :+ els).safeString(" ")
+    }
   }
 
   def walkDefi(defi: Defi): String = defi match {

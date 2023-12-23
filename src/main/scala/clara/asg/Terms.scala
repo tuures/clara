@@ -35,12 +35,19 @@ object Terms {
   case class Block(bcs: Seq[BlockContent], typ: Type) extends ValueExpr
 
   case class NamedValue(name: String, typ: Type) extends ValueExpr
-  case class NamePattern(name: String, typ: Type) extends Pattern
+
+  case class LiteralPattern(term: ValueExpr) extends Pattern {
+    def typ: Type = term.typ
+  }
+  case class CapturePattern(name: String, typ: Type) extends Pattern
 
   case class Field(body: ValueExpr)
   case class Record(fields: Namespace[Field], typ: Types.Record) extends ValueExpr
 
   case class Lambda(parameter: Pattern, body: ValueExpr, typ: Type) extends ValueExpr
+
+  // FIXME
+  case class Piecewise(pieces: Seq[(Pattern, ValueExpr)], typ: Type) extends ValueExpr
 
   sealed trait SelectedMember
   case object SelectedField extends SelectedMember

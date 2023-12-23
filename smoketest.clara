@@ -1,8 +1,83 @@
 // using various language features to test they work end-to-end
 
+//////
+// Block definitions
+
 ::opaque Float
 ::opaque Int
 ::opaque String
+
+::singleton True
+::singleton False
+
+::alias Boolean: True | False
+
+::alias Top: *
+::alias Bottom: !
+::alias Unit: ()
+
+::tagged Player: {name: String, score: Int}
+
+::boxed FooId: String
+::boxed BarId: String
+
+//////
+// Basic literals
+
+float1: Float = 1.0
+int1: Int = 1
+int1000 = 1_000
+
+string1: String = '1'
+//string10 = "$(string1)0"
+verbatimString = '$NoInterpolatio\n here'
+difficultString = #''\t''# // literally '\t'
+
+//////
+// Records, Tuples
+
+xyRecord: {x: Float, y: Float} = {x = 1.0, y = 0.5}
+xyzRecord = {
+  x = float1
+  y = 0.5
+  z = 0
+}
+
+xyTuple: (Float, Float) = (1.0, 0.5)
+
+//////
+// Functions
+
+identityFunc = <A>(a: A) => a
+//identityFunc2: (<A>A => A) = <A>(a: A) => a
+constant1 = () => 1
+first = <A, B>(a: A, _: B) => a
+one = first(1,2)
+
+//////
+// Pattern matching
+yesOrNo = #(
+  True => 'yes'
+  False => 'no'
+)
+
+player1 = Player {name = "Player 1", score = 9000}
+
+::alias FooBar: FooId | BarId
+fooId: FooBar = FooId "xyz"
+barId: FooBar = BarId "xyz"
+
+// FIXME CallPattern
+// isFooOrBar = #(
+//   FooId _ => "Foo"
+//   BarId _ => "Bar"
+// )
+
+//(isFooOrBar(fooId), isFooOrBar(barId))
+
+
+//////
+// Methods, Member selection, Pipe
 
 // ::tagged True: ()
 // True: True = True ()

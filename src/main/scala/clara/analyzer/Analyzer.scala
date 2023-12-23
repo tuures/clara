@@ -3,7 +3,6 @@ package clara.analyzer
 import clara.asg.Terms
 import clara.ast.Ast
 import clara.util.Message
-import clara.util.Safe._
 
 import impl._
 

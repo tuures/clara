@@ -1,5 +1,7 @@
 # Ideas to consider
 
+https://2022.stateofjs.com/en-US/opinions/#top_currently_missing_from_js
+
 ## module support
 
 start from the "entry point" file
@@ -57,6 +59,9 @@ https://github.com/topshell-language/topshell#sum-types-and-pattern-matching
 
 piecewise-defined function:
   (| true => 1 | false => 2)
+
+error if match is not exhaustive
+warn if the match is too wide when directly assgining the piecewise func to something where narrower type is expected
 
 
 ### reverse call / pipe syntax
@@ -162,6 +167,8 @@ Bar = {
 }
 
 ## Tuples and records
+
+- warn if record literal has extraneous fields when directly assigning to something where narrower type is expected
 
 ### tuples as nested pairs
 

@@ -32,6 +32,12 @@ case class TypeExprAnalyzerImpl(env: Env) {
           An.fromSomeOrError(ns.add((name, typ)), duplicateName)
         }
       }.map(Types.Record(_))
+    case Ast.UnionType(ts, _) => An.seq(ts.map(typeExprType)).map { types =>
+      Types.Union(types)
+    }
+    case Ast.IntersectionType(ts, _) => An.seq(ts.map(typeExprType)).map { types =>
+      Types.Intersection(types)
+    }
     case Ast.FuncType(typeParams, parameter, result, _) => {
       TypeParamAnalyzer(env).walkTypeParams(typeParams).flatMap { case (withParamsEnv, typeParamCons) =>
         TypeExprAnalyzerImpl(withParamsEnv).funcType(typeParamCons, parameter, result)

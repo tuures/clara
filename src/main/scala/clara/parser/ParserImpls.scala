@@ -229,8 +229,9 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   //////
   // Names
 
-  // FIXME allow numbers and other symbols in name
-  def name[X: P] = CharsWhile(c => Character.isLetter(c)).!.opaque("name") // NOTE: Character.isLetter works only with BMP characters
+  // NOTE: Character.isLetter works only with BMP characters
+  def name[X: P]: P[String] =
+    ((underscore | CharPred(Character.isLetter(_))) ~~ CharsWhile(Character.isLetterOrDigit(_)).?).!.opaque("name")
 
   def nameWithPos[X: P]: P[NameWithPos] = P(pp(name)(NameWithPos.apply _))
 
@@ -281,6 +282,15 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   def simplePattern[X: P]: P[Pattern] = P(unitPattern | tuplePattern | patternParens | namePattern)
 
   //////
+  // Unions and intersections
+  val verticalBar = "|"
+  val ampersand = "&"
+
+  def unionType[X: P]: P[UnionType] = P(pp(simpleType.rep(min=2, sep=verticalBar))(UnionType.apply _))
+
+  def intersectionType[X: P]: P[IntersectionType] = P(pp(simpleType.rep(min=2, sep=ampersand))(IntersectionType.apply _))
+
+  //////
   // Function syntax
 
   val funcArrow = "=>"
@@ -291,11 +301,16 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
 
   def lambda[X: P]: P[Lambda] = P(pp(polyFuncSyntax(pattern, valueExpr))(Lambda.apply _))
 
-  def piecewise[X: P]: P[Piecewise] = {
-    def piece = "|" ~ funcSyntax(pattern, valueExpr) ~ nl.rep
-    def pieces = piece.rep(1)
+  object PiecewiseImpl {
+    def piece[X: P] = P(funcSyntax(pattern, valueExpr))
+    def pieceSep[X: P] = P((nl | comma) ~ nl.rep) // FIXME duplication with recordItemSep
+    def pieces[X: P] = P(piece.rep(sep=pieceSep))
+  }
 
-    P(pp(openParens ~ nl.rep ~ pieces ~ nl.rep ~ closeParens)(Piecewise.apply _))
+  def piecewise[X: P]: P[Piecewise] = {
+    import PiecewiseImpl._
+
+    P(pp(hash ~ openParens ~ nl.rep ~ pieces ~ comma.? ~ nl.rep ~ closeParens)(Piecewise.apply _))
   }
 
   def funcType[X: P]: P[FuncType] = P(pp(polyFuncSyntax(simpleType, typeExpr))(FuncType.apply _))
@@ -393,14 +408,14 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
 
   def attribute[X: P]: P[Attribute] = P(pp(at ~ bracketOpen ~ name ~ anythingBefore(bracketClose).!.?.map(_.filter(_.nonEmpty)) ~ bracketClose)(Attribute.apply _))
 
-  def attributes[X: P] = P(attribute.rep(sep=nl.rep) ~ nl.rep)
+  def attributes[X: P]: P[Seq[Attribute]] = P(attribute.rep(sep=nl.rep) ~ nl.rep)
 
   //////
   // In-block defs
   val doubleColon = "::"
   def keywordSyntax[T, X: P](word: => P[T]): P[T] = P(doubleColon ~/ word ~ nl.rep)
 
-  def keyword[X: P](word: String) = P(keywordSyntax(word))
+  def keyword[X: P](word: String): P[Unit] = P(keywordSyntax(word))
 
   object TypeDefImpl {
     def alias[X: P] = P("alias").map(_ => TypeDefKind.Alias)
@@ -444,12 +459,12 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
 
   def valueExpr[X: P]: P[ValueExpr] = P(pipe | pipePart)
 
-  def typeExpr[X: P]: P[TypeExpr] = P(funcType | simpleType)
+  def typeExpr[X: P]: P[TypeExpr] = P(funcType | unionType | intersectionType | simpleType)
 
   def pattern[X: P]: P[Pattern] = P(patternAs | simplePattern)
 
   //////
   // Start here
 
-  def programBlock[X: P] = P(pp(Start ~ blockContents(true) ~ End)(Block.apply _))
+  def programBlock[X: P]: P[Block] = P(pp(Start ~ blockContents(true) ~ End)(Block.apply _))
 }

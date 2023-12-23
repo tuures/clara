@@ -10,18 +10,30 @@ case class ValueExprAnalyzerImpl(env: Env) {
   def namedNullaryType(name: String, pos: Pos): An[Types.Type] =
     TypeExprAnalyzer.namedNullaryType(env, name, pos)
 
+  def namedValue(name: String, pos: Pos): An[Terms.NamedValue] = {
+    env.values.get(name).map(typ => An.result(Terms.NamedValue(name, typ))).orElse {
+      env.typeCons.get(name).map { con =>
+        con match {
+          case con: TypeCons.WrapperTypeCon =>
+            An.result(Terms.NamedValue(name, TypeInterpreter.wrapperConstructorFunc(con)))
+          case _ => An.error(SourceMessage(pos, safe"Unknown value `$name`. Type `$name` cannot be used as a value."))
+        }
+      }
+    }.getOrElse(An.error(SourceMessage(pos, safe"Unknown value `$name`")))
+  }
+
   def lambdaTerm(lambda: Ast.Lambda, expectedParameterType: Option[Types.Type]): An[Terms.Lambda] = {
     val Ast.Lambda(typeParams, parameter, body, _) = lambda
 
     TypeParamAnalyzer(env).walkTypeParams(typeParams).flatMap { case (withParamsEnv, typeParamCons) =>
-        PatternAnalyzer(withParamsEnv, withParamsEnv).walkAssignment(parameter, expectedParameterType).
+      PatternAnalyzer(withParamsEnv, withParamsEnv).walkAssignment(parameter, expectedParameterType).
         flatMap { case (funcBodyEnv, parameterTerm) =>
           ValueExprAnalyzerImpl(funcBodyEnv).valueExprTerm(body).map { bodyTerm =>
             val typ = Types.Func(typeParamCons, parameterTerm.typ, bodyTerm.typ)
             Terms.Lambda(parameterTerm, bodyTerm, typ)
           }
         }
-    }
+      }
   }
 
   def functionCallArgumentTerm(calleeParameter: Types.Type, argument: Ast.ValueExpr): An[Terms.ValueExpr] =
@@ -75,17 +87,7 @@ case class ValueExprAnalyzerImpl(env: Env) {
       Terms.Tuple(terms, Types.Tuple(terms.map(_.typ)))
     }
     case b: Ast.Block => BlockAnalyzer.blockTerm(env, b)
-    case Ast.NamedValue(name, pos) => {
-      env.values.get(name).map(typ => An.result(Terms.NamedValue(name, typ))).orElse {
-        env.typeCons.get(name).map { con =>
-          con match {
-            case con: TypeCons.WrapperTypeCon =>
-              An.result(Terms.NamedValue(name, TypeInterpreter.wrapperConstructorFunc(con)))
-            case _ => An.error(SourceMessage(pos, safe"Unknown value `$name`. Type `$name` cannot be used as a value."))
-          }
-        }
-      }.getOrElse(An.error(SourceMessage(pos, safe"Unknown value `$name`")))
-    }
+    case Ast.NamedValue(name, pos) => namedValue(name, pos)
     case Ast.ValueAs(e, t, pos) =>
       valueExprTerm(e).zip(TypeExprAnalyzer.typeExprType(env, t)).flatMap { case (term, typ) =>
         TypeInterpreter.expectAssignable(term.typ, typ, pos).map((_: Unit) => term)
@@ -108,6 +110,28 @@ case class ValueExprAnalyzerImpl(env: Env) {
       }
     }
     case l: Ast.Lambda => lambdaTerm(l, None)
+    case Ast.Piecewise(pieces, _) => {
+      // FIXME
+      case class PieceState(pieces: Seq[(Terms.Pattern, Terms.ValueExpr, Types.Func)])
+      An.step(pieces)(PieceState(Nil)) { case (state, (pattern, body)) =>
+
+        PatternAnalyzer(env, env).walkAssignment(pattern, None).
+          flatMap { case (funcBodyEnv, parameterTerm) =>
+            ValueExprAnalyzerImpl(funcBodyEnv).valueExprTerm(body).map { bodyTerm =>
+              val typ = Types.Func(Nil, parameterTerm.typ, bodyTerm.typ)
+
+              state.copy(pieces = state.pieces ++ Seq((parameterTerm, bodyTerm, typ)))
+            }
+          }
+
+      }.map { state =>
+        val pieces = state.pieces.map(p => (p._1, p._2))
+        val typ = Types.Intersection(state.pieces.map(_._3))
+
+        Terms.Piecewise(pieces, typ)
+      }
+    }
+    // FIXME Ast.NamedMember?
     case Ast.MemberSelection(obj, Ast.NamedValue(name, memberPos), _) =>
       valueExprTerm(obj).flatMap { objectTerm =>
         MemberSelectionAnalyzer(env, name, memberPos).walkMemberSelection(objectTerm).map { case (selectedMember, typ) =>
@@ -126,10 +150,25 @@ case class ValueExprAnalyzerImpl(env: Env) {
         }
       }
     }
+    // FIXME remove duplication with Call
+    case Ast.Pipe(argument, callee, _) => {
+      valueExprTerm(callee).flatMap { calleeTerm =>
+        calleeTerm.typ match {
+          case f: Types.Func =>
+            functionCall(f, argument).map { case (argumentTerm, resultType) =>
+              Terms.Call(calleeTerm, argumentTerm, resultType)
+            }
+          case _ =>
+            An.error(SourceMessage(callee.pos, safe"Cannot call value of type `${Types.toSource(calleeTerm.typ)}`"))
+        }
+      }
+    }
   }
 }
 
 object ValueExprAnalyzer {
+  def namedValue(env: Env, name: String, pos: Pos): An[Terms.NamedValue] =
+    ValueExprAnalyzerImpl(env).namedValue(name, pos)
   def valueExprTerm(env: Env, valueExpr: Ast.ValueExpr): An[Terms.ValueExpr] =
     ValueExprAnalyzerImpl(env).valueExprTerm(valueExpr)
 }

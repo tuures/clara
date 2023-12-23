@@ -93,6 +93,10 @@ class ParserImplsSpec extends BaseSpec {
     LiteralValue.StringPlainPart("str"),
     LiteralValue.StringExpressionPart(NamedValue("bar"))
   )))
+  parseAst(p.processedStringLiteral(_))(""""$(bar)str"""")(StringLiteral(Seq(
+    LiteralValue.StringExpressionPart(NamedValue("bar")),
+    LiteralValue.StringPlainPart("str")
+  )))
   parseAst(p.processedStringLiteral(_))(""""\"\\10\$\n"""")(StringLiteral(Seq(
     LiteralValue.StringEscapePart(Seq('"'.toString, """\""")),
     LiteralValue.StringPlainPart("10"),
@@ -191,6 +195,10 @@ class ParserImplsSpec extends BaseSpec {
     FieldDef("a", None, NamedValue("foo")),
     FieldDef("b", Some(NamedType("Bar")), NamedValue("bar"))
   )))
+  parseAst(p.record(_))("{a, b}")(Record(Seq(
+    FieldDef("a", None, NamedValue("a")),
+    FieldDef("b", None, NamedValue("b"))
+  )))
   parseAst(p.record(_))("{\n  a = foo\n  b: Bar = bar\n}")(Record(Seq(
     FieldDef("a", None, NamedValue("foo")),
     FieldDef("b", Some(NamedType("Bar")), NamedValue("bar"))
@@ -201,6 +209,14 @@ class ParserImplsSpec extends BaseSpec {
     FieldDecl("a", NamedType("Foo")),
     FieldDecl("b", NamedType("Bar"))
   )))
+
+  parseAst(p.unionType(_))("A | {} | ()")(
+    UnionType(Seq(NamedType("A"), RecordType(Nil), UnitType()))
+  )
+
+  parseAst(p.intersectionType(_))("A & {} & ()")(
+    IntersectionType(Seq(NamedType("A"), RecordType(Nil), UnitType()))
+  )
 
   parseAst(p.lambda(_))("() => ()")(
     Lambda(UnitPattern(), UnitLiteral())
@@ -223,17 +239,24 @@ class ParserImplsSpec extends BaseSpec {
   )
   reject(p.lambda(_))("()\n=> ()")
 
-  parseAst(p.piecewise(_))("(|() => ())")(
+  parseAst(p.piecewise(_))("#(() => ())")(
     Piecewise(Seq(UnitPattern() -> UnitLiteral()))
   )
-  parseAst(p.piecewise(_))("(\n  | () =>\n    ()\n)")(
+  parseAst(p.piecewise(_))("#(\n  () =>\n    ()\n)")(
     Piecewise(Seq(UnitPattern() -> UnitLiteral()))
   )
-  parseAst(p.piecewise(_))("(| A => a | B => b)")(
+  parseAst(p.piecewise(_))("#(A => a, B => b)")(
     Piecewise(Seq(NamePattern("A") -> NamedValue("a"), NamePattern("B") -> NamedValue("b")))
   )
-  reject(p.piecewise(_))("()")
-  reject(p.piecewise(_))("(|)")
+  parseAst(p.piecewise(_))("#(\n  A => a\n  B => b\n)")(
+    Piecewise(Seq(NamePattern("A") -> NamedValue("a"), NamePattern("B") -> NamedValue("b")))
+  )
+  parseAst(p.piecewise(_))("#(\n  A => a,\n  B => b,\n)")(
+    Piecewise(Seq(NamePattern("A") -> NamedValue("a"), NamePattern("B") -> NamedValue("b")))
+  )
+  parseAst(p.piecewise(_))("#()")(
+    Piecewise(Nil)
+  )
 
   parseAst(p.funcType(_))("() => ()")(
     FuncType(UnitType(), UnitType())

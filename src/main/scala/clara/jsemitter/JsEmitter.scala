@@ -34,6 +34,20 @@ object JsEmitter {
         emitValueExpr(body)
       }.entries)
     case Terms.Lambda(parameter, body, _) => JsAst.UnaryArrowFunc(emitParameters(parameter), Seq(emitValueExpr(body)))
+    case Terms.Piecewise(pieces, _) => {
+      val ifBranches = pieces.map { case (pattern, body) =>
+        val predicateExpr = pattern match {
+          case Terms.CapturePattern(name, typ) => ???
+          case Terms.LiteralPattern(term) => JsAst.BinaryOperation("===", JsAst.Named("$value"), emitValueExpr(term))
+          case Terms.TuplePattern(ps, typ) => ???
+          case Terms.UnitPattern() => ???
+        }
+
+        JsAst.IfBranch(predicateExpr, Seq(emitValueExpr(body)))
+      }
+
+      JsAst.UnaryArrowFunc(JsAst.NamePattern("$value"), Seq(JsAst.If(ifBranches, Nil)))
+    }
     case Terms.MemberSelection(obj, memberName, selectedMember, _) =>
       emitMemberSelection(obj, memberName, selectedMember)
     case Terms.Call(callee @ Terms.MemberSelection(obj, memberName, selectedMember, _), argument, _) =>
@@ -80,7 +94,7 @@ object JsEmitter {
   def emitValueDefTarget(target: Terms.Pattern): JsAst.Pattern = target match {
     case Terms.UnitPattern() => ???
     case Terms.TuplePattern(ps, _) => JsAst.ArrayPattern(ps.map(emitValueDefTarget))
-    case Terms.NamePattern(name, _) => JsAst.NamePattern(name)
+    case Terms.CapturePattern(name, _) => JsAst.NamePattern(name)
   }
 
   def emitMethodDefSection(targetType: Types.Type, selfPattern: Terms.Pattern, methodDefs: Namespace[Terms.MethodDef]) = {
@@ -127,7 +141,7 @@ object JsEmitter {
   def emitParameters(pattern: Terms.Pattern): JsAst.Pattern = pattern match {
     case Terms.UnitPattern() => JsAst.UnitPattern
     case Terms.TuplePattern(ps, _) => JsAst.ArrayPattern(ps.map(emitParameters))
-    case Terms.NamePattern(name, _) => JsAst.NamePattern(name)
+    case Terms.CapturePattern(name, _) => JsAst.NamePattern(name)
   }
 }
 

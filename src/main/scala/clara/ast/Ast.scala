@@ -48,12 +48,17 @@ object Ast {
   // FIXME NameWithPos
   case class FieldDecl(name: String, t: TypeExpr, pos: Pos = NoPos) extends Node
   case class RecordType(fields: Seq[FieldDecl], pos: Pos = NoPos) extends TypeExpr
-  // FIXME add sign
   // TODO case class RecordPattern(fields: Seq[FieldPattern], pos: Pos = NoPos) extends Pattern
-  // TODO FieldPattern = NamePattern | PatternTyped(NamePattern, t)
-  // TODO support nested patterns? like: {point: Point {x, y}, size: Int} => ...
-  // TODO support renaming? like: {point @ p, size: Int} => ...
-  // TODO how to support default values in patterns? {size: Int = 1}
+  // TODO support nested patterns? like: {point: Point = {x, y}, size: Int} => ... fields with = do not bind field name
+  // TODO support renaming for general patterns? like: (point @ p: Point) => ...
+  // TODO FieldPattern := name ~ maybeTyped ~ ('=' ~ pattern).?
+  // TODO i.e. FieldPattern = (NamePattern | PatternTyped(NamePattern, t), Pattern)
+  // TODO how to support default values in patterns?
+  //   (foo: Int ?? 1) => ...
+  //   {foo: Int = ?? 1}
+
+  case class UnionType(ts: Seq[TypeExpr], pos: Pos = NoPos) extends TypeExpr
+  case class IntersectionType(ts: Seq[TypeExpr], pos: Pos = NoPos) extends TypeExpr
 
   // sealed trait Variance
   // case object Covariant extends Variance

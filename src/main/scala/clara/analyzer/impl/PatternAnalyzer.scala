@@ -32,10 +32,16 @@ case class PatternAnalyzer(env: Env, allowShadow: Env) {
           }
       }
     case Ast.NamePattern(name, pos) =>
-      // FIXME default to Bottom type and just give warning?
-      An.fromSomeOrError(fromType, SourceMessage(pos, "Could not infer type")).flatMap { fromType =>
-        env.addOrShadowValue((name, fromType), allowShadow, pos).map { nextEnv =>
-          (nextEnv, Terms.NamePattern(name, fromType))
+      if (name.charAt(0).isUpper) {
+        ValueExprAnalyzer.namedValue(env, name, pos).map { term =>
+          (env, Terms.LiteralPattern(term))
+        }
+      } else {
+        // FIXME default to Top type and just give warning?
+        An.fromSomeOrError(fromType, SourceMessage(pos, "Could not infer type")).flatMap { fromType =>
+          env.addOrShadowValue((name, fromType), allowShadow, pos).map { nextEnv =>
+            (nextEnv, Terms.CapturePattern(name, fromType))
+          }
         }
       }
     case Ast.PatternAs(p, t, pos) =>
