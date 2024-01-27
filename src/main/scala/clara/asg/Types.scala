@@ -260,8 +260,8 @@ object Types {
         }
         .safeString("{", ", ", "}")
     case Tuple(ts) => ts.map(toSource).safeString("(", ", ", ")")
-    case Union(ts) => ts.map(toSource).safeString(" | ")
-    case Intersection(ts) => ts.map(toSource).safeString(" & ")
+    case Union(ts) => ts.map(toSourceWithAutoParens).safeString(" | ")
+    case Intersection(ts) => ts.map(toSourceWithAutoParens).safeString(" & ")
     case Param(con) => con.name
     case Alias(con, typeArgs, _) => nominalToSource(con, typeArgs)
     case Tagged(con, typeArgs, _) => nominalToSource(con, typeArgs)
@@ -275,6 +275,13 @@ object Types {
 
     def nominalToSource(con: TypeCons.TypeCon, typeArgs: Seq[Types.Type]): String =
       con.name + typeListSource(typeArgs.map(toSource))
+
+    def parens(str: String) = s"($str)"
+
+    def toSourceWithAutoParens(typ: Type): String = typ match {
+      case _: Func | _: Union | _: Intersection => parens(toSource(typ))
+      case _ => toSource(typ)
+    }
   }
 }
 
