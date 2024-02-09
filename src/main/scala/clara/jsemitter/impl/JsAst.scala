@@ -2,8 +2,8 @@ package clara.jsemitter.impl
 
 object JsAst {
   sealed trait Node
-  sealed trait Content extends Node
-  sealed trait Expr extends Content
+  sealed trait Content
+  sealed trait Expr extends Node
   sealed trait Stmt extends Content
   sealed trait Defi extends Content
   sealed trait Pattern extends Node
@@ -17,13 +17,16 @@ object JsAst {
   case class Named(name: String) extends Expr
   case object UnitPattern extends Pattern
   case class NamePattern(name: String) extends Pattern
+
   sealed trait ArrowFunc extends Expr
   case class NullaryArrowFunc(body: Seq[Content]) extends ArrowFunc
   case class UnaryArrowFunc(param: Pattern, body: Seq[Content]) extends ArrowFunc
+
   case class Member(obj: Expr, memberName: String) extends Expr
   case class NullaryCall(target: Expr) extends Expr
   case class UnaryCall(target: Expr, argument: Expr) extends Expr
   case class BinaryOperation(operator: String, a: Expr, b: Expr) extends Expr
+
   case class IfBranch(predicate: Expr, body: Seq[Content]) extends Node
   case class If(ifBranches: Seq[IfBranch], elseBranch: Seq[Content]) extends Stmt
 

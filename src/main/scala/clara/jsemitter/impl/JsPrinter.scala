@@ -86,11 +86,11 @@ case class JsPrinterImpl() {
         val keyword = if (index > 0) "else if" else "if"
         safe"$keyword (${walkExpr(predicate)}) ${walkBlock(body)}"
       }
-      val els = if (elseBranch.nonEmpty) {
-        safe"else ${walkBlock(elseBranch)}"
-      } else ""
+      val maybeElse = if (elseBranch.nonEmpty) {
+        Seq(safe"else ${walkBlock(elseBranch)}")
+      } else Nil
 
-      (ifs :+ els).safeString(" ")
+      (ifs ++ maybeElse).safeString(" ")
     }
   }
 

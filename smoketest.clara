@@ -7,7 +7,9 @@
 ::opaque Int
 ::opaque String
 
+//@[emitName true]
 ::singleton True
+//@[emitName false]
 ::singleton False
 
 ::alias Boolean: True | False
@@ -60,6 +62,9 @@ yesOrNo = #(
   True => 'yes'
   False => 'no'
 )
+
+//FIXME:
+// yesOrNo True
 
 player1 = Player {name = "Player 1", score = 9000}
 

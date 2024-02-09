@@ -2,7 +2,7 @@ package clara.jsemitter
 
 // Asg => JsAst
 
-import clara.asg.{Attributes, Terms, Types, Namespace}
+import clara.asg.{Attributes, Terms, TypeCons, Types, Namespace}
 import clara.ast.LiteralValue
 
 import impl._
@@ -14,12 +14,11 @@ object JsEmitter {
   def emitProgram(program: Terms.Block): JsAst.Module = {
     val body = program.bcs.flatMap(emitBlockContent)
 
-    // JsAst.UnaryCall(JsAst.UnaryArrowFunc("$", body), JsAst.Named("global"))
-    val helpers = Seq(
+    val moduleIntro = Seq(
       // JsAst.Const("$claraType", JsAst.UnaryCall(JsAst.Named("Symbol"), JsAst.StringLiteral("$claraType")))
     )
 
-    JsAst.Module(helpers ++ body)
+    JsAst.Module(moduleIntro ++ body)
   }
 
   def emitValueExpr(valueExpr: Terms.ValueExpr): JsAst.Expr = valueExpr match {
@@ -33,7 +32,8 @@ object JsEmitter {
     case Terms.Record(fields, _) => JsAst.ObjectLiteral(fields.mapValues { case Terms.Field(body) =>
         emitValueExpr(body)
       }.entries)
-    case Terms.Lambda(parameter, body, _) => JsAst.UnaryArrowFunc(emitParameters(parameter), Seq(emitValueExpr(body)))
+    case Terms.Lambda(parameter, body, _) =>
+      JsAst.UnaryArrowFunc(emitParameters(parameter), Seq(JsAst.Return(emitValueExpr(body))))
     case Terms.Piecewise(pieces, _) => {
       val ifBranches = pieces.map { case (pattern, body) =>
         val predicateExpr = pattern match {
@@ -43,7 +43,7 @@ object JsEmitter {
           case Terms.UnitPattern() => ???
         }
 
-        JsAst.IfBranch(predicateExpr, Seq(emitValueExpr(body)))
+        JsAst.IfBranch(predicateExpr, Seq(JsAst.Return(emitValueExpr(body))))
       }
 
       JsAst.UnaryArrowFunc(JsAst.NamePattern("$value"), Seq(JsAst.If(ifBranches, Nil)))
@@ -57,9 +57,7 @@ object JsEmitter {
         case Terms.SelectedField =>
           emitCall(callee, argument)
       }
-    case Terms.Call(_: Terms.NewExpr, argument, _) => emitValueExpr(argument)
     case Terms.Call(callee, argument, _) => emitCall(callee, argument)
-    case Terms.NewExpr(_) => JsAst.UnaryArrowFunc(JsAst.NamePattern("_"), Seq(JsAst.Named("_"))) // TODO JsAst.Iife
   }
 
   def emitIntegerLiteral(value: LiteralValue.Integer) = value match {
@@ -82,11 +80,16 @@ object JsEmitter {
   }
 
   def emitBlockContent(blockContent: Terms.BlockContent): Option[JsAst.Content] = blockContent match {
-    case e: Terms.ValueExpr => Some(emitValueExpr(e))
+    case e: Terms.ValueExpr => Some(JsAst.Return(emitValueExpr(e))) // FIXME discarded values not handled
     case _: Terms.ValueDecl => None
     case Terms.ValueDef(target, e) => Some(JsAst.Const(emitValueDefTarget(target), emitValueExpr(e)))
-    case _: Terms.AliasTypeDef => None
-    case _: Terms.TypeDef => None
+    case Terms.TypeDef(con) => con match {
+      case TypeCons.SingletonTypeCon(name, _, _) => Some(JsAst.Const(
+        JsAst.NamePattern(name),
+        JsAst.StringLiteral(name) // TODO object? symbol?
+      ))
+      case _ => None
+    }
     case _: Terms.MethodDeclSection => None
     case Terms.MethodDefSection(targetType, selfPattern, methodDefs) => Some(emitMethodDefSection(targetType, selfPattern, methodDefs))
   }
@@ -99,7 +102,7 @@ object JsEmitter {
 
   def emitMethodDefSection(targetType: Types.Type, selfPattern: Terms.Pattern, methodDefs: Namespace[Terms.MethodDef]) = {
     val entries = methodDefs.mapValues { case Terms.MethodDef(attributes, body) =>
-      JsAst.UnaryArrowFunc(emitParameters(selfPattern), Seq(emitValueExpr(body)))
+      JsAst.UnaryArrowFunc(emitParameters(selfPattern), Seq(JsAst.Return(emitValueExpr(body))))
     }.entries
 
     JsAst.Const(
@@ -125,7 +128,8 @@ object JsEmitter {
     selectedMember match {
       case Terms.SelectedMethod(attributes) => attributes.emitKind match {
         case Some(Attributes.InstanceProperty) => selectInstanceProperty
-        case Some(Attributes.BinaryOperator) => JsAst.UnaryArrowFunc(JsAst.NamePattern("_"), Seq(JsAst.BinaryOperation(name, emitValueExpr(obj), JsAst.Named("_"))))
+        case Some(Attributes.BinaryOperator) =>
+          JsAst.UnaryArrowFunc(JsAst.NamePattern("_"), Seq(JsAst.Return(JsAst.BinaryOperation(name, emitValueExpr(obj), JsAst.Named("_")))))
         case None => JsAst.UnaryCall(JsAst.Member(JsAst.Named(NameMangler.methodsCompanionName(obj.typ)), name), emitValueExpr(obj))
       }
       case Terms.SelectedField => selectInstanceProperty

@@ -56,12 +56,8 @@ object Terms {
 
   case class Call(callee: ValueExpr, argument: ValueExpr, typ: Type) extends ValueExpr
 
-  // FIMXE
-  case class AliasTypeDef(name: String) extends InBlockDecl
-  // FIXME
+  // TODO con type could be narrowed to rule out ParamCon
   case class TypeDef(con: TypeCon) extends InBlockDecl
-  // FIXME
-  case class NewExpr(typ: Type) extends ValueExpr
 
   sealed trait MethodSection extends InBlockDecl
   case class MethodDeclSection(targetType: Type, methodDecls: Namespace[MethodDecl]) extends MethodSection
