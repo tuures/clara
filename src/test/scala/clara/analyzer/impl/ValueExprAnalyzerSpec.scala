@@ -8,6 +8,9 @@ class ValueExprAnalyzerSpec extends BaseSpec {
     ???
   }
 
+  // piecewise function with one piece should not produce intersection type
+  // empty piecewise function
+
   //   ve("Calling function yields result type", "()") {
 //     Call(Lambda(UnitPattern(), UnitLiteral()), UnitLiteral())
 //   }

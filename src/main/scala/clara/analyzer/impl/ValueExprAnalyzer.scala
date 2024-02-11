@@ -72,6 +72,44 @@ case class ValueExprAnalyzerImpl(env: Env) {
     }
   }
 
+  def callTerm(callee: Ast.ValueExpr, argument: Ast.ValueExpr): An[Terms.Call] = {
+    valueExprTerm(callee).flatMap { calleeTerm =>
+      lazy val cannotCall =
+        An.error(SourceMessage(callee.pos, safe"Cannot call value of type `${Types.toSource(calleeTerm.typ)}`"))
+
+      calleeTerm.typ match {
+        case f: Types.Func =>
+          functionCall(f, argument).map { case (argumentTerm, resultType) =>
+            Terms.Call(calleeTerm, argumentTerm, resultType)
+          }
+        // TODO make object callable if it has apply method?
+        case Types.Intersection(ts) => {
+          valueExprTerm(argument).flatMap { argumentTerm =>
+            ts.flatMap {
+              case f: Types.Func => Some(f)
+              case _ => None
+            } match {
+              case Nil => cannotCall
+              case funcs => funcs.filter(f => Types.isAssignable(argumentTerm.typ, f.parameter)) match {
+                case Nil =>
+                  val parameterUnion = Types.Union(funcs.map(_.parameter))
+
+                  // FIXME instead of expectAssignable use something that returns the error directly
+                  TypeInterpreter.expectAssignable(argumentTerm.typ, parameterUnion, argument.pos).map(_ => ???)
+                case assignableFuncs =>
+                  val resultType = Types.Union(assignableFuncs.map(_.result))
+
+                  An.result(Terms.Call(calleeTerm, argumentTerm, resultType))
+              }
+            }
+          }
+        }
+        case _ =>
+          cannotCall
+      }
+    }
+  }
+
   def valueExprTerm(valueExpr: Ast.ValueExpr): An[Terms.ValueExpr] = valueExpr match {
     case Ast.UnitLiteral(_) => An.result(Terms.UnitLiteral())
     case Ast.IntegerLiteral(value, pos) => namedNullaryType("Int", pos).map { typ =>
@@ -138,31 +176,8 @@ case class ValueExprAnalyzerImpl(env: Env) {
           Terms.MemberSelection(objectTerm, name, selectedMember, typ)
         }
       }
-    case Ast.Call(callee, argument, _) => {
-      valueExprTerm(callee).flatMap { calleeTerm =>
-        calleeTerm.typ match {
-          case f: Types.Func =>
-            functionCall(f, argument).map { case (argumentTerm, resultType) =>
-              Terms.Call(calleeTerm, argumentTerm, resultType)
-            }
-          case _ =>
-            An.error(SourceMessage(callee.pos, safe"Cannot call value of type `${Types.toSource(calleeTerm.typ)}`"))
-        }
-      }
-    }
-    // FIXME remove duplication with Call
-    case Ast.Pipe(argument, callee, _) => {
-      valueExprTerm(callee).flatMap { calleeTerm =>
-        calleeTerm.typ match {
-          case f: Types.Func =>
-            functionCall(f, argument).map { case (argumentTerm, resultType) =>
-              Terms.Call(calleeTerm, argumentTerm, resultType)
-            }
-          case _ =>
-            An.error(SourceMessage(callee.pos, safe"Cannot call value of type `${Types.toSource(calleeTerm.typ)}`"))
-        }
-      }
-    }
+    case Ast.Call(callee, argument, _) => callTerm(callee, argument)
+    case Ast.Pipe(argument, callee, _) => callTerm(callee, argument)
   }
 }
 

@@ -93,20 +93,26 @@ object Types {
 
   case class Union(types: Seq[Type]) extends Type
   object Union {
-    def apply(types: Seq[Type]): Union = new Union(types.flatMap {
+    def apply(types: Seq[Type]): Type = types.flatMap {
       case nested: Union => nested.types
       case Bottom => Seq()
       case t => Seq(t)
-    })
+    } match {
+      case Nil => Bottom
+      case ts => new Union(ts)
+    }
   }
 
   case class Intersection(types: Seq[Type]) extends Type
   object Intersection {
-    def apply(types: Seq[Type]): Intersection = new Intersection(types.flatMap {
+    def apply(types: Seq[Type]): Type = types.flatMap {
       case nested: Intersection => nested.types
       case Top => Seq()
       case t => Seq(t)
-    })
+    } match {
+      case Nil => Top
+      case ts => new Intersection(ts)
+    }
   }
 
   // user defined nominal types

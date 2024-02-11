@@ -10,6 +10,18 @@ class TypesSpec extends BaseSpec {
   import TypeCons._
   import Types._
 
+  def testNormalization(t1: Type, t2: Type, description: String): Unit = {
+    test(safe"normalization: $description") {
+      assert(t1 === t2)
+    }
+  }
+
+  testNormalization(Union(Nil), Bottom, "empty union = Bottom")
+  testNormalization(Intersection(Nil), Top, "empty intersection = Top")
+  // TODO
+  // testNormalization(Union(Seq(Uni, Uni)), Uni, "indentical representations removed: () | () = ()")
+  // testNormalization(Intersection(Seq(Uni, Uni)), Uni, "indentical representations removed: () & () = ()")
+
   val aParam = Param(ParamCon("A", NoPos))
   val aParam2 = Param(ParamCon("A", NoPos))
   val bParam = Param(ParamCon("B", NoPos))

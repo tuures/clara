@@ -1,5 +1,7 @@
 // using various language features to test they work end-to-end
 
+// TODO: add warnings for unused constants
+
 //////
 // Block definitions
 
@@ -19,6 +21,7 @@
 ::alias Unit: ()
 
 ::tagged Player: {name: String, score: Int}
+::tagged FooTagged<T>: T
 
 ::boxed FooId: String
 ::boxed BarId: String
@@ -45,13 +48,17 @@ xyzRecord = {
   z = 0
 }
 
+// FIXME: add support for record shorthands both in valueexpr and patterns:
+//makeTwo = <A>(first: A, second: A) => {first, second}
+
 xyTuple: (Float, Float) = (1.0, 0.5)
 
 //////
 // Functions
 
 identityFunc = <A>(a: A) => a
-//identityFunc2: (<A>A => A) = <A>(a: A) => a
+// FIXME:
+// identityFunc2: (<A>A => A) = <A>(a: A) => a
 constant1 = () => 1
 first = <A, B>(a: A, _: B) => a
 one = first(1,2)
@@ -63,14 +70,19 @@ yesOrNo = #(
   False => 'no'
 )
 
-//FIXME:
-// yesOrNo True
+yesNo = (yesOrNo True, yesOrNo False)
 
 player1 = Player {name = "Player 1", score = 9000}
 
 ::alias FooBar: FooId | BarId
 fooId: FooBar = FooId "xyz"
 barId: FooBar = BarId "xyz"
+
+fooTagged: FooTagged<Int> = FooTagged 1
+
+
+higherOrderFunc = (f: String => String) => f("Bar")
+higherOrderFunc(s => s)
 
 // FIXME CallPattern
 // isFooOrBar = #(

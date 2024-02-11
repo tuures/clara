@@ -36,7 +36,9 @@ object Ast {
   // FIXME typeArgs
   case class NamedValue(name: String, pos: Pos = NoPos) extends ValueExpr
   case class NamedType(name: NameWithPos, typeArgs: Seq[TypeExpr], pos: Pos = NoPos) extends TypeExpr
-  case class NamePattern(name: String, pos: Pos = NoPos) extends Pattern // rename to CapturePattern?
+  case class NamePattern(name: String, pos: Pos = NoPos) extends Pattern
+  // TODO have CapturePattern and LiteralPattern separately already in the AST?
+  // TODO add escape syntax for lower case literal patterns – perhaps @foo
 
   // TODO rename? ValueExprTyped, PatternTyped
   case class ValueAs(e: ValueExpr, t: TypeExpr, pos: Pos = NoPos) extends ValueExpr
