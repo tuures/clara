@@ -96,12 +96,6 @@ higherOrderFunc(s => s)
 //////
 // Methods, Member selection, Pipe
 
-// ::tagged True: ()
-// True: True = True ()
-// ::tagged False: ()
-// False: False = False ()
-// ::alias Boolean: True | False
-
 // ::declare ::methods Float: {
 //   @[emitKind binaryOperator] @[emitName +]
 //   plus: Float => Float
