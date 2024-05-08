@@ -7,11 +7,9 @@ case class PatternAnalyzer(env: Env, allowShadow: Env) {
   def walkAssignment(targetPattern: Ast.Pattern, fromType: Option[Types.Type]): An[(Env, Terms.Pattern)] = targetPattern match {
     case Ast.UnitPattern(pos) =>
       // FIXME default to Bottom type to simplify
-      (fromType match {
-        case None => An.result(())
-        case Some(fromType) =>
-          TypeInterpreter.expectAssignable(fromType, Types.Uni, pos)
-      }).map { case () =>
+      fromType.fold(An.result(())){ fromType =>
+        TypeInterpreter.expectAssignable(fromType, Types.Uni, pos)
+      }.map { case () =>
         (env, Terms.UnitPattern())
       }
     case Ast.TuplePattern(ps, pos) =>
@@ -44,14 +42,12 @@ case class PatternAnalyzer(env: Env, allowShadow: Env) {
           }
         }
       }
-    case Ast.PatternAs(p, t, pos) =>
+    case Ast.PatternAs(p, t, _) =>
       TypeExprAnalyzer.typeExprType(env, t).flatMap { targetType =>
         // FIXME default to Bottom type to simplify
-        (fromType match {
-          case None => An.result(())
-          case Some(fromType) =>
-            TypeInterpreter.expectAssignable(fromType, targetType, pos)
-        }).flatMap { case () =>
+        fromType.fold(An.result(())){ fromType =>
+          TypeInterpreter.expectAssignable(fromType, targetType, t.pos)
+        }.flatMap { case () =>
           walkAssignment(p, Some(targetType))
         }
       }

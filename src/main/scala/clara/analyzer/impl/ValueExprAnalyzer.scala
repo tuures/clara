@@ -15,7 +15,7 @@ case class ValueExprAnalyzerImpl(env: Env) {
       env.typeCons.get(name).map { con =>
         con match {
           case con: TypeCons.WrapperTypeCon =>
-            An.result(Terms.NamedValue(name, TypeInterpreter.wrapperConstructorFunc(con)))
+            An.result(Terms.NamedValue(name, TypeCons.wrapperConstructorFunc(con)))
           case _ => An.error(SourceMessage(pos, safe"Unknown value `$name`. Type `$name` cannot be used as a value."))
         }
       }
@@ -126,9 +126,10 @@ case class ValueExprAnalyzerImpl(env: Env) {
     }
     case b: Ast.Block => BlockAnalyzer.blockTerm(env, b)
     case Ast.NamedValue(name, pos) => namedValue(name, pos)
-    case Ast.ValueAs(e, t, pos) =>
+    case Ast.ValueAs(e, t, _) =>
+      // TODO: this does not actually change the type, just checks for assignability, is that ok?
       valueExprTerm(e).zip(TypeExprAnalyzer.typeExprType(env, t)).flatMap { case (term, typ) =>
-        TypeInterpreter.expectAssignable(term.typ, typ, pos).map((_: Unit) => term)
+        TypeInterpreter.expectAssignable(term.typ, typ, t.pos).map((_: Unit) => term)
       }
     case Ast.Record(fields, _) => {
       An.step(fields)(Namespace.empty[Terms.Field]){ case (ns, Ast.FieldDef(name, typeExprOpt, body, pos)) =>
@@ -137,7 +138,7 @@ case class ValueExprAnalyzerImpl(env: Env) {
         valueExprTerm(body).flatMap { bodyTerm =>
           typeExprOpt.fold(An.result(())) { typExpr =>
             TypeExprAnalyzer.typeExprType(env, typExpr).flatMap { typ =>
-              TypeInterpreter.expectAssignable(bodyTerm.typ, typ, pos)
+              TypeInterpreter.expectAssignable(bodyTerm.typ, typ, typExpr.pos)
             }
           }.flatMap { case () =>
             An.fromSomeOrError(ns.add((name, Terms.Field(bodyTerm))), duplicateName)
@@ -172,7 +173,7 @@ case class ValueExprAnalyzerImpl(env: Env) {
     // FIXME Ast.NamedMember?
     case Ast.MemberSelection(obj, Ast.NamedValue(name, memberPos), _) =>
       valueExprTerm(obj).flatMap { objectTerm =>
-        MemberSelectionAnalyzer(env, name, memberPos).walkMemberSelection(objectTerm).map { case (selectedMember, typ) =>
+        MemberSelectionAnalyzer.memberSelection(env, objectTerm, name, memberPos).map { case (selectedMember, typ) =>
           Terms.MemberSelection(objectTerm, name, selectedMember, typ)
         }
       }

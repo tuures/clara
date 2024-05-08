@@ -3,7 +3,7 @@ package clara.analyzer.impl
 import clara.util.Safe._
 
 import clara.ast.{Pos, SourceMessage}
-import clara.asg.Namespace
+import clara.asg.{Namespace, TypeCons}
 import clara.asg.Types.Type
 import clara.asg.TypeCons.TypeCon
 import clara.asg.Attributes.MethodAttributes
@@ -25,12 +25,14 @@ case class Env(typeCons: Namespace[TypeCon], values: Namespace[Type], methods: U
 
     An.fromSomeOrError(ns, error).map(t => this.copy(typeCons = t))
   }
-  // FIXME
-  // def addMethod(typ: Type, uniq: Uniq, binding: (String, EnvMethod), pos: Pos): An[Env] = {
-  //   lazy val error = SourceMessage(pos, safe"Method with name `${binding._1}` already given for type `${Types.toSource(typ)}`")
-  //   val o = methods.get(uniq).getOrElse(Namespace.empty[EnvMethod]).add(binding).map(ns => methods.addOrModify((uniq, ns)))
-  //   An.fromSomeOrError(o, error).map(m => this.copy(methods = m))
-  // }
+  def addMethod(con: TypeCon, binding: (String, EnvMethod), pos: Pos): An[Env] = {
+    lazy val error =
+      SourceMessage(pos, safe"Method with name `${binding._1}` already exists for type `${TypeCons.toSource(con)}`")
+    val methodsUpdated = methods.get(con.uniq).getOrElse(Namespace.empty[EnvMethod]).
+      add(binding).map(ns => methods.addOrModify((con.uniq, ns)))
+
+    An.fromSomeOrError(methodsUpdated, error).map(m => this.copy(methods = m))
+  }
 }
 
 object Env {

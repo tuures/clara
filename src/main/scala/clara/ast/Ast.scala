@@ -98,10 +98,9 @@ object Ast {
   // TODO: remove duplication MethodDeclSection vs MethodDefSection
   // TODO: use ConstructPattern instead of targetType, selfPattern
 
-  case class MethodDeclSection(targetType: NameWithPos, methods: Seq[Method], pos: Pos = NoPos) extends InBlockDecl
   case class MethodDecl(attributes: Seq[Attribute], name: String, t: TypeExpr, pos: Pos = NoPos) extends Method
-  case class MethodDefSection(targetType: NameWithPos, selfPattern: Pattern, methods: Seq[Method], pos: Pos = NoPos) extends InBlockDecl
   case class MethodDef(attributes: Seq[Attribute], name: String, t: Option[TypeExpr], body: ValueExpr, pos: Pos = NoPos) extends Method
+  case class MethodSection(isDecl: Boolean, targetType: NameWithPos, selfPattern: Option[Pattern], methods: Seq[Method], pos: Pos = NoPos) extends InBlockDecl
 
   // TODO: add attributes?
   case class ValueDecl(name: String, t: TypeExpr, pos: Pos = NoPos) extends InBlockDecl

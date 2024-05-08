@@ -6,7 +6,7 @@ import clara.ast.{Ast, Pos, SourceMessage}
 import clara.util.Safe._
 
 
-case class BlockAnalyzerState(
+case class BlockState(
   currentEnv: Env,
   currentContents: Vector[Terms.BlockContent],
   currentReturnType: Option[Types.Type],
@@ -17,8 +17,8 @@ case class BlockAnalyzerState(
       tell(SourceMessage(blockPos, "Block should end with an expression."))
   }
 }
-object BlockAnalyzerState {
-  def begin(parentEnv: Env) = BlockAnalyzerState(parentEnv, Nil.toVector, None)
+object BlockState {
+  def begin(parentEnv: Env) = BlockState(parentEnv, Nil.toVector, None)
 }
 
 case class BlockAnalyzerImpl(parentEnv: Env) {
@@ -50,24 +50,21 @@ case class BlockAnalyzerImpl(parentEnv: Env) {
           }
       }
     case typeDef: Ast.TypeDef =>
-      TypeDefAnalyzer.typeDefTerm(currentEnv, parentEnv, typeDef).map { case (nextEnv, typeDefTerm) =>
-        BlockContentStep(nextEnv, typeDefTerm, None)
-    }
-    case Ast.MethodDeclSection(targetTypeName, methods, _) => ???
-      // MethodSectionAnalyzer(currentEnv).walkDeclSection(targetTypeName, methods)
-      //   .map { case (term, nextEnv) => (term, None, nextEnv) }
-    case Ast.MethodDefSection(targetTypeName, selfPattern, methods, _) => ???
-      // MethodSectionAnalyzer(currentEnv).walkDefSection(targetTypeName, selfPattern, methods)
-      //   .map { case (term, nextEnv) => (term, None, nextEnv) }
+      TypeDefAnalyzer.typeDefTerm(currentEnv, parentEnv, typeDef).map { case (nextEnv, term) =>
+        BlockContentStep(nextEnv, term, None)
+      }
+    case methodSection: Ast.MethodSection =>
+      MethodSectionAnalyzer.methodSectionTerm(currentEnv, methodSection).
+        map { case (nextEnv, term) => BlockContentStep(nextEnv, term, None) }
   }
 
-  def walkBlockContents(bcs: Seq[Ast.BlockContent]): An[BlockAnalyzerState] =
-    An.step(bcs.zipWithIndex)(BlockAnalyzerState.begin(parentEnv)) { case (currentState, (bc, index)) =>
-      val BlockAnalyzerState(currentEnv, currentContents, _) = currentState
+  def walkBlockContents(bcs: Seq[Ast.BlockContent]): An[BlockState] =
+    An.step(bcs.zipWithIndex)(BlockState.begin(parentEnv)) { case (currentState, (bc, index)) =>
+      val BlockState(currentEnv, currentContents, _) = currentState
 
       walkBlockContent(currentEnv, bc, index === bcs.length - 1).
         map { case BlockContentStep(nextEnv, contentTerm, nextReturnType) =>
-          BlockAnalyzerState(nextEnv, currentContents :+ contentTerm, nextReturnType)
+          BlockState(nextEnv, currentContents :+ contentTerm, nextReturnType)
         }
     }
 

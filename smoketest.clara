@@ -9,6 +9,11 @@
 ::opaque Int
 ::opaque String
 
+::opaque Array<E>
+// TODO array literals?
+
+// TODO ::enum Boolean = True | false
+
 //@[emitName true]
 ::singleton True
 //@[emitName false]
@@ -96,38 +101,28 @@ higherOrderFunc(s => s)
 //////
 // Methods, Member selection, Pipe
 
-// ::declare ::methods Float: {
-//   @[emitKind binaryOperator] @[emitName +]
-//   plus: Float => Float
+// TODO fix methods
+//::methods Boolean b: {
+//  thenElse =...
+//  and = ... how to deal with short circuiting?
+//  or = ...
+//}
 
-//   @[emitKind binaryOperator] @[emitName -]
-//   minus: Float => Float
+::declare ::methods String: {
+  @[emitKind instanceProperty]
+  length: Int
+}
 
-//   @[emitKind binaryOperator] @[emitName *]
-//   multiply: Float => Float
+::methods Boolean b: {
+  not = b @ #(
+    True => False
+    False => True
+  )
+}
 
-//   @[emitKind binaryOperator] @[emitName /]
-//   divideBy: Float => Float
-// }
-
-// ::declare ::methods Int: {
-//   @[emitKind binaryOperator] @[emitName +]
-//   plus: Int => Int
-
-//   @[emitKind binaryOperator] @[emitName -]
-//   minus: Int => Int
-
-//   @[emitKind binaryOperator] @[emitName *]
-//   multiply: Int => Int
-
-//   @[emitKind binaryOperator] @[emitName /]
-//   divideBy: Int => Float
-// }
-
-// ::declare ::methods String: {
-//   @[emitKind instanceProperty]
-//   length: Int
-// }
+::methods FooTagged t: {
+  tupled: (T, T) = (t, t)
+}
 
 // ::declare ::type BrowserConsole = {
 //   log: String => ()
@@ -143,11 +138,20 @@ higherOrderFunc(s => s)
 
 // console.log("Hello World!")
 
-
 // ::methods Maybe {
 //   map<B>: Maybe<B> = (f: A => B) => this ??
+//     | Some(value) => Some(f(value))
 //     | None => None
-//     | Some(value) => f(value)
 // }
 
 ()
+
+// adaptation from A argument to () => A parameter
+
+// pattern matching, equality
+
+// fix all warnings and ???s
+
+// operator syntax
+// "interfaces" (typeclasses) for methods?
+// rest/spread for objects and arrays?

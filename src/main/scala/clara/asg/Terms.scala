@@ -36,7 +36,7 @@ object Terms {
 
   case class NamedValue(name: String, typ: Type) extends ValueExpr
 
-  case class LiteralPattern(term: ValueExpr) extends Pattern {
+  case class LiteralPattern(term: NamedValue) extends Pattern {
     def typ: Type = term.typ
   }
   case class CapturePattern(name: String, typ: Type) extends Pattern
@@ -51,7 +51,7 @@ object Terms {
 
   sealed trait SelectedMember
   case object SelectedField extends SelectedMember
-  case class SelectedMethod(attributes: MethodAttributes) extends SelectedMember
+  case class SelectedMethod(targetCon: TypeCon, attributes: MethodAttributes) extends SelectedMember
   case class MemberSelection(obj: ValueExpr, memberName: String, selectedMember: SelectedMember, typ: Type) extends ValueExpr
 
   case class Call(callee: ValueExpr, argument: ValueExpr, typ: Type) extends ValueExpr
@@ -60,9 +60,9 @@ object Terms {
   case class TypeDef(con: TypeCon) extends InBlockDecl
 
   sealed trait MethodSection extends InBlockDecl
-  case class MethodDeclSection(targetType: Type, methodDecls: Namespace[MethodDecl]) extends MethodSection
+  case class MethodDeclSection(targetCon: TypeCon, methodDecls: Namespace[MethodDecl]) extends MethodSection
   case class MethodDecl(attributes: MethodAttributes, typ: Type) extends Member
-  case class MethodDefSection(targetType: Type, self: Pattern, methodDefs: Namespace[MethodDef]) extends MethodSection
+  case class MethodDefSection(targetCon: TypeCon, self: Pattern, methodDefs: Namespace[MethodDef]) extends MethodSection
   case class MethodDef(attributes: MethodAttributes, body: ValueExpr) extends Member
 
   case class ValueDecl(name: String) extends InBlockDecl

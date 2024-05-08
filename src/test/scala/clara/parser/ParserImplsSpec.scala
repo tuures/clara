@@ -379,6 +379,7 @@ class ParserImplsSpec extends BaseSpec {
   parseAst(p.typeDef(_))("::opaque Foo")(
     TypeDef(TypeDefKind.Opaque, "Foo")
   )
+  reject(p.typeDef(_))(":: opaque Foo")
 
   parseAst(p.typeDef(_))("::opaque Foo<Nonsense>: Nonsense")(
     TypeDef(TypeDefKind.Opaque, "Foo", Seq(TypeParam("Nonsense")), NamedType("Nonsense"))
@@ -392,35 +393,35 @@ class ParserImplsSpec extends BaseSpec {
     TypeDef(TypeDefKind.Singleton, "Foo", Seq(TypeParam("Nonsense")), NamedType("Nonsense"))
   )
 
-  parseAst(p.methodDeclSection(_))("::declare ::methods Bar: {\n  foo: Bar\n}")(
-    MethodDeclSection(NameWithPos("Bar"), Seq(
+  parseAst(p.methodSection(_))("::declare ::methods Bar: {\n  foo: Bar\n}")(
+    MethodSection(true, NameWithPos("Bar"), None, Seq(
       MethodDecl(Nil, "foo", NamedType("Bar", Nil))
     ))
   )
-  parseAst(p.methodDeclSection(_))("::declare ::methods Bar: { foo: Bar = sic }")(
-    MethodDeclSection(NameWithPos("Bar"), Seq(
+  parseAst(p.methodSection(_))("::declare ::methods Bar: { foo: Bar = sic }")(
+    MethodSection(true, NameWithPos("Bar"), None, Seq(
       MethodDef(Nil, "foo", Some(NamedType("Bar", Nil)), NamedValue("sic"))
     ))
   )
-  parseAst(p.methodDeclSection(_))("::declare ::methods Bar: {\n@[a]\nfoo: Bar\nbaz: Baz\n}")(
-    MethodDeclSection(NameWithPos("Bar"), Seq(
+  parseAst(p.methodSection(_))("::declare ::methods Bar: {\n@[a]\nfoo: Bar\nbaz: Baz\n}")(
+    MethodSection(true, NameWithPos("Bar"), None, Seq(
       MethodDecl(Seq(Attribute("a", None)), "foo", NamedType("Bar", Nil)),
       MethodDecl(Nil, "baz", NamedType("Baz", Nil)),
     ))
   )
 
-  parseAst(p.methodDefSection(_))("::methods Bar b: { foo = b }")(
-    MethodDefSection(NameWithPos("Bar"), NamePattern("b"), Seq(
+  parseAst(p.methodSection(_))("::methods Bar b: { foo = b }")(
+    MethodSection(false, NameWithPos("Bar"), Some(NamePattern("b")), Seq(
       MethodDef(Nil, "foo", None, NamedValue("b"))
     ))
   )
-  parseAst(p.methodDefSection(_))("::methods Bar b:\n  {foo: Bar = b}")(
-    MethodDefSection(NameWithPos("Bar"), NamePattern("b"), Seq(
+  parseAst(p.methodSection(_))("::methods Bar b:\n  {foo: Bar = b}")(
+    MethodSection(false, NameWithPos("Bar"), Some(NamePattern("b")), Seq(
       MethodDef(Nil, "foo", Some(NamedType("Bar", Nil)), NamedValue("b"))
     ))
   )
-  parseAst(p.methodDefSection(_))("::methods Bar b: { foo: Sic }")(
-    MethodDefSection(NameWithPos("Bar"), NamePattern("b"), Seq(
+  parseAst(p.methodSection(_))("::methods Bar b: { foo: Sic }")(
+    MethodSection(false, NameWithPos("Bar"), Some(NamePattern("b")), Seq(
       MethodDecl(Nil, "foo", NamedType("Sic", Nil))
     ))
   )

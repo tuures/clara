@@ -413,7 +413,7 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   //////
   // In-block defs
   val doubleColon = "::"
-  def keywordSyntax[T, X: P](word: => P[T]): P[T] = P(doubleColon ~/ word ~ nl.rep)
+  def keywordSyntax[T, X: P](word: => P[T]): P[T] = P(doubleColon ~~ word ~/ nl.rep)
 
   def keyword[X: P](word: String): P[Unit] = P(keywordSyntax(word))
 
@@ -438,21 +438,16 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
 
   def methodsBody[X: P]: P[Seq[Method]] = P(recordSyntax(methodDef | methodDecl))
 
-  // TODO use ConstructPattern instead of typeName ~ simplePattern
-  def methodDefSection[X: P]: P[MethodDefSection] = P(pp(
-    keyword("methods") ~/ nameWithPos ~ simplePattern ~ colon ~ nl.rep ~ methodsBody
-  )(MethodDefSection.apply _))
-
-  def methodDeclSection[X: P]: P[MethodDeclSection] = P(pp(
-    keyword("declare") ~
-    keyword("methods") ~/ nameWithPos ~ colon ~ nl.rep ~ methodsBody
-  )(MethodDeclSection.apply _))
+  def methodSection[X: P]: P[MethodSection] = P(pp(
+    keyword("declare").!.?.map(_.isDefined) ~
+    keyword("methods") ~/ nameWithPos ~ simplePattern.? ~ colon ~ nl.rep ~ methodsBody
+  )(MethodSection.apply _))
 
   def valueDecl[X: P]: P[ValueDecl] = P(pp(keyword("declare") ~ name ~ typed)(ValueDecl.apply _))
 
   def valueDef[X: P]: P[ValueDef] = P(pp(pattern ~ equalsSign ~ nl.rep ~ valueExpr)(ValueDef.apply _))
 
-  def inBlockDecl[X: P]: P[InBlockDecl] = P(typeDef | methodDefSection | methodDeclSection | valueDecl | valueDef)
+  def inBlockDecl[X: P]: P[InBlockDecl] = P(typeDef | methodSection | valueDecl | valueDef)
 
   //////
   // Top level rules

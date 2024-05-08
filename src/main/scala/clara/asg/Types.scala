@@ -14,6 +14,7 @@ object Uniq {
 
 // FIXME move
 object TypeCons {
+  import Types._
   import Impl._
 
   sealed trait TypeCon {
@@ -51,6 +52,27 @@ object TypeCons {
     uniq: Uniq = Uniq(),
   ) extends TypeCon
 
+  def pseudoInstantiate(con: TypeCon): Type = con match {
+    case con @ WrapperTypeCon(typeDefKind, _, typeParams, wrappedType, _, _) => {
+      val typeArgs = typeParams.map(Param)
+
+      typeDefKind match {
+        case TypeDefKind.Alias => Alias(con, typeArgs, wrappedType)
+        case TypeDefKind.Tagged => Tagged(con, typeArgs, wrappedType)
+        case TypeDefKind.Boxed => Boxed(con, typeArgs, wrappedType)
+      }
+    }
+    case con @ OpaqueTypeCon(_, typeParams, _, _) => Opaque(con, typeParams.map(Param))
+    case con: SingletonTypeCon => Singleton(con)
+    case con: ParamCon => Param(con)
+  }
+
+  def wrapperConstructorFunc(con: WrapperTypeCon): Func = {
+    // TODO: is it safe to re-use type con's type params as type params for the func?
+    Func(con.typeParams, con.wrappedType, pseudoInstantiate(con))
+  }
+
+  // TODO: could be replaced with toSource(pseudoInstantiate(con)) on the callsite?
   def toSource(con: TypeCon): String = con match {
     case con: ParamCon => con.name
     case con: WrapperTypeCon => toSourceWithTypeParams(con.name, con.typeParams)
@@ -257,14 +279,7 @@ object Types {
       val paramsList = ToSourceImpl.typeListSource(typeParams.map(TypeCons.toSource))
       safe"$paramsList${toSource(parameter)} => ${toSource(result)}"
     case Record(fields) =>
-      fields
-        .mapValues(toSource)
-        .entries
-        .map {
-          case (name, v) =>
-            safe"$name: $v"
-        }
-        .safeString("{", ", ", "}")
+      fields.mapValues(toSource).entries.map { case (name, v) => safe"$name: $v" }.safeString("{", ", ", "}")
     case Tuple(ts) => ts.map(toSource).safeString("(", ", ", ")")
     case Union(ts) => ts.map(toSourceWithAutoParens).safeString(" | ")
     case Intersection(ts) => ts.map(toSourceWithAutoParens).safeString(" & ")

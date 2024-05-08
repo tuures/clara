@@ -1,7 +1,7 @@
 package clara.analyzer.impl
 
 import clara.asg.{Uniq, Types}
-import clara.asg.Types.{Func, Nominal, Alias, Tagged, Boxed, Opaque, Singleton, Param, Type}
+import clara.asg.Types.{Func, Nominal, Alias, Tagged, Union, Boxed, Opaque, Singleton, Param, Type}
 import clara.asg.TypeCons.{TypeCon, WrapperTypeCon, OpaqueTypeCon, SingletonTypeCon, ParamCon}
 import clara.ast.{SourceMessage, Pos}
 import clara.ast.Ast.TypeDefKind
@@ -13,19 +13,7 @@ import clara.asg.TypeCons
 object TypeInterpreter {
   import Impl._
 
-  def wrapperConstructorFunc(con: WrapperTypeCon): Func = {
-    val typeArgs = con.typeParams.map(con => Param(con))
-
-    val resultType = con.typeDefKind match {
-      case TypeDefKind.Alias => Alias(con, typeArgs, con.wrappedType)
-      case TypeDefKind.Tagged => Tagged(con, typeArgs, con.wrappedType)
-      case TypeDefKind.Boxed => Boxed(con, typeArgs, con.wrappedType)
-    }
-
-    Func(con.typeParams, con.wrappedType, resultType)
-  }
-
-  def instantiate(typeCon: TypeCon, typeArgs: Seq[Type], pos: Pos): An[Nominal] = typeCon match {
+  def instantiate(con: TypeCon, typeArgs: Seq[Type], pos: Pos): An[Nominal] = con match {
     case con @ WrapperTypeCon(typeDefKind, _, typeParams, wrappedType, _, _) => {
       matchTypeArgs(typeParams, typeArgs, con, pos).
         map(substitutions => Types.substituteParams(substitutions, wrappedType)).map { wrappedTypeSubstituted =>
@@ -47,6 +35,26 @@ object TypeInterpreter {
   def expectAssignable(t1: Type, t2: Type, pos: Pos): An[Unit] = Types.isAssignable(t1, t2) match {
     case true =>  An.result(())
     case false => An.error(SourceMessage(pos, safe"Type `${Types.toSource(t1)}` is not assignable to type `${Types.toSource(t2)}`"))
+  }
+
+  def expandMethodTargets(topLevelTypeCon: TypeCon, pos: Pos): An[Set[TypeCon]] = {
+
+    def methodTargets(con: TypeCon): An[Set[TypeCon]] = con match {
+      case con @ WrapperTypeCon(TypeDefKind.Alias, _, _, wrappedType, _, _) =>
+        aliasWrappedMethodTargets(wrappedType).map { wrappedTargets => Set(con) ++ wrappedTargets }
+      case con => An.result(Set(con))
+    }
+
+    def aliasWrappedMethodTargets(wrappedType: Type): An[Set[TypeCons.TypeCon]] = wrappedType match {
+      case typ: Nominal => methodTargets(typ.con)
+      case Union(types) => An.seq(types.map {
+        case t: Nominal => An.result(t.con)
+        case t => An.error(SourceMessage(pos, safe"Cannot have methods for type `${TypeCons.toSource(topLevelTypeCon)}` because it expands into a union type with non-nominal member type `${Types.toSource(t)}`"))
+      }).map(_.toSet)
+      // FIXME exhaustive
+    }
+
+    methodTargets(topLevelTypeCon)
   }
 
   object Impl {

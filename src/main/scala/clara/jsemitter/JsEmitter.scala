@@ -38,7 +38,8 @@ object JsEmitter {
       val ifBranches = pieces.map { case (pattern, body) =>
         val predicateExpr = pattern match {
           case Terms.CapturePattern(name, typ) => ???
-          case Terms.LiteralPattern(term) => JsAst.BinaryOperation("===", JsAst.Named("$value"), emitValueExpr(term))
+          case Terms.LiteralPattern(namedValue) =>
+            JsAst.BinaryOperation("===", JsAst.Named("$value"), emitValueExpr(namedValue))
           case Terms.TuplePattern(ps, typ) => ???
           case Terms.UnitPattern() => ???
         }
@@ -52,7 +53,8 @@ object JsEmitter {
       emitMemberSelection(obj, memberName, selectedMember)
     case Terms.Call(callee @ Terms.MemberSelection(obj, memberName, selectedMember, _), argument, _) =>
       selectedMember match {
-        case Terms.SelectedMethod(attributes) if attributes.emitKind.exists(_ === Attributes.BinaryOperator) =>
+        // TODO: is this branch needed or could be optimized on JsAst level after emit?
+        case Terms.SelectedMethod(_, attributes) if attributes.emitKind.exists(_ === Attributes.BinaryOperator) =>
           emitBinaryOperation(obj, memberName, selectedMember, argument)
         case Terms.SelectedField =>
           emitCall(callee, argument)
@@ -91,7 +93,7 @@ object JsEmitter {
       case _ => None
     }
     case _: Terms.MethodDeclSection => None
-    case Terms.MethodDefSection(targetType, selfPattern, methodDefs) => Some(emitMethodDefSection(targetType, selfPattern, methodDefs))
+    case Terms.MethodDefSection(targetCon, selfPattern, methodDefs) => Some(emitMethodDefSection(targetCon, selfPattern, methodDefs))
   }
 
   def emitValueDefTarget(target: Terms.Pattern): JsAst.Pattern = target match {
@@ -100,20 +102,20 @@ object JsEmitter {
     case Terms.CapturePattern(name, _) => JsAst.NamePattern(name)
   }
 
-  def emitMethodDefSection(targetType: Types.Type, selfPattern: Terms.Pattern, methodDefs: Namespace[Terms.MethodDef]) = {
+  def emitMethodDefSection(targetCon: TypeCons.TypeCon, selfPattern: Terms.Pattern, methodDefs: Namespace[Terms.MethodDef]) = {
     val entries = methodDefs.mapValues { case Terms.MethodDef(attributes, body) =>
       JsAst.UnaryArrowFunc(emitParameters(selfPattern), Seq(JsAst.Return(emitValueExpr(body))))
     }.entries
 
     JsAst.Const(
-      JsAst.NamePattern(NameMangler.methodsCompanionName(targetType)),
+      JsAst.NamePattern(NameMangler.methodsCompanionName(targetCon)),
       JsAst.ObjectLiteral(entries)
     )
   }
 
   def emitMemberName(memberName: String, selectedMember: Terms.SelectedMember): String = {
     val nameOverride = selectedMember match {
-      case Terms.SelectedMethod(attributes) => attributes.emitName
+      case Terms.SelectedMethod(_, attributes) => attributes.emitName
       case Terms.SelectedField => None
     }
 
@@ -126,11 +128,11 @@ object JsEmitter {
     def selectInstanceProperty = JsAst.Member(emitValueExpr(obj), name)
 
     selectedMember match {
-      case Terms.SelectedMethod(attributes) => attributes.emitKind match {
+      case Terms.SelectedMethod(targetCon, attributes) => attributes.emitKind match {
         case Some(Attributes.InstanceProperty) => selectInstanceProperty
         case Some(Attributes.BinaryOperator) =>
           JsAst.UnaryArrowFunc(JsAst.NamePattern("_"), Seq(JsAst.Return(JsAst.BinaryOperation(name, emitValueExpr(obj), JsAst.Named("_")))))
-        case None => JsAst.UnaryCall(JsAst.Member(JsAst.Named(NameMangler.methodsCompanionName(obj.typ)), name), emitValueExpr(obj))
+        case None => JsAst.UnaryCall(JsAst.Member(JsAst.Named(NameMangler.methodsCompanionName(targetCon)), name), emitValueExpr(obj))
       }
       case Terms.SelectedField => selectInstanceProperty
     }
@@ -150,10 +152,5 @@ object JsEmitter {
 }
 
 object NameMangler {
-  def methodsCompanionName(typ: Types.Type) = safe"${typeName(typ)}$$Methods"
-
-  def typeName(typ: Types.Type) = typ match {
-    // case Types.Alias(name, _) => name
-    case t => throw new scala.NotImplementedError(t.toString())
-  }
+  def methodsCompanionName(targetCon: TypeCons.TypeCon) = safe"${targetCon.name}$$Methods"
 }

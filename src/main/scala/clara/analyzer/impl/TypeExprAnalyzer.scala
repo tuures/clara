@@ -52,6 +52,8 @@ case class TypeExprAnalyzerImpl(env: Env) {
 }
 
 object TypeExprAnalyzer {
+  def namedTypeCon(env: Env, n: Ast.NameWithPos): An[TypeCons.TypeCon] =
+    TypeExprAnalyzerImpl(env).namedTypeCon(n)
   def namedNullaryType(env: Env, name: String, pos: Pos): An[Types.Type] =
     TypeExprAnalyzerImpl(env).namedType(Ast.NameWithPos(name, pos), Nil, pos)
   def typeExprType(env: Env, typeExpr: Ast.TypeExpr): An[Types.Type] =
