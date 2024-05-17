@@ -45,11 +45,11 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   }
 
   // pp is GENERATED CODE:
-  // List.range(1, 5).map { pArity =>
+  // List.range(1, 6).map { pArity =>
   //   val cs = List.range(0, pArity + 1).
   //     map(i => ('A' + i).toChar.toString)
   //
-  //   val typeParams = (cs ++ "X: P").mkString("[", ", ", "]")
+  //   val typeParams = (cs :+ "X: P").mkString("[", ", ", "]")
   //
   //   val tupleArgs = cs.init.mkString(", ")
   //   val pArg =
@@ -65,11 +65,18 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   //
   //   safe"def pp$typeParams$valueParams = $impl"
   // }.foreach(println)
-  def pp[A, X: P](p: => P[Unit])(f: Pos => A) = P(withPos(p).map(t => f(t._2)))
-  def pp[A, B, X: P](p: => P[A])(f: (A, Pos) => B) = P(withPos(p).map(t => f(t._1, t._2)))
-  def pp[A, B, C, X: P](p: => P[(A, B)])(f: (A, B, Pos) => C) = P(withPos(p).map(t => f(t._1._1, t._1._2, t._2)))
-  def pp[A, B, C, D, X: P](p: => P[(A, B, C)])(f: (A, B, C, Pos) => D) = P(withPos(p).map(t => f(t._1._1, t._1._2, t._1._3, t._2)))
-  def pp[A, B, C, D, E, X: P](p: => P[(A, B, C, D)])(f: (A, B, C, D, Pos) => E) = P(withPos(p).map(t => f(t._1._1, t._1._2, t._1._3, t._1._4, t._2)))
+  def pp[A, X: P](p: => P[Unit])(f: Pos => A) =
+    P(withPos(p).map(t => f(t._2)))
+  def pp[A, B, X: P](p: => P[A])(f: (A, Pos) => B) =
+    P(withPos(p).map(t => f(t._1, t._2)))
+  def pp[A, B, C, X: P](p: => P[(A, B)])(f: (A, B, Pos) => C) =
+    P(withPos(p).map(t => f(t._1._1, t._1._2, t._2)))
+  def pp[A, B, C, D, X: P](p: => P[(A, B, C)])(f: (A, B, C, Pos) => D) =
+    P(withPos(p).map(t => f(t._1._1, t._1._2, t._1._3, t._2)))
+  def pp[A, B, C, D, E, X: P](p: => P[(A, B, C, D)])(f: (A, B, C, D, Pos) => E) =
+    P(withPos(p).map(t => f(t._1._1, t._1._2, t._1._3, t._1._4, t._2)))
+  def pp[A, B, C, D, E, F, X: P](p: => P[(A, B, C, D, E)])(f: (A, B, C, D, E, Pos) => F) =
+    P(withPos(p).map(t => f(t._1._1, t._1._2, t._1._3, t._1._4, t._1._5, t._2)))
 
   //////
   // Basics
@@ -440,7 +447,7 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
 
   def methodSection[X: P]: P[MethodSection] = P(pp(
     keyword("declare").!.?.map(_.isDefined) ~
-    keyword("methods") ~/ nameWithPos ~ simplePattern.? ~ colon ~ nl.rep ~ methodsBody
+    keyword("methods") ~/ nameWithPos ~ maybeTypeParams ~ simplePattern.? ~ colon ~ nl.rep ~ methodsBody
   )(MethodSection.apply _))
 
   def valueDecl[X: P]: P[ValueDecl] = P(pp(keyword("declare") ~ name ~ typed)(ValueDecl.apply _))

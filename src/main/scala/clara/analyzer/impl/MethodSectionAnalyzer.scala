@@ -28,9 +28,11 @@ case class MethodSectionAnalyzerImpl(parentEnv: Env) {
       }
     }
   }
+
   object DeclSectionState {
     def begin(env: Env) = DeclSectionState(env, Namespace.empty[Terms.MethodDecl])
   }
+
   case class WalkDefState(env: Env, ns: Namespace[Terms.MethodDef]) {
     def addMethodDef(con: TypeCons.TypeCon, methodDef: Ast.MethodDef): An[WalkDefState] = {
       val Ast.MethodDef(attributes, name, typeOpt, body, pos) = methodDef
@@ -60,6 +62,7 @@ case class MethodSectionAnalyzerImpl(parentEnv: Env) {
       }
     }
   }
+
   object WalkDefState {
     def begin(env: Env) = WalkDefState(env, Namespace.empty[Terms.MethodDef])
   }
@@ -68,7 +71,7 @@ case class MethodSectionAnalyzerImpl(parentEnv: Env) {
     TypeExprAnalyzer.namedTypeCon(parentEnv, targetTypeName)
 
   def methodSectionTerm(methodSection: Ast.MethodSection): An[(Env, Terms.MethodSection)] = {
-    val Ast.MethodSection(isDecl, targetTypeName, selfPattern, methodAsts, _) = methodSection
+    val Ast.MethodSection(isDecl, targetTypeName, typeParams, selfPattern, methodAsts, _) = methodSection
 
     targetCon(targetTypeName).flatMap { con =>
       (isDecl, selfPattern) match {
