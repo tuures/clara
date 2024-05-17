@@ -13,14 +13,24 @@ case class SourcePos(sourceInfo: SourceInfo, fromIndex: Int, untilIndex: Option[
   def humanFormat = {
     val fromLineCol = sourceInfo.lineCol(fromIndex)
     val from = fromLineCol.humanFormat
-    val until = untilIndex.map { untilIndex =>
+    val until = untilIndex.flatMap { untilIndex =>
       // use inclusive range format for humans, thus - 1
       val lineCol = sourceInfo.lineCol(untilIndex - 1)
-      val ndash = "\u2013"
-      safe"($ndash${if (lineCol.line === fromLineCol.line) lineCol.humanFormatCol else lineCol.humanFormat})"
-    }.getOrElse("")
 
-    safe"${sourceInfo.name}:$from$until"
+      if (lineCol.line === fromLineCol.line) {
+        if (lineCol.col === fromLineCol.col) {
+          None
+        } else {
+          Some(lineCol.humanFormatCol)
+        }
+      } else {
+        Some(lineCol.humanFormat)
+      }
+    }
+
+    val ndash = "\u2013"
+
+    safe"${sourceInfo.name}:$from${until.fold("")(until => safe"($ndash$until)")}"
   }
 
   override def toString() = safe"SourcePos($humanFormat)"

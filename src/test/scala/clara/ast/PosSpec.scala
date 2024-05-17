@@ -4,13 +4,15 @@ import clara.testutil.BaseSpec
 
 class PosSpec extends BaseSpec {
 
-  val sourceInfo = SourceInfo.fromString("foo.file", "abc\ndef\nghi")
+  val source = "abc\ndef\nghi"
+  val sourceInfo = SourceInfo.fromString("foo.file", source)
 
   def testSourcePosHumanFormat(sp: SourcePos)(expected: String) = {
     import clara.util.Safe.SafeStringContext
 
-    val indices = safe"${sp.fromIndex.toString()} ${sp.untilIndex.toString()}"
-    test(safe"SourcePos.humanFormat $indices -> $expected") {
+    val sourceEscaped = source.replace("\n", "\\n")
+    val indices = safe"${sp.fromIndex.toString()}, ${sp.untilIndex.fold("None")(_.toString())}"
+    test(safe"SourcePos($sourceEscaped, $indices).humanFormat -> $expected") {
       assert(sp.humanFormat === expected)
     }
   }
