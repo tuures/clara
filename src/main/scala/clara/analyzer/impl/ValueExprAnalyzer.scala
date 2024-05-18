@@ -150,8 +150,10 @@ case class ValueExprAnalyzerImpl(env: Env) {
     }
     case l: Ast.Lambda => lambdaTerm(l, None)
     case Ast.Piecewise(pieces, _) => {
-      // FIXME
-      case class PieceState(pieces: Seq[(Terms.Pattern, Terms.ValueExpr, Types.Func)])
+      // TODO review and clean the code, extract?
+      // TODO exhaustiveness check
+      // TODO dead branch check
+      case class PieceState(pieces: Seq[((Terms.Pattern, Terms.ValueExpr), Types.Func)])
       An.step(pieces)(PieceState(Nil)) { case (state, (pattern, body)) =>
 
         PatternAnalyzer(env, env).walkAssignment(pattern, None).
@@ -159,15 +161,15 @@ case class ValueExprAnalyzerImpl(env: Env) {
             ValueExprAnalyzerImpl(funcBodyEnv).valueExprTerm(body).map { bodyTerm =>
               val typ = Types.Func(Nil, parameterTerm.typ, bodyTerm.typ)
 
-              state.copy(pieces = state.pieces ++ Seq((parameterTerm, bodyTerm, typ)))
+              state.copy(pieces = state.pieces ++ Seq(((parameterTerm, bodyTerm), typ)))
             }
           }
 
       }.map { state =>
-        val pieces = state.pieces.map(p => (p._1, p._2))
-        val typ = Types.Intersection(state.pieces.map(_._3))
+        val (patternsWithBodies, funcTypes) = state.pieces.unzip
+        val typ = Types.Intersection(funcTypes)
 
-        Terms.Piecewise(pieces, typ)
+        Terms.Piecewise(patternsWithBodies, typ)
       }
     }
     // FIXME Ast.NamedMember?
