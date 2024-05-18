@@ -25,8 +25,8 @@ case class ValueExprAnalyzerImpl(env: Env) {
   def lambdaTerm(lambda: Ast.Lambda, expectedParameterType: Option[Types.Type]): An[Terms.Lambda] = {
     val Ast.Lambda(typeParams, parameter, body, _) = lambda
 
-    TypeParamAnalyzer(env).walkTypeParams(typeParams).flatMap { case (withParamsEnv, typeParamCons) =>
-      PatternAnalyzer(withParamsEnv, withParamsEnv).walkAssignment(parameter, expectedParameterType).
+    TypeParamAnalyzer(env).walkTypeParams(typeParams).flatMap { case (withTypeParamsEnv, typeParamCons) =>
+      PatternAnalyzer(withTypeParamsEnv, withTypeParamsEnv).walkAssignment(parameter, expectedParameterType).
         flatMap { case (funcBodyEnv, parameterTerm) =>
           ValueExprAnalyzerImpl(funcBodyEnv).valueExprTerm(body).map { bodyTerm =>
             val typ = Types.Func(typeParamCons, parameterTerm.typ, bodyTerm.typ)

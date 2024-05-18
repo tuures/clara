@@ -7,14 +7,15 @@ import clara.util.Safe._
 
 object TypeDefAnalyzer {
   def typeDefTerm(env: Env, allowShadow: Env, typeDef: Ast.TypeDef): An[(Env, Terms.TypeDef)] = {
-    val Ast.TypeDef(typeDefKind, Ast.NameWithPos(name, namePos), typeParams, maybeTypeExpr, pos) = typeDef
+    val Ast.TypeDef(typeDefKind, target, maybeTypeExpr, pos) = typeDef
+    val Ast.DeclTargetType(Ast.NameWithPos(name, namePos), typeParams, targetPos) = target
 
     lazy val rejectTypeParams = An.errorIf(typeParams.length > 0)(
-      SourceMessage(pos, safe"Cannot define type parameters for type `$name`")
+      SourceMessage(targetPos, safe"Cannot define type parameters for type `$name`")
     )
 
-    lazy val rejectStructure = An.errorIf(maybeTypeExpr.isDefined)(
-      SourceMessage(pos, safe"Cannot define structure for type `$name`")
+    lazy val rejectStructure = An.errorFromSome(maybeTypeExpr)(maybeTypeExpr =>
+      SourceMessage(maybeTypeExpr.pos, safe"Cannot define structure for type `$name`")
     )
 
     lazy val structureTypeExpr = An.fromSomeOrError(
@@ -25,9 +26,9 @@ object TypeDefAnalyzer {
     val typeConAn: An[TypeCons.TypeCon] = typeDefKind match {
       case wrapperTypeDefKind: Ast.TypeDefKind.Wrapper =>
         TypeParamAnalyzer(env).walkTypeParams(typeParams).zip(structureTypeExpr).
-          flatMap { case ((withParamsEnv, paramTypes), typeExpr) =>
-            TypeExprAnalyzer.typeExprType(withParamsEnv, typeExpr).map { typ =>
-              TypeCons.WrapperTypeCon(wrapperTypeDefKind, name, paramTypes, typ, namePos)
+          flatMap { case ((withTypeParamsEnv, typeParamCons), typeExpr) =>
+            TypeExprAnalyzer.typeExprType(withTypeParamsEnv, typeExpr).map { typ =>
+              TypeCons.WrapperTypeCon(wrapperTypeDefKind, name, typeParamCons, typ, namePos)
             }
           }
       case Ast.TypeDefKind.Opaque =>

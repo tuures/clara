@@ -122,7 +122,9 @@ higherOrderFunc(s => s)
   )
 }
 
-::methods FooTagged t: {
+// FIXME ERROR: smoketest.clara:126:20(–25): Type `(FooTagged<T>, FooTagged<T>)` is not assignable to type `(T, T)`
+// self pattern should be the unwrapped type or not?
+::methods FooTagged<T> t: {
   tupled: (T, T) = (t, t)
 }
 

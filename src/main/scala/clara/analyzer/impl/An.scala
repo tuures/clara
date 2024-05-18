@@ -66,6 +66,8 @@ object An {
 
   def errorIf(pred: Boolean)(e: Message): An[Unit] = if (pred) error(e) else result(())
 
+  def errorFromSome[A](o: Option[A])(f: A => Message): An[Unit] = o.map(a => error(f(a))).getOrElse(result(()))
+
   /**
    * Combines sequence of analyses together. Returns a combiend Failure if any of the analyses had failed.
    * All logs are always combined.

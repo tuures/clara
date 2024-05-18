@@ -39,8 +39,8 @@ case class TypeExprAnalyzerImpl(env: Env) {
       Types.Intersection(types)
     }
     case Ast.FuncType(typeParams, parameter, result, _) => {
-      TypeParamAnalyzer(env).walkTypeParams(typeParams).flatMap { case (withParamsEnv, typeParamCons) =>
-        TypeExprAnalyzerImpl(withParamsEnv).funcType(typeParamCons, parameter, result)
+      TypeParamAnalyzer(env).walkTypeParams(typeParams).flatMap { case (withTypeParamsEnv, typeParamCons) =>
+        TypeExprAnalyzerImpl(withTypeParamsEnv).funcType(typeParamCons, parameter, result)
       }
     }
   }

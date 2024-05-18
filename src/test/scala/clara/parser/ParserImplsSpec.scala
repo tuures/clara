@@ -7,7 +7,17 @@ import clara.testutil.{AstTestHelpers, BaseSpec}
 import scala.reflect.ClassTag
 
 class ParserImplsSpec extends BaseSpec {
-  import Ast.{TypeDef => _, NamedType => _, Lambda => _, FuncType => _, _}
+  import Ast.{
+    DeclTargetType => _,
+    TypeDef => _,
+    MethodDecl => _,
+    MethodDef => _,
+    NamedType => _,
+    Lambda => _,
+    FuncType => _,
+    // above ones will be used via AstTestHelpers
+    _
+  }
   import AstTestHelpers._
 
   import fastparse._
@@ -394,45 +404,45 @@ class ParserImplsSpec extends BaseSpec {
   )
 
   parseAst(p.methodSection(_))("::declare ::methods Bar: {\n  foo: Bar\n}")(
-    MethodSection(true, NameWithPos("Bar"), Nil, None, Seq(
-      MethodDecl(Nil, "foo", NamedType("Bar", Nil))
+    MethodSection(true, DeclTargetType("Bar", Nil), None, Seq(
+      MethodDecl("foo", NamedType("Bar", Nil))
     ))
   )
   parseAst(p.methodSection(_))("::declare ::methods Bar<A>: {\n  foo: A\n}")(
-    MethodSection(true, NameWithPos("Bar"), Seq(TypeParam("A")), None, Seq(
-      MethodDecl(Nil, "foo", NamedType("A", Nil))
+    MethodSection(true, DeclTargetType("Bar", Seq(TypeParam("A"))), None, Seq(
+      MethodDecl("foo", NamedType("A", Nil))
     ))
   )
   parseAst(p.methodSection(_))("::declare ::methods Bar: { foo: Bar = sic }")(
-    MethodSection(true, NameWithPos("Bar"), Nil, None, Seq(
-      MethodDef(Nil, "foo", Some(NamedType("Bar", Nil)), NamedValue("sic"))
+    MethodSection(true, DeclTargetType("Bar", Nil), None, Seq(
+      MethodDef("foo", Some(NamedType("Bar", Nil)), NamedValue("sic"))
     ))
   )
   parseAst(p.methodSection(_))("::declare ::methods Bar: {\n@[a]\nfoo: Bar\nbaz: Baz\n}")(
-    MethodSection(true, NameWithPos("Bar"), Nil, None, Seq(
+    MethodSection(true, DeclTargetType("Bar", Nil), None, Seq(
       MethodDecl(Seq(Attribute("a", None)), "foo", NamedType("Bar", Nil)),
-      MethodDecl(Nil, "baz", NamedType("Baz", Nil)),
+      MethodDecl("baz", NamedType("Baz", Nil)),
     ))
   )
 
   parseAst(p.methodSection(_))("::methods Bar b: { foo = b }")(
-    MethodSection(false, NameWithPos("Bar"), Nil, Some(NamePattern("b")), Seq(
-      MethodDef(Nil, "foo", None, NamedValue("b"))
+    MethodSection(false, DeclTargetType("Bar", Nil), Some(NamePattern("b")), Seq(
+      MethodDef("foo", None, NamedValue("b"))
     ))
   )
   parseAst(p.methodSection(_))("::methods Bar b:\n  {foo: Bar = b}")(
-    MethodSection(false, NameWithPos("Bar"), Nil, Some(NamePattern("b")), Seq(
-      MethodDef(Nil, "foo", Some(NamedType("Bar", Nil)), NamedValue("b"))
+    MethodSection(false, DeclTargetType("Bar", Nil), Some(NamePattern("b")), Seq(
+      MethodDef("foo", Some(NamedType("Bar", Nil)), NamedValue("b"))
     ))
   )
   parseAst(p.methodSection(_))("::methods Bar<A> b:\n  {foo: Bar<A> = b}")(
-    MethodSection(false, NameWithPos("Bar"), Seq(TypeParam("A")), Some(NamePattern("b")), Seq(
-      MethodDef(Nil, "foo", Some(NamedType("Bar", Seq(NamedType("A")))), NamedValue("b"))
+    MethodSection(false, DeclTargetType("Bar", Seq(TypeParam("A"))), Some(NamePattern("b")), Seq(
+      MethodDef("foo", Some(NamedType("Bar", Seq(NamedType("A")))), NamedValue("b"))
     ))
   )
   parseAst(p.methodSection(_))("::methods Bar b: { foo: Sic }")(
-    MethodSection(false, NameWithPos("Bar"), Nil, Some(NamePattern("b")), Seq(
-      MethodDecl(Nil, "foo", NamedType("Sic", Nil))
+    MethodSection(false, DeclTargetType("Bar", Nil), Some(NamePattern("b")), Seq(
+      MethodDecl("foo", NamedType("Sic", Nil))
     ))
   )
 

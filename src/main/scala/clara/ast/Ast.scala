@@ -92,15 +92,16 @@ object Ast {
     case object Singleton extends TypeDefKind
   }
 
+  case class DeclTargetType(name: NameWithPos, typeParams: Seq[TypeParam], pos: Pos = NoPos)
+
   // TODO: add attributes?
-  case class TypeDef(typeDefKind: TypeDefKind, name: NameWithPos, typeParams: Seq[TypeParam], t: Option[TypeExpr], pos: Pos = NoPos) extends InBlockDecl
+  case class TypeDef(typeDefKind: TypeDefKind, target: DeclTargetType, t: Option[TypeExpr], pos: Pos = NoPos) extends InBlockDecl
 
-  // TODO: remove duplication MethodDeclSection vs MethodDefSection
-  // TODO: use ConstructPattern instead of targetType, selfPattern
+  // TODO: use ConstructPattern instead of targetType, selfPattern ?
 
-  case class MethodDecl(attributes: Seq[Attribute], name: String, t: TypeExpr, pos: Pos = NoPos) extends Method
-  case class MethodDef(attributes: Seq[Attribute], name: String, t: Option[TypeExpr], body: ValueExpr, pos: Pos = NoPos) extends Method
-  case class MethodSection(isDecl: Boolean, targetType: NameWithPos, typeParams: Seq[TypeParam], selfPattern: Option[Pattern], methods: Seq[Method], pos: Pos = NoPos) extends InBlockDecl
+  case class MethodDecl(attributes: Seq[Attribute], name: NameWithPos, t: TypeExpr, pos: Pos = NoPos) extends Method
+  case class MethodDef(attributes: Seq[Attribute], name: NameWithPos, t: Option[TypeExpr], body: ValueExpr, pos: Pos = NoPos) extends Method
+  case class MethodSection(isDecl: Boolean, target: DeclTargetType, selfPattern: Option[Pattern], methods: Seq[Method], pos: Pos = NoPos) extends InBlockDecl
 
   // TODO: add attributes?
   case class ValueDecl(name: String, t: TypeExpr, pos: Pos = NoPos) extends InBlockDecl

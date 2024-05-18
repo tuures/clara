@@ -434,20 +434,22 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
     def typeDefKind[X: P] = P(keywordSyntax(alias | tagged | boxed | opaque | singleton))
   }
 
+  def declTargetType[X: P]: P[DeclTargetType] = P(pp(nameWithPos ~ maybeTypeParams)(DeclTargetType.apply _))
+
   def typeDef[X: P]: P[TypeDef] = P(pp(
     TypeDefImpl.typeDefKind ~
-    nameWithPos ~ maybeTypeParams ~ typed.?
+    declTargetType ~ typed.?
   )(TypeDef.apply _))
 
-  def methodDef[X: P]: P[MethodDef] = P(pp(attributes ~ name ~ typed.? ~ equalsSign ~ valueExpr)(MethodDef.apply _))
+  def methodDef[X: P]: P[MethodDef] = P(pp(attributes ~ nameWithPos ~ typed.? ~ equalsSign ~ valueExpr)(MethodDef.apply _))
 
-  def methodDecl[X: P]: P[MethodDecl] = P(pp(attributes ~ name ~ typed)(MethodDecl.apply _))
+  def methodDecl[X: P]: P[MethodDecl] = P(pp(attributes ~ nameWithPos ~ typed)(MethodDecl.apply _))
 
   def methodsBody[X: P]: P[Seq[Method]] = P(recordSyntax(methodDef | methodDecl))
 
   def methodSection[X: P]: P[MethodSection] = P(pp(
     keyword("declare").!.?.map(_.isDefined) ~
-    keyword("methods") ~/ nameWithPos ~ maybeTypeParams ~ simplePattern.? ~ colon ~ nl.rep ~ methodsBody
+    keyword("methods") ~/ declTargetType ~ simplePattern.? ~ colon ~ nl.rep ~ methodsBody
   )(MethodSection.apply _))
 
   def valueDecl[X: P]: P[ValueDecl] = P(pp(keyword("declare") ~ name ~ typed)(ValueDecl.apply _))

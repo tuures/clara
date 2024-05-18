@@ -8,14 +8,25 @@ object AstTestHelpers {
     def NamedType(name: String) = new NamedType(NameWithPos(name), Nil)
     def NamedType(name: String, typeArgs: Seq[TypeExpr]) = new NamedType(NameWithPos(name), typeArgs)
 
+    def DeclTargetType(name: String) = new DeclTargetType(NameWithPos(name), Nil)
+    def DeclTargetType(name: String, typeParams: Seq[TypeParam]) = new DeclTargetType(NameWithPos(name), typeParams)
+
     def TypeDef(typeDefKind: TypeDefKind, name: String) =
-      new TypeDef(typeDefKind, NameWithPos(name), Nil, None)
+      new TypeDef(typeDefKind, DeclTargetType(name, Nil), None)
     def TypeDef(typeDefKind: TypeDefKind, name: String, typeParams: Seq[TypeParam]) =
-      new TypeDef(typeDefKind, NameWithPos(name), typeParams, None)
+      new TypeDef(typeDefKind, DeclTargetType(name, typeParams), None)
     def TypeDef(typeDefKind: TypeDefKind, name: String, t: TypeExpr) =
-      new TypeDef(typeDefKind, NameWithPos(name), Nil, Some(t))
+      new TypeDef(typeDefKind, DeclTargetType(name, Nil), Some(t))
     def TypeDef(typeDefKind: TypeDefKind, name: String, typeParams: Seq[TypeParam], t: TypeExpr) =
-      new TypeDef(typeDefKind, NameWithPos(name), typeParams, Some(t))
+      new TypeDef(typeDefKind, DeclTargetType(name, typeParams), Some(t))
+
+    def MethodDecl(name: String, t: NamedType) = new MethodDecl(Nil, NameWithPos(name), t)
+    def MethodDecl(attributes: Seq[Attribute], name: String, t: NamedType) =
+      new MethodDecl(attributes, NameWithPos(name), t)
+
+    def MethodDef(name: String, t: Option[NamedType], e: ValueExpr) = new MethodDef(Nil, NameWithPos(name), t, e)
+    def MethodDef(attributes: Seq[Attribute], name: String, t: Option[NamedType], e: ValueExpr) =
+      new MethodDef(attributes, NameWithPos(name), t, e)
 
     def Lambda(parameter: Pattern, body: ValueExpr) =
       new Lambda(Nil, parameter, body)
