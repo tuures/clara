@@ -236,7 +236,7 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   //////
   // Names
 
-  // NOTE: Character.isLetter works only with BMP characters
+  // NOTE: Character.isLetter* works only with BMP characters
   def name[X: P]: P[String] =
     ((underscore | CharPred(Character.isLetter(_))) ~~ CharsWhile(Character.isLetterOrDigit(_)).?).!.opaque("name")
 
@@ -246,7 +246,14 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
 
   def namedType[X: P]: P[NamedType] = P(pp(nameWithPos ~ maybeTypeArgs)(NamedType.apply _))
 
-  def namePattern[X: P]: P[NamePattern] = P(pp(name)(NamePattern.apply _))
+  // NOTE: Character.isUpperCase works only with BMP characters
+  def anyUpperCaseChar[X: P]: P[Unit] = P(CharPred(Character.isUpperCase(_)))
+
+  def namedConstantPattern[X: P]: P[NamedConstantPattern] =
+    P(pp(&(anyUpperCaseChar) ~~ name)(NamedConstantPattern.apply _))
+
+  def capturePattern[X: P]: P[CapturePattern] =
+    P(pp(/*!(anyUpperCaseChar) ~~ */name)(CapturePattern.apply _))
 
   //////
   // ValueAs
@@ -281,12 +288,15 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   //////
   // Simple
 
-  def simple[X: P]: P[ValueExpr] = P(unitLiteral | floatLiteral | integerLiteral | stringLiteral | tuple | block | parens | namedValue | record)
+  def simple[X: P]: P[ValueExpr] =
+    P(unitLiteral | floatLiteral | integerLiteral | stringLiteral | tuple | block | parens | namedValue | record)
 
-  def simpleType[X: P]: P[TypeExpr] = P(topType | bottomType | unitType | tupleType | typeParens | namedType | recordType)
+  def simpleType[X: P]: P[TypeExpr] =
+    P(topType | bottomType | unitType | tupleType | typeParens | namedType | recordType)
 
   // FIXME floatPattern integerPattern stringPattern
-  def simplePattern[X: P]: P[Pattern] = P(unitPattern | tuplePattern | patternParens | namePattern)
+  def simplePattern[X: P]: P[Pattern] =
+    P(unitPattern | tuplePattern | patternParens | namedConstantPattern | capturePattern)
 
   //////
   // Unions and intersections
@@ -381,6 +391,9 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
       }
     }
   }
+
+  // TODO: should we allow also lowercase name here?
+  def constructPattern[X: P] = P(pp(&(anyUpperCaseChar) ~~ nameWithPos ~ simplePattern)(ConstructPattern.apply _))
 
 
   //////

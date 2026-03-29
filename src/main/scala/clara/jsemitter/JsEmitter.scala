@@ -38,7 +38,7 @@ object JsEmitter {
       val ifBranches = pieces.map { case (pattern, body) =>
         val predicateExpr = pattern match {
           case Terms.CapturePattern(name, typ) => ???
-          case Terms.LiteralPattern(namedValue) =>
+          case Terms.NamedConstantPattern(namedValue) =>
             JsAst.BinaryOperation("===", JsAst.Named("$value"), emitValueExpr(namedValue))
           case Terms.TuplePattern(ps, typ) => ???
           case Terms.UnitPattern() => ???

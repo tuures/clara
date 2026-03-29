@@ -56,6 +56,15 @@ class TypesSpec extends BaseSpec {
   val blueSingleton = Singleton(SingletonTypeCon("BlueSingleton", NoPos))
   val redSingleton = Singleton(SingletonTypeCon("RedSingleton", NoPos))
 
+  val redBlueUnionAliasCon = WrapperTypeCon(
+    TypeDefKind.Alias,
+    "RedOrBlueAlias",
+    Nil,
+    Union(Seq(redSingleton, blueSingleton)),
+    NoPos,
+  )
+  val redBlueUnionAliasType = Alias(redBlueUnionAliasCon, Nil, Union(Seq(redSingleton, blueSingleton)))
+
   def testAssignable(expected: Boolean)(t1: Type, t2: Type, description: String = ""): Unit = {
     val desc = if (description.length > 0) description else safe"${t1.toString()}, ${t2.toString()}"
     test(safe"${if(expected) "" else "!"}isAssignable($desc)") {
@@ -87,6 +96,14 @@ class TypesSpec extends BaseSpec {
   testAssignable(false)(Record("foo" -> Uni), Record("bar" -> Uni))
   testAssignable(true)(Record("foo" -> Uni, "zot" -> Uni), Record("foo" -> Uni))
   testAssignable(false)(Record("foo" -> Uni), Record("foo" -> Uni, "zot" -> Uni))
+
+  testAssignable(true)(Tuple(Seq(Uni, Uni)), Tuple(Seq(Uni, Uni)))
+  testAssignable(true)(Tuple(Seq(Uni, Record("foo" -> Uni, "zot" -> Uni))), Tuple(Seq(Uni, Record("foo" -> Uni))))
+  testAssignable(false)(Tuple(Seq(Uni, Uni)), Tuple(Seq(Uni, Record("foo" -> Uni))))
+
+  testAssignable(true)(Union(Seq(Uni, Record("foo" -> Uni))), Union(Seq(Uni, Record("foo" -> Uni))))
+  testAssignable(true)(Union(Seq(Record("foo" -> Uni), Uni)), Union(Seq(Uni, Record("foo" -> Uni))))
+  testAssignable(true)(Union(Seq(Record("foo" -> Uni), Uni)), Union(Seq(Uni, Record())))
 
   testAssignable(true)(aParam, aParam)
   testAssignable(false)(aParam, bParam)
@@ -133,6 +150,17 @@ class TypesSpec extends BaseSpec {
   testAssignable(true)(blueSingleton, blueSingleton, "BlueSingleton, BlueSingleton")
   testAssignable(false)(blueSingleton, redSingleton, "BlueSingleton, RedSingleton")
   testAssignable(false)(redSingleton, blueSingleton, "RedSingleton, BlueSingleton")
+
+  testAssignable(true)(
+    funcUniUniAliasType, Union(Seq(Func(Uni, Uni), Uni)),
+    "FunctionAlias<Uni, Uni>, (Uni => Uni) | Uni"
+  )
+  testAssignable(true)(
+    Intersection(Seq(Func(Uni, Uni), Uni)), funcUniUniAliasType,
+    "(Uni => Uni) | Uni, FunctionAlias<Uni, Uni>"
+  )
+  testAssignable(true)(redBlueUnionAliasType, Union(Seq(redSingleton, blueSingleton)))
+  testAssignable(true)(Intersection(Seq(redSingleton, blueSingleton)), redBlueUnionAliasType)
 
   def testToSource(con: TypeCon)(expected: String) = {
     test(safe"toSource(${con.toString()}) $expected") {

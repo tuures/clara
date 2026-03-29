@@ -4,9 +4,9 @@ import clara.testutil.BaseSpec
 
 class TypeDefAnalyzerSpec extends BaseSpec {
 
-  test("???") {
-    ???// TypeDefAnalyzer.typeDefTerm
-  }
+  // test("???") {
+  //   ???// TypeDefAnalyzer.typeDefTerm
+  // }
 
 
   // FIXME detailed tests for different typeDef kinds

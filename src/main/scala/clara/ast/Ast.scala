@@ -15,16 +15,21 @@ object Ast {
 
   case class TopType(pos: Pos = NoPos) extends TypeExpr
   case class BottomType(pos: Pos = NoPos) extends TypeExpr
+  //TODO WilcardPattern _ extends Pattern
 
   case class UnitLiteral(pos: Pos = NoPos) extends ValueExpr
   case class UnitType(pos: Pos = NoPos) extends TypeExpr
   case class UnitPattern(pos: Pos = NoPos) extends Pattern
 
   case class IntegerLiteral(value: LiteralValue.Integer, pos: Pos = NoPos) extends ValueExpr
+  case class IntegerPattern(value: LiteralValue.Integer, pos: Pos = NoPos) extends Pattern
 
   case class FloatLiteral(value: LiteralValue.Float, pos: Pos = NoPos) extends ValueExpr
+  case class FloatPattern(value: LiteralValue.Float, pos: Pos = NoPos) extends Pattern
 
   case class StringLiteral(parts: Seq[LiteralValue.StringPart], pos: Pos = NoPos) extends ValueExpr
+  // FIXME need to replace LiteralValue.StringPart with something for pattern, support capture
+  case class StringPattern(parts: Seq[LiteralValue.StringPart], pos: Pos = NoPos) extends Pattern
 
   case class Tuple(es: Seq[ValueExpr], pos: Pos = NoPos) extends ValueExpr
   case class TupleType(ts: Seq[TypeExpr], pos: Pos = NoPos) extends TypeExpr
@@ -33,12 +38,23 @@ object Ast {
   case class Block(bcs: Seq[BlockContent], pos: Pos = NoPos) extends ValueExpr
 
   case class NameWithPos(name: String, pos: Pos = NoPos) extends Node
-  // FIXME typeArgs
+  // TODO add typeArg for NamedValue or allow typeArg to be used on any expression with separate node?
   case class NamedValue(name: String, pos: Pos = NoPos) extends ValueExpr
   case class NamedType(name: NameWithPos, typeArgs: Seq[TypeExpr], pos: Pos = NoPos) extends TypeExpr
-  case class NamePattern(name: String, pos: Pos = NoPos) extends Pattern
-  // TODO have CapturePattern and LiteralPattern separately already in the AST?
-  // TODO add escape syntax for lower case literal patterns – perhaps @foo
+  case class NamedConstantPattern(name: String, pos: Pos = NoPos) extends Pattern
+  case class CapturePattern(name: String, pos: Pos = NoPos) extends Pattern
+  // TODO add escape syntax for lower case literal patterns – perhaps $expression or @expression ?
+  // case class ExpressionConstantPattern
+
+  //TODO case class PredicatePattern // <otherpatternOpt> ? expression
+
+  //TODO: conditional expression
+  // ?(
+  //   isAdmin & isRoot => 0
+  //   isDiscounted => 1
+  //   2
+  // )
+  // ?(isAdmin & isRoot => 0, isDiscounted => 1, 2)
 
   // TODO rename? ValueExprTyped, PatternTyped
   case class ValueAs(e: ValueExpr, t: TypeExpr, pos: Pos = NoPos) extends ValueExpr
@@ -61,6 +77,7 @@ object Ast {
 
   case class UnionType(ts: Seq[TypeExpr], pos: Pos = NoPos) extends TypeExpr
   case class IntersectionType(ts: Seq[TypeExpr], pos: Pos = NoPos) extends TypeExpr
+  //TODO OrPattern |, AndPattern &
 
   // sealed trait Variance
   // case object Covariant extends Variance
@@ -77,7 +94,7 @@ object Ast {
   case class Call(callee: ValueExpr, argument: ValueExpr, pos: Pos = NoPos) extends ValueExpr
   case class Pipe(argument: ValueExpr, callee: ValueExpr, pos: Pos = NoPos) extends ValueExpr
 
-  //case class ConstructPattern(targetType: TypeName, selfPattern: Pattern, pos: Pos = NoPos) extends Pattern
+  case class ConstructPattern(name: NameWithPos, selfPattern: Pattern, pos: Pos = NoPos) extends Pattern
 
   case class Attribute(key: String, value: Option[String], pos: Pos = NoPos) extends Node
 

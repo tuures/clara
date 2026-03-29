@@ -64,6 +64,19 @@ error if match is not exhaustive
 warn if the match is too wide when directly assgining the piecewise func to something where narrower type is expected
 
 
+--
+
+if (admin) 1 else 0
+
+admin ? 1 : 0
+
+admin .ifElse(() => 1, () => 0)
+admin @ #(True => 1, False => 0)
+admin @ #(?true => , 0)
+
+if admin printWarning
+
+
 ### reverse call / pipe syntax
 dir @ sort @ uniq
 

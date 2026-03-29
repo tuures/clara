@@ -14,7 +14,7 @@ case class BlockState(
   def finishTerm(blockPos: Pos): An[Terms.Block] = currentReturnType match {
     case Some(typ) => An.result(Terms.Block(currentContents, typ))
     case None => An.result(Terms.Block(currentContents, Types.Uni)).
-      tell(SourceMessage(blockPos, "Block should end with an expression."))
+      tell(SourceMessage(blockPos, "Block should end with an expression"))
   }
 }
 object BlockState {

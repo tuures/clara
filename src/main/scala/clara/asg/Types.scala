@@ -186,6 +186,9 @@ object Types {
   def sameCon(t1: Nominal, t2: Nominal): Boolean = t1.con.uniq === t2.con.uniq
 
   def isAssignable(t1: Type, t2: Type): Boolean = (t1, t2) match {
+    // alias needs to be unwrapped first
+    case (Alias(_, _, wrappedType), t2) => isAssignable(wrappedType, t2)
+    case (t1, Alias(_, _, wrappedType)) => isAssignable(t1, wrappedType)
     case (_, Top)    => true
     case (Bottom, _) => true
     case (Uni, Uni)  => true
@@ -205,8 +208,6 @@ object Types {
     case (Intersection(ts1), t2) => ts1.exists(t1 => isAssignable(t1, t2))
     case (t1, Intersection(ts2)) => ts2.forall(t2 => isAssignable(t1, t2))
     case (p1: Param, p2: Param) => sameCon(p1, p2)
-    case (Alias(_, _, wrappedType), t2) => isAssignable(wrappedType, t2)
-    case (t1, Alias(_, _, wrappedType)) => isAssignable(t1, wrappedType)
     case (t1: Tagged, t2: Tagged) => sameCon(t1, t2) && isAssignable(t1.wrappedType, t2.wrappedType)
     case (t1: Boxed, t2: Boxed) => sameCon(t1, t2) && isAssignable(t1.wrappedType, t2.wrappedType)
     case (t1: Opaque, t2: Opaque) => sameCon(t1, t2) &&

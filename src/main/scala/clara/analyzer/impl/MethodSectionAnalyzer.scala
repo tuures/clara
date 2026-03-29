@@ -1,7 +1,7 @@
 package clara.analyzer.impl
 
-import clara.asg.{Attributes, Terms, Types, TypeCons, Uniq, Namespace}
-import clara.ast.{Ast, Pos, SourceMessage}
+import clara.asg.{Attributes, Terms, Types, TypeCons, Namespace}
+import clara.ast.{Ast, SourceMessage}
 
 import clara.util.Safe._
 
@@ -102,6 +102,7 @@ case class MethodSectionAnalyzerImpl(targetCon: TypeCons.TypeCon) {
 
   def methodDefSection(withTypeParamsEnv: Env, targetType: Types.Type, selfPattern: Ast.Pattern, methodAsts: Seq[Ast.Method]) = {
     PatternAnalyzer(withTypeParamsEnv, withTypeParamsEnv).
+      // TODO should pattern be for the unwrapped value? (rename selfPattern, and unwrap targetType)
       walkAssignment(selfPattern, Some(targetType)).flatMap { case (selfEnv, selfPatternTerm) =>
         An.step(methodAsts)(WalkDefState.begin(selfEnv)){ case (currentState, methodAst) =>
           (methodAst match {

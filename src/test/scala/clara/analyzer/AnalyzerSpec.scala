@@ -18,8 +18,8 @@ class AnalyzerSpec extends BaseSpec {
       TypeDef(Ast.TypeDefKind.Opaque, "Float"),
       TypeDef(Ast.TypeDefKind.Opaque, "Array", Seq(TypeParam("E"))),
       Ast.ValueDecl("NaN", NamedType("Int")),
-      Ast.ValueDef(Ast.NamePattern("fooString"), Ast.StringLiteral(Seq(LiteralValue.StringPlainPart("foo")))),
-      Ast.ValueDef(Ast.PatternAs(Ast.NamePattern("nanInt"), NamedType("Int")), Ast.NamedValue("NaN")),
+      Ast.ValueDef(Ast.CapturePattern("fooString"), Ast.StringLiteral(Seq(LiteralValue.StringPlainPart("foo")))),
+      Ast.ValueDef(Ast.PatternAs(Ast.CapturePattern("nanInt"), NamedType("Int")), Ast.NamedValue("NaN")),
       UnitLiteral()
     ))
 

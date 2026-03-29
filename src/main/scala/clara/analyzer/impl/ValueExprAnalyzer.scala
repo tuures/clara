@@ -36,11 +36,13 @@ case class ValueExprAnalyzerImpl(env: Env) {
       }
   }
 
-  def functionCallArgumentTerm(calleeParameter: Types.Type, argument: Ast.ValueExpr): An[Terms.ValueExpr] =
+  def funcCallArgumentTerm(calleeParameter: Types.Type, argument: Ast.ValueExpr): An[Terms.ValueExpr] =
     (calleeParameter, argument) match {
-      // for inline lambda, infer the lambda's parameter type from the callee's parameter type
+      // for lambda literal in call expression argument position, infer the lambda's parameter type from the callee's parameter type
       // avoiding the need for type annotations on the parameter pattern of the lambda
       case (Types.Func(Nil, p, _), l: Ast.Lambda) => lambdaTerm(l, Some(p))
+      // TODO case (Type.Tuple, Ast.Tuple) with nested lambdas
+      // TODO case (Type.Record, Ast.Record) with nested lambdas
       case _ => valueExprTerm(argument)
     }
 
@@ -59,8 +61,8 @@ case class ValueExprAnalyzerImpl(env: Env) {
     Types.Func(Nil, substituteParams(parameterType), substituteParams(resultType))
   }
 
-  def functionCall(calleeFunc: Types.Func, argument: Ast.ValueExpr): An[(Terms.ValueExpr, Types.Type)] = {
-    functionCallArgumentTerm(calleeFunc.parameter, argument).flatMap { argumentTerm =>
+  def funcCall(calleeFunc: Types.Func, argument: Ast.ValueExpr): An[(Terms.ValueExpr, Types.Type)] = {
+    funcCallArgumentTerm(calleeFunc.parameter, argument).flatMap { argumentTerm =>
       val Types.Func(_, inferredParameterType, inferredResultType) = calleeFunc.typeParams match {
         case Nil => calleeFunc
         case _ => inferFuncTypeArgs(calleeFunc, argumentTerm.typ)
@@ -72,38 +74,44 @@ case class ValueExprAnalyzerImpl(env: Env) {
     }
   }
 
-  def callTerm(callee: Ast.ValueExpr, argument: Ast.ValueExpr): An[Terms.Call] = {
+  def callTerm(callee: Ast.ValueExpr, argument: Ast.ValueExpr): An[Terms.Call] = callee match {
+    // TODO if calleeTerm is a literal piecewise or lambda, resolve argument first and use that to help infer types in the piecewise
+    case callee: Ast.Lambda => callTermX(callee, argument)
+    case callee: Ast.Piecewise => callTermX(callee, argument)
+    // ... otherwise resolve callee first as it should have type already and that will help resolve the argument (e.g. when literal lambda or piecewise is passed as an argument to a higher order function which is being called)
+    case _ => callTermX(callee, argument)
+  }
+
+  def callTermX(callee: Ast.ValueExpr, argument: Ast.ValueExpr): An[Terms.Call] = {
     valueExprTerm(callee).flatMap { calleeTerm =>
       lazy val cannotCall =
         An.error(SourceMessage(callee.pos, safe"Cannot call value of type `${Types.toSource(calleeTerm.typ)}`"))
 
       calleeTerm.typ match {
         case f: Types.Func =>
-          functionCall(f, argument).map { case (argumentTerm, resultType) =>
+          funcCall(f, argument).map { case (argumentTerm, resultType) =>
             Terms.Call(calleeTerm, argumentTerm, resultType)
           }
-        // TODO make object callable if it has apply method?
         case Types.Intersection(ts) => {
           valueExprTerm(argument).flatMap { argumentTerm =>
             ts.flatMap {
-              case f: Types.Func => Some(f)
+              // TODO: is it ok that we just discard the intersection type members that are polymorphic functions. Check if parser already rejects them, if not we should probably give an error here instead of just ignoring them.
+              case f @ Types.Func(Nil, _, _) => Some(f)
               case _ => None
             } match {
               case Nil => cannotCall
-              case funcs => funcs.filter(f => Types.isAssignable(argumentTerm.typ, f.parameter)) match {
-                case Nil =>
-                  val parameterUnion = Types.Union(funcs.map(_.parameter))
+              case funcs =>
+                val parameterUnion = Types.Union(funcs.map(_.parameter))
 
-                  // FIXME instead of expectAssignable use something that returns the error directly
-                  TypeInterpreter.expectAssignable(argumentTerm.typ, parameterUnion, argument.pos).map(_ => ???)
-                case assignableFuncs =>
-                  val resultType = Types.Union(assignableFuncs.map(_.result))
-
-                  An.result(Terms.Call(calleeTerm, argumentTerm, resultType))
-              }
+                // TODO: narrow down the resultType based on which branches the argument is compatible with.
+                TypeInterpreter.expectAssignable(argumentTerm.typ, parameterUnion, argument.pos).map { case () =>
+                  val resultType = Types.Union(funcs.map(_.result))
+                  Terms.Call(calleeTerm, argumentTerm, resultType)
+                }
             }
           }
         }
+        // TODO make object callable if it has apply method?
         case _ =>
           cannotCall
       }
