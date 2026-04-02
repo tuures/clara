@@ -56,7 +56,7 @@ int1: Int = 1
 int1000 = 1_000
 
 string1: String = '1'
-//string10 = "$(string1)0"
+// string10 = "$(string1)0"
 verbatimString = '$NoInterpolatio\n here'
 difficultString = #''\t''# // literally '\t'
 
@@ -106,7 +106,7 @@ fooTagged: FooTagged<Int> = FooTagged 1
 higherOrderFunc = (f: String => String) => f("Bar")
 higherOrderFunc(s => s)
 
-// FIXME CallPattern
+// FIXME ConstructPattern
 // isFooOrBar = #(
 //   FooId _ => "Foo"
 //   BarId _ => "Bar"
@@ -139,9 +139,9 @@ higherOrderFunc(s => s)
 
 // FIXME ERROR: smoketest.clara:126:20(–25): Type `(FooTagged<T>, FooTagged<T>)` is not assignable to type `(T, T)`
 // self pattern should be the unwrapped type or not?
-::methods FooTagged<T> t: {
-  tupled: (T, T) = (t, t)
-}
+// ::methods FooTagged<T> t: {
+//   tupled: (T, T) = (t, t)
+// }
 
 // ::declare ::type BrowserConsole = {
 //   log: String => ()

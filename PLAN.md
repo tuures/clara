@@ -18,26 +18,32 @@
     - rejected `{A => a, B => b}` syntax because could be confusing with record syntax especially when writing an starting with empty braces
     - rejected composability `#(func1, func2)` in order to prioritise simplicity
   - destructuring (patterns) should work the same everywhere (function paramter, assignment, pattern matching expression)
-  - no other built-in control flow syntax (e.g. if-else)
+  - no other control flow syntax (e.g. if-else) is built-in
+    - can perhaps be added in stdlib (boolean helpers) if some kind of call-by-name/need support is added and BE can support specialized optimization (if function compiles into if statement)
 
 - all functions take just one (value) parameter
   - return another function or use tuples to mimic multiple parameters
   - do not provide any shorthand syntax for multiple parameters
   - avoids much hassle in typechecker, but also helps keep syntax more explicit
   - argument can be passed without parenthesis when desirable
-  - ? automatics adaptation when emitting JS ?
+  - multi-argument adaptation needed when emitting/calling JS
+    - Q: can it be made automatic or needs manual annotation?
 
-- polymorphism, but not higher-kinded
+- polymorphism (but not higher-kinded at least in the first steps)
   - higher-kinded type parameters complicate typechecker without significant practical benefit
   - offer simple parametric polymorphism like in TypeScript
 
 - equality
   - built-in equality should be structural (behaves well and cannot be overridden)
-  - custom equality can be provided with custom method
+  - possibly: no built-in equality operator
+    - equality is fundamentally implemented via pattern matching
+    - `==` operator could be stdlib helper (requires extension operator support)
+      - e.g. something like `==<T>(A: T, B: T) = A @ #(B => true, _ => false)`
+  - custom domain-specific equality can be provided with custom method
 
 - lists/sequences
-  - syntax for sequence literals (like array in JS)
-  - ??? or use vararg tuples like `Seq(1,2,3)` in Scala
+  - syntax for immutable sequence literals `[1, 2, 3]`
+  - ??? or use vararg tuples like `Seq(1, 2, 3)` in Scala
 
 - ??? interfaces? like Seq which can be implemented for several concrete types
 
@@ -45,19 +51,19 @@
   - desugars into nominal + union types
 
 - operator syntax for methods
-  - no operator precedence, or should/could it be user configurable? (e.g. + vs *)
+  - ? no operator precedence, or should/could it be user configurable? (e.g. + vs *)
 
 - ? provide `sum(1, 2)` as shorthand for `sum.apply(1,2)` like in Scala ?
 
 - unified type system
   - all types are located in single type lattics which has top and bottom types
-  - "magical types" like integers and strings are injected as opaque types which do not have any inspectable structure
+  - "magical types" like integers and strings are injected as opaque types which do not have any inspectable structure, but are still part of the same lattice (between top and bottom)
   - user can define more opaque types to bridge platform types into language
 
 - provide both structural and nominal typing
   - structural subtyping for records etc
   - nominal typing via nominally wrapping structured types
-  - support both tagged (runtime variants) and untagged unions (ad-hoc union types)
+  - support both dynamically (runtime) tagged and static (compile-time) tagged types
   - facilitates gradually nominal typing: start with structural types, add nominal types as you go
 
 - methods defined separately from the structure of the type
@@ -65,7 +71,8 @@
   - no "classes with inheritance" — only data is subject to subtyping
   - methods can only be defined for nominal types
   - helps to avoid recursion in definitions
-  - ??? offer extension ad-hoc methods (on arbitrary types) ?
+  - ??? offer extension ad-hoc methods/operators (on arbitrary types)?
+
 
 - provide module system
 
@@ -82,20 +89,3 @@
 
 - documentation
   - syntax comparisons with Scala, TypeScript, ...
-
-
----
-
-## trash bin
-
-- provide ways to keept the flow of code left to right by using, where convenient:
-  1. methods `object.method(arg)` instead of `func(arg)`
-
-      some methods take other functions as arguments: `foos.map(v => ... )`. in this case we can either:
-      -  use predefined methods of the value v: `foos.map(_.bar)`, OR
-      -  use ad-hoc functions of data-last style: `foos.map(zot)`, where `zot: Foo => B`
-
-      for example: `[1,2,3].map(pow(2))`, where `pow: Int => Int => Int`
-  2. use ad-hoc functions of data-last style:
-    - `func(arg)(object)`
-    - `object @ func(arg)`

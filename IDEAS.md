@@ -16,6 +16,9 @@ all value and type declarations from the top level block of a module are "export
 
 imports can appear any level of the code
 
+::import foo/math // imports everything from math module as math.*
+::import foo/math pi // imports pi from math as pi
+
 
 ## operators
 
@@ -311,3 +314,9 @@ http://www.inquisition.ca/en/info/gepsypl/rules.htm
 
 https://proglangdesign.net/
 
+
+### documentation approach
+
+https://diataxis.fr/
+
+https://passo.uno/seven-action-model/
