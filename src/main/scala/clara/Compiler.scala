@@ -25,9 +25,9 @@ object Compiler {
       val (asgOrErrors, warnings) = Analyzer.analyzeProgramBlock(programBlock)
 
       asgOrErrors.map { asg =>
-        JsEmitter.emitProgram(asg)
+        JsEmitter.emitModule(asg)
       }.map { jsAst =>
-        (JsPrinter.emitString(jsAst), warnings)
+        (JsPrinter.printModule(jsAst), warnings)
       }
     }
   }

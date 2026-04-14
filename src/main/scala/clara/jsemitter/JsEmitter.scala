@@ -11,7 +11,7 @@ import clara.util.Safe._
 
 
 object JsEmitter {
-  def emitProgram(program: Terms.Block): JsAst.Module = {
+  def emitModule(program: Terms.Block): JsAst.Module = {
     val body = program.bcs.flatMap(emitBlockContent)
 
     val moduleIntro = Seq(
@@ -76,13 +76,23 @@ object JsEmitter {
     case LiteralValue.StringPlainPart(value) => value
   }).safeString(""))
 
-  def emitBlock(bcs: Seq[Terms.BlockContent]) = {
-    // TODO: JsAst.Iife so that we can automatically optimise unintentional iifes away
-    JsAst.NullaryCall(JsAst.NullaryArrowFunc(bcs.flatMap(emitBlockContent)))
+  def emitBlock(bcs: Seq[Terms.BlockContent]): JsAst.Expr = {
+    val emitted = bcs.flatMap(emitBlockContent)
+    emitted match {
+      // Single expression: no need for IIFE wrapper
+      case Seq(e: JsAst.Expr) => e
+      case _ =>
+        // Wrap the last expression in Return, leave preceding ones as bare expressions (side effects)
+        val body = emitted.lastOption match {
+          case Some(e: JsAst.Expr) => emitted.init :+ JsAst.Return(e)
+          case _ => emitted
+        }
+        JsAst.Iife(body)
+    }
   }
 
   def emitBlockContent(blockContent: Terms.BlockContent): Option[JsAst.Content] = blockContent match {
-    case e: Terms.ValueExpr => Some(JsAst.Return(emitValueExpr(e))) // FIXME discarded values not handled
+    case e: Terms.ValueExpr => Some(emitValueExpr(e))
     case _: Terms.ValueDecl => None
     case Terms.ValueDef(target, e) => Some(JsAst.Const(emitValueDefTarget(target), emitValueExpr(e)))
     case Terms.TypeDef(con) => con match {
