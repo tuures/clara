@@ -42,6 +42,8 @@ examples:
 
 Option https://github.com/scala/scala/blob/2.13.x/src/library/scala/Option.scala
 
+`??` as shorthand for getOrElse: returnsOpt() ?? fallbackValue
+
 
 ## pattern matching, control structures, equality
 
@@ -287,14 +289,35 @@ tail call elimination using @[tailCall]
 }
 
 
-## default type for any type (in pattern)
-might only make sense for records
+## defaults in patterns (`??`)
 
-(a = 1, b = 1) = fooTuple2
+`=` in patterns is reserved for renaming/capturing/constants:
+- `{foo = bar}` — capture field `foo` as `bar` (rename)
+- `{foo = FooConstant}` — match field `foo` against constant
+- `{foo = 5}` — match field `foo` against literal
+- `{foo}` — shorthand for `{foo = foo}` (capture as same name)
 
-{ a = 1, b = 2 } = fooRecord
+So `=` cannot also mean "default value". Use `?? valueExpression` instead:
 
-(a = 1) = ()
+```clara
+setup = {foo: String, bar: String ?? "default"} => ...
+// accepts {foo = "hi"}, bar defaults to "default"
+
+(firstname, lastname, score ?? 0) = someValue
+```
+
+The corresponding type could be presented as:
+```clara
+{foo: String, optional: String ??, anotherOptional: String ??}
+```
+
+`??` is justified to avoid the explosion of union types with multiple optional fields and to avoid the overuse of option monad in APIs
+
+```clara
+{foo: String, optional1: String ??, optional2: String ?? }
+// vs
+{foo: String, optional1: String, optional2: String} | {foo: String, optional1: String} | {foo: String, optional2: String} | {foo: String}
+```
 
 
 ## Potentially useful resources

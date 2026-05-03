@@ -11,7 +11,9 @@ case class BlockState(
   currentContents: Vector[Terms.BlockContent],
   currentReturnType: Option[Types.Type],
 ) {
-  def finishTerm(blockPos: Pos): An[Terms.Block] = currentReturnType match {
+  def finishTerm(blockPos: Pos, isProgramBlock: Boolean = false): An[Terms.Block] = currentReturnType match {
+    case Some(typ) if isProgramBlock && !(typ === Types.Uni) => An.result(Terms.Block(currentContents, typ)).
+      tell(SourceMessage(blockPos, "Non-unit value discarded in program"))
     case Some(typ) => An.result(Terms.Block(currentContents, typ))
     case None if currentContents.isEmpty => An.result(Terms.Block(currentContents, Types.Uni))
     case None => An.result(Terms.Block(currentContents, Types.Uni)).
@@ -69,9 +71,14 @@ case class BlockAnalyzerImpl(parentEnv: Env) {
         }
     }
 
-  def blockTerm(block: Ast.Block): An[Terms.Block] = walkBlockContents(block.bcs).flatMap(_.finishTerm(block.pos))
+  def blockTerm(block: Ast.Block, isProgramBlock: Boolean): An[Terms.Block] =
+    walkBlockContents(block.bcs).flatMap(_.finishTerm(block.pos, isProgramBlock))
 }
 
 object BlockAnalyzer {
-  def blockTerm(parentEnv: Env, block: Ast.Block): An[Terms.Block] = BlockAnalyzerImpl(parentEnv).blockTerm(block)
+  def regularBlockTerm(parentEnv: Env, block: Ast.Block): An[Terms.Block] =
+    BlockAnalyzerImpl(parentEnv).blockTerm(block, isProgramBlock = false)
+
+  def programBlockTerm(parentEnv: Env, block: Ast.Block): An[Terms.Block] =
+    BlockAnalyzerImpl(parentEnv).blockTerm(block, isProgramBlock = true)
 }

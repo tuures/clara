@@ -11,7 +11,7 @@ class BlockAnalyzerSpec extends BaseSpec {
   test("empty Block (program block) should produce unit type with no warning about missing expression") {
     val block = Block(Seq.empty)
 
-    val blockTermAn = BlockAnalyzer.blockTerm(Env.empty, block)
+    val blockTermAn = BlockAnalyzer.regularBlockTerm(Env.empty, block)
 
     val expectedTerm = Terms.Block(Seq.empty, Types.Uni)
     assert(blockTermAn.value.value === expectedTerm)
@@ -67,6 +67,20 @@ class BlockAnalyzerSpec extends BaseSpec {
   //   ???
   // }
 
+  test("program block: Non-unit last expression should warn about discarded value") {
+    def lambdaAst = Lambda(Nil, UnitPattern(), UnitLiteral())
+    def lambdaTerm = Terms.Lambda(Terms.UnitPattern(), Terms.UnitLiteral(), Types.Func(Nil, Types.Uni, Types.Uni))
+
+    val block = Block(Seq(lambdaAst))
+
+    val blockTermAn = BlockAnalyzer.programBlockTerm(Env.empty, block)
+
+    val expectedTerm = Terms.Block(Seq(lambdaTerm), Types.Func(Nil, Types.Uni, Types.Uni))
+    assert(blockTermAn.value.value === expectedTerm)
+
+    assert(blockTermAn.log.map(_.message) === Seq("Non-unit value discarded in program"))
+  }
+
   test("valueExpr: Non-unit returning expression should give warning unless it's the last item in the block") {
     def lambdaAst = Lambda(Nil, UnitPattern(), UnitLiteral())
     def lambdaTerm = Terms.Lambda(Terms.UnitPattern(), Terms.UnitLiteral(), Types.Func(Nil, Types.Uni, Types.Uni))
@@ -80,7 +94,7 @@ class BlockAnalyzerSpec extends BaseSpec {
       lambdaAst,
     ))
 
-    val blockTermAn = BlockAnalyzer.blockTerm(Env.empty, block)
+    val blockTermAn = BlockAnalyzer.regularBlockTerm(Env.empty, block)
 
     val expectedBlockTermBody = Seq(
       lambdaTerm,

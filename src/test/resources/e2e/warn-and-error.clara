@@ -1,0 +1,6 @@
+::opaque String
+
+x: String = (
+  "hello"
+  ()
+)

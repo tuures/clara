@@ -132,7 +132,7 @@ case class ValueExprAnalyzerImpl(env: Env) {
     case Ast.Tuple(es, _) => An.seq(es.map(valueExprTerm)).map { terms =>
       Terms.Tuple(terms, Types.Tuple(terms.map(_.typ)))
     }
-    case b: Ast.Block => BlockAnalyzer.blockTerm(env, b)
+    case b: Ast.Block => BlockAnalyzer.regularBlockTerm(env, b)
     case Ast.NamedValue(name, pos) => namedValue(name, pos)
     case Ast.ValueAs(e, t, _) =>
       // TODO: this does not actually change the type, just checks for assignability, is that ok?

@@ -1,33 +1,32 @@
 package clara.analyzer
 
-import clara.analyzer.impl.{BlockAnalyzer, Env}
-import clara.ast.{Ast, LiteralValue}
-import clara.asg.Types
-
-import clara.testutil.{AstTestHelpers, BaseSpec}
+import clara.analyzer.impl.An
+import clara.asg.{Terms, Types}
+import clara.util.GeneralMessage
+import clara.testutil.BaseSpec
 
 class AnalyzerSpec extends BaseSpec {
-  import Ast.{TypeDef => _, NamedType => _, _}
-  import AstTestHelpers._
 
-  // FIXME probably makes more sense to replace this with end-to-end smoke test
-  test("simple program smoketest") {
-    val blockAst = Ast.Block(Seq(
-      TypeDef(Ast.TypeDefKind.Opaque, "String"),
-      TypeDef(Ast.TypeDefKind.Opaque, "Int"),
-      TypeDef(Ast.TypeDefKind.Opaque, "Float"),
-      TypeDef(Ast.TypeDefKind.Opaque, "Array", Seq(TypeParam("E"))),
-      Ast.ValueDecl("NaN", NamedType("Int")),
-      Ast.ValueDef(Ast.CapturePattern("fooString"), Ast.StringLiteral(Seq(LiteralValue.StringPlainPart("foo")))),
-      Ast.ValueDef(Ast.PatternAs(Ast.CapturePattern("nanInt"), NamedType("Int")), Ast.NamedValue("NaN")),
-      UnitLiteral()
-    ))
+  test("AnalyzedProgram.messages includes both warnings (log) and errors") {
+    val warning = GeneralMessage("a warning")
+    val error = GeneralMessage("an error")
 
-    val blockTerm = BlockAnalyzer.blockTerm(Env.empty, blockAst).value.value
+    val analysis = An.Failure(Vector(error), Vector(warning))
+    val result = AnalyzedProgram(analysis)
 
-    val expectedType = Types.Uni
+    assert(result.program === None)
+    assert(result.messages === Seq(warning, error))
+  }
 
-    assert(blockTerm.bcs.length === blockAst.bcs.length)
-    assert(blockTerm.typ === expectedType)
+  test("AnalyzedProgram.messages includes warnings on success") {
+    val warning = GeneralMessage("a warning")
+
+    val term = Terms.Block(Seq.empty, Types.Uni)
+
+    val analysis = An.Success(term, Vector(warning))
+    val result = AnalyzedProgram(analysis)
+
+    assert(result.program === Some(term))
+    assert(result.messages === Seq(warning))
   }
 }

@@ -1,0 +1,2 @@
+src/test/resources/e2e/warn-and-error.clara:4:3(–9): Non-unit value discarded in block
+src/test/resources/e2e/warn-and-error.clara:3:4(–9): Type `()` is not assignable to type `String`

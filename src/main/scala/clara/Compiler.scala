@@ -22,12 +22,11 @@ object Compiler {
       }
 
     def analyzeAndEmit(programBlock: Ast.Block): Either[Seq[Message], (String, Seq[Message])] = {
-      val (asgOrErrors, warnings) = Analyzer.analyzeProgramBlock(programBlock)
+      val analyzed = Analyzer.analyzeProgram(programBlock)
 
-      asgOrErrors.map { asg =>
-        JsEmitter.emitModule(asg)
-      }.map { jsAst =>
-        (JsPrinter.printModule(jsAst), warnings)
+      analyzed.program.toRight(analyzed.messages).map { program =>
+        val jsAst = JsEmitter.emitModule(program)
+        (JsPrinter.printModule(jsAst), analyzed.messages)
       }
     }
   }

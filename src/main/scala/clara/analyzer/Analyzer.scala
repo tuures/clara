@@ -9,10 +9,12 @@ import impl._
 // Ast => (Asg, Messages)
 // Asg = Analyzed Semantic Graph
 
-object Analyzer {
-  def analyzeProgramBlock(programBlock: Ast.Block): (Either[Seq[Message], Terms.Block], Seq[Message]) = {
-    val analysis: An[Terms.Block] = BlockAnalyzer.blockTerm(Env.empty, programBlock)
+case class AnalyzedProgram(analysis: An[Terms.Block]) {
+  def program: Option[Terms.Block] = analysis.value.toOption
+  def messages: Seq[Message] = analysis.log ++ analysis.value.left.getOrElse(Seq())
+}
 
-    (analysis.value, analysis.log)
-  }
+object Analyzer {
+  def analyzeProgram(programBlock: Ast.Block): AnalyzedProgram =
+    AnalyzedProgram(BlockAnalyzer.programBlockTerm(Env.empty, programBlock))
 }
