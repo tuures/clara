@@ -182,6 +182,10 @@ Bar = {
   ... // akin to Scala's object
 }
 
+local type variables (reads "where"):
+(Option[(A, A)]; A = SomeLongComplexType)
+
+
 ## Tuples and records
 
 - warn if record literal has extraneous fields when directly assigning to something where narrower type is expected

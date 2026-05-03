@@ -1,0 +1,10 @@
+::opaque String
+::singleton True
+::singleton False
+::alias Boolean: True | False
+
+not = #(True => False, False => True)
+
+greeting = "hello"
+flipped = not True
+

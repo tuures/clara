@@ -226,7 +226,7 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   def blockContent[X: P] = P(inBlockDecl | valueExpr)
 
   def blockContents[X: P](isProgramBlock: Boolean): P[Seq[BlockContent]] = P {
-    val min = if (isProgramBlock) 1 else 2
+    val min = if (isProgramBlock) 0 else 2
 
     blockItemSep.rep ~ blockContent.rep(min=min, sep=blockItemSep.rep(1)) ~ blockItemSep.rep
   }

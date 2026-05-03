@@ -12,8 +12,10 @@ case class LineCol(line: Int, col: Int) {
 }
 
 case class SourceInfo(name: String, newlineIndices: Vector[Int], length: Int) {
+  require(length >= 0, "length must be non-negative")
+
   def lineCol(index: Int): LineCol = {
-    require(index >= 0 && index < length, "index out of range")
+    require(index >= 0 && index < length, s"index ${index} out of range")
 
     // TODO this could be optimised using a binary search for precessor
     val lineIndex = newlineIndices.lastIndexWhere(index > _)

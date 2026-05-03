@@ -8,6 +8,17 @@ class BlockAnalyzerSpec extends BaseSpec {
   import Ast.{Lambda => _, TypeDef => _, NamedType => _, _}
   import AstTestHelpers._
 
+  test("empty Block (program block) should produce unit type with no warning about missing expression") {
+    val block = Block(Seq.empty)
+
+    val blockTermAn = BlockAnalyzer.blockTerm(Env.empty, block)
+
+    val expectedTerm = Terms.Block(Seq.empty, Types.Uni)
+    assert(blockTermAn.value.value === expectedTerm)
+
+    assert(blockTermAn.log.isEmpty)
+  }
+
   test("typeDef: Block containing only a typeDef should give a warning of missing expression. " +
     "Type definitions should affect the type env inside the block and match the returned term contents.") {
     val typeDef = TypeDef(TypeDefKind.Alias, "Unit", UnitType())
@@ -27,7 +38,7 @@ class BlockAnalyzerSpec extends BaseSpec {
     val expectedTerm = Terms.Block(Seq(Terms.TypeDef(typ)), Types.Uni)
     assert(blockTermAn.value.value === expectedTerm)
 
-    assert(blockTermAn.log.map(_.message) === Seq("Block should end with an expression"))
+    assert(blockTermAn.log.map(_.message) === Seq("Block should end with an expression. Implicitly returning unit."))
   }
 
 
