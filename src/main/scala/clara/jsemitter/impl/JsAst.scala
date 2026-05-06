@@ -10,7 +10,16 @@ object JsAst {
 
   case object Undefined extends Expr
   case class NumberLiteral(value: String) extends Expr
-  case class StringLiteral(value: String) extends Expr
+
+  sealed trait StringPart extends Node
+  case class StringPlainPart(value: String) extends StringPart
+  case class StringEscapePart(escapes: Seq[String]) extends StringPart
+  case class StringExpressionPart(expr: Expr) extends StringPart
+  case class StringLiteral(parts: Seq[StringPart]) extends Expr
+  object StringLiteral {
+    def apply(value: String): StringLiteral = StringLiteral(Seq(StringPlainPart(value)))
+  }
+
   case class ArrayLiteral(values: Seq[Expr]) extends Expr
   case class ArrayPattern(ps: Seq[Pattern]) extends Pattern
   case class ObjectLiteral(entries: Seq[(String, Expr)]) extends Expr

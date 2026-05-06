@@ -26,16 +26,15 @@ class JsEmitterSpec extends BaseSpec {
     assert(emitExpr(expr) === JsAst.NumberLiteral("42"))
   }
 
-  // TODO:
-  // test("emitValueExpr: IntegerLiteral binary") {
-  //   val expr = Terms.IntegerLiteral(LiteralValue.IntegerBin("1010"), dummyType)
-  //   assert(emitExpr(expr) === JsAst.NumberLiteral("0b1010"))
-  // }
+  test("emitValueExpr: IntegerLiteral binary") {
+    val expr = Terms.IntegerLiteral(LiteralValue.IntegerBin("1010"), dummyType)
+    assert(emitExpr(expr) === JsAst.NumberLiteral("0b1010"))
+  }
 
-  // test("emitValueExpr: IntegerLiteral hex") {
-  //   val expr = Terms.IntegerLiteral(LiteralValue.IntegerHex("ff"), dummyType)
-  //   assert(emitExpr(expr) === JsAst.NumberLiteral("0xff"))
-  // }
+  test("emitValueExpr: IntegerLiteral hex") {
+    val expr = Terms.IntegerLiteral(LiteralValue.IntegerHex("ff"), dummyType)
+    assert(emitExpr(expr) === JsAst.NumberLiteral("0xff"))
+  }
 
   test("emitValueExpr: FloatLiteral") {
     val expr = Terms.FloatLiteral(LiteralValue.Float("3", "14"), dummyType)
@@ -43,27 +42,26 @@ class JsEmitterSpec extends BaseSpec {
   }
 
   test("emitValueExpr: StringLiteral plain") {
-    val expr = Terms.StringLiteral(Seq(LiteralValue.StringPlainPart("hello")), dummyType)
+    val expr = Terms.StringLiteral(Seq(Terms.StringPlainPart("hello")), dummyType)
     assert(emitExpr(expr) === JsAst.StringLiteral("hello"))
   }
 
-  // TODO:
-  // test("emitValueExpr: StringLiteral escape") {
-  //   val expr = Terms.StringLiteral(Seq(LiteralValue.StringEscapePart(Seq("n"))), dummyType)
-  //   assert(emitExpr(expr) === JsAst.StringLiteral("\\n"))
-  // }
+  test("emitValueExpr: StringLiteral escapes") {
+    val values = Seq("n", "\"", "\\", "t", "$", "r", "u0041", "u10FFFF")
+    val expr = Terms.StringLiteral(Seq(Terms.StringEscapePart(values)), dummyType)
+    assert(emitExpr(expr) === JsAst.StringLiteral(Seq(JsAst.StringEscapePart(values))))
+  }
 
-  // test("emitValueExpr: StringLiteral expression") {
-  //   val inner = Ast.NamedValue("x")
-  //   val expr = Terms.StringLiteral(Seq(LiteralValue.StringExpressionPart(inner)), dummyType)
-  //   assert(emitExpr(expr) === JsAst.StringLiteral("${x}"))
-  // }
-
-  // test("emitValueExpr: StringLiteral mixed") {
-  //   val inner = Ast.NamedValue("x")
-  //   val expr = Terms.StringLiteral(Seq(LiteralValue.StringPlainPart("hello "), LiteralValue.StringExpressionPart(inner)), dummyType)
-  //   assert(emitExpr(expr) === JsAst.StringLiteral("hello ${x}"))
-  // }
+  test("emitValueExpr: StringLiteral with expression") {
+    val expr = Terms.StringLiteral(Seq(
+      Terms.StringPlainPart("hello "),
+      Terms.StringExpressionPart(Terms.NamedValue("x", dummyType)),
+    ), dummyType)
+    assert(emitExpr(expr) === JsAst.StringLiteral(Seq(
+      JsAst.StringPlainPart("hello "),
+      JsAst.StringExpressionPart(JsAst.Named("x")),
+    )))
+  }
 
   test("emitValueExpr: Tuple") {
     val expr = Terms.Tuple(Seq(
@@ -251,20 +249,20 @@ class JsEmitterSpec extends BaseSpec {
         Terms.TuplePattern(Seq(
           Terms.CapturePattern("a", dummyType),
           Terms.CapturePattern("b", dummyType),
+          Terms.UnitPattern(),
         ), dummyType),
         Terms.Tuple(Seq(
           Terms.IntegerLiteral(LiteralValue.IntegerDec("1"), dummyType),
           Terms.IntegerLiteral(LiteralValue.IntegerDec("2"), dummyType),
+          Terms.UnitLiteral(),
         ), dummyType)
       )
     ), dummyType)
     val module = JsEmitter.emitModule(program)
     assert(module === JsAst.Module(Seq(
-      JsAst.Const(JsAst.ArrayPattern(Seq(JsAst.NamePattern("a"), JsAst.NamePattern("b"))), JsAst.ArrayLiteral(Seq(JsAst.NumberLiteral("1"), JsAst.NumberLiteral("2"))))
+      JsAst.Const(JsAst.ArrayPattern(Seq(JsAst.NamePattern("a"), JsAst.NamePattern("b"), JsAst.UnitPattern)), JsAst.ArrayLiteral(Seq(JsAst.NumberLiteral("1"), JsAst.NumberLiteral("2"), JsAst.Undefined)))
     )))
   }
-
-  // TODO: emitValueDefTarget with UnitPattern (???)
 
   test("emitModule: singleton type def") {
     val con = TypeCons.SingletonTypeCon("True", NoPos)

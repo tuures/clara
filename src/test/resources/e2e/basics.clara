@@ -1,10 +1,15 @@
+::opaque Int
 ::opaque String
 ::singleton True
 ::singleton False
 ::alias Boolean: True | False
 
-not = #(True => False, False => True)
+::declare console: { log: String => () }
 
 greeting = "hello"
-flipped = not True
+message = "$(greeting) world"
+console.log(message)
 
+not = #(True => False, False => True)
+flipped = not True
+()

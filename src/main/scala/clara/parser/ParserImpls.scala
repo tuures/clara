@@ -131,7 +131,7 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
 
     def decimal[X: P] = P(decimalDigitsWithUnderscore.map(LiteralValue.IntegerDec.apply _))
 
-    def hexDigits[X: P] = P((decimalDigits | CharIn("A-F") | CharIn("a-f")).repX(1))
+    def hexDigits[X: P] = CharsWhileIn("0-9a-fA-F")
     def hex[X: P] = P(withPrefixAndUnderscores("x", hexDigits).map(LiteralValue.IntegerHex.apply _))
 
     def value[X: P]: P[LiteralValue.Integer] = P(binary | decimal | hex)
@@ -163,8 +163,8 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
       CharsWhile(nothingSpecial).!.map(LiteralValue.StringPlainPart(_))
     }
 
-    // TODO use StringIn for better performance
-    def escapeBody[X: P] = P(quote.s | escapeStart.s | exprStart.s | "n" | "t")
+    def unicodeEscapeBody[X: P] = P("u" ~~ CharIn("0-9a-fA-F").repX(min=1, max=6))
+    def escapeBody[X: P] = P(unicodeEscapeBody | quote.s | escapeStart.s | exprStart.s | "n" | "t" | "r")
     def escapePart[X: P]: P[LiteralValue.StringEscapePart] =
       P((escapeStart.s ~~ escapeBody.!).repX(1).map(LiteralValue.StringEscapePart(_)))
 
@@ -433,7 +433,7 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   //////
   // In-block defs
   val doubleColon = "::"
-  def keywordSyntax[T, X: P](word: => P[T]): P[T] = P(doubleColon ~~ word ~/ nl.rep)
+  def keywordSyntax[T, X: P](word: => P[T]): P[T] = P(doubleColon ~~ word ~ nl.rep)
 
   def keyword[X: P](word: String): P[Unit] = P(keywordSyntax(word))
 

@@ -2,7 +2,7 @@ package clara.jsemitter
 
 // Asg => JsAst
 
-import clara.asg.{Attributes, Terms, TypeCons, Types, Namespace}
+import clara.asg.{Attributes, Terms, TypeCons, Namespace}
 import clara.ast.LiteralValue
 
 import impl._
@@ -63,18 +63,18 @@ object JsEmitter {
   }
 
   def emitIntegerLiteral(value: LiteralValue.Integer) = value match {
-    case LiteralValue.IntegerBin(value) => ???
+    case LiteralValue.IntegerBin(value) => JsAst.NumberLiteral(safe"0b$value")
     case LiteralValue.IntegerDec(value) => JsAst.NumberLiteral(value)
-    case LiteralValue.IntegerHex(value) => ???
+    case LiteralValue.IntegerHex(value) => JsAst.NumberLiteral(safe"0x$value")
   }
 
   def emitFloatLiteral(whole: String, fraction: String) = JsAst.NumberLiteral(safe"$whole.$fraction")
 
-  def emitStringLiteral(parts: Seq[LiteralValue.StringPart]) = JsAst.StringLiteral((parts.map {
-    case LiteralValue.StringEscapePart(escapes) => ???
-    case LiteralValue.StringExpressionPart(e) => ???
-    case LiteralValue.StringPlainPart(value) => value
-  }).safeString(""))
+  def emitStringLiteral(parts: Seq[Terms.StringPart]) = JsAst.StringLiteral(parts.map {
+    case Terms.StringEscapePart(escapes) => JsAst.StringEscapePart(escapes)
+    case Terms.StringExpressionPart(e) => JsAst.StringExpressionPart(emitValueExpr(e))
+    case Terms.StringPlainPart(value) => JsAst.StringPlainPart(value)
+  })
 
   def emitBlock(bcs: Seq[Terms.BlockContent]): JsAst.Expr = {
     val emitted = bcs.flatMap(emitBlockContent)
@@ -107,7 +107,7 @@ object JsEmitter {
   }
 
   def emitValueDefTarget(target: Terms.Pattern): JsAst.Pattern = target match {
-    case Terms.UnitPattern() => ???
+    case Terms.UnitPattern() => JsAst.UnitPattern
     case Terms.TuplePattern(ps, _) => JsAst.ArrayPattern(ps.map(emitValueDefTarget))
     case Terms.CapturePattern(name, _) => JsAst.NamePattern(name)
   }

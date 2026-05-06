@@ -27,11 +27,7 @@ object JsPrinterImpl {
   def printExpr(expr: Expr): String = expr match {
     case Undefined => "undefined"
     case NumberLiteral(value) => value
-    case StringLiteral(value) => {
-      val quoteChar = "'"
-
-      safe"""${quoteChar}${value.replace(quoteChar, safe"\\${quoteChar}")}${quoteChar}"""
-    }
+    case StringLiteral(parts) => printStringLiteral(parts)
     case ArrayLiteral(values) => arraySyntax(values.map(printExpr))
     case ObjectLiteral(entries) => printObjectLiteral(entries)
     case Named(name) => name
@@ -47,6 +43,38 @@ object JsPrinterImpl {
     case _ => entries.map { case (name, expr) => indented(safe"$name: ${printExpr(expr)}") }.safeString("{\n", ",\n", "\n}")
   }
 
+  def printStringLiteral(parts: Seq[StringPart]): String = {
+    val Backtick = "`"
+    val SingleQuote = "'"
+
+    def printStringEscape(delimiter: String)(escape: String): String = escape match {
+      case "\\" | "n" | "t" | "r" => "\\" + escape
+      case "\"" => escape
+      case "$" => if (delimiter == Backtick) "\\$" else "$"
+      case u if u.startsWith("u") => "\\u{" + u.substring(1) + "}"
+      case _ => throw new java.lang.AssertionError("illegal string escape sequence: " + escape)
+    }
+
+    def printStringExpression(outputDelimiter: String)(expr: Expr): String =
+      if (outputDelimiter == Backtick) safe"$${${printExpr(expr)}}"
+      else throw new java.lang.AssertionError("illegal StringExpressionPart")
+
+    def renderParts(outputDelimiter: String): String = {
+      val rendered = parts.map {
+        case StringPlainPart(value) => value.replace(outputDelimiter, s"\\$outputDelimiter")
+        case StringEscapePart(escapes) => escapes.map(printStringEscape(outputDelimiter)).safeString("")
+        case StringExpressionPart(expr) => printStringExpression(outputDelimiter)(expr)
+      }
+      safe"$outputDelimiter${rendered.safeString("")}$outputDelimiter"
+    }
+
+    if (parts.exists(_.isInstanceOf[StringExpressionPart])) {
+      renderParts(Backtick)
+    } else {
+      renderParts(SingleQuote)
+    }
+  }
+
   def printBlock(body: Seq[Content]) = "{\n" + indented(body.map(printContent).safeString("\n"))+ "\n}"
 
   def printArrowFunc(param: Pattern, body: Seq[Content]): String = {
@@ -59,6 +87,7 @@ object JsPrinterImpl {
     def printArrayExprBody(e: Expr): String = safe"$paramPrinted =>\n" + indented(printExpr(e))
     def printArrayBlockBody(contents: Seq[Content]): String = safe"$paramPrinted => ${printBlock(contents)}"
 
+    // TODO: recursion needed here to flatten deeply-nested single-statement blocks?
     body match {
       case Seq(single) => single match {
         case Return(e) => e match {

@@ -31,8 +31,13 @@ object Terms {
   case class FloatLiteral(value: LiteralValue.Float, typ: Type) extends ValueExpr
   case class FloatPattern(value: LiteralValue.Float, typ: Type) extends Pattern
 
-  case class StringLiteral(parts: Seq[LiteralValue.StringPart], typ: Type) extends ValueExpr
-  case class StringPattern(parts: Seq[LiteralValue.StringPart], typ: Type) extends Pattern
+  sealed trait StringPart
+  case class StringPlainPart(value: String) extends StringPart
+  case class StringEscapePart(escapes: Seq[String]) extends StringPart
+  case class StringExpressionPart(expr: ValueExpr) extends StringPart
+
+  case class StringLiteral(parts: Seq[StringPart], typ: Type) extends ValueExpr
+  case class StringPattern(parts: Seq[StringPart], typ: Type) extends Pattern
 
   case class Tuple(es: Seq[ValueExpr], typ: Type) extends ValueExpr
   case class TuplePattern(ps: Seq[Pattern], typ: Type) extends Pattern

@@ -20,12 +20,50 @@ class JsPrinterSpec extends BaseSpec {
     assert(printExpr(NumberLiteral("42")) === "42")
   }
 
-  test("StringLiteral: plain") {
+  test("StringLiteral: simple plain part") {
     assert(printExpr(StringLiteral("hello")) === "'hello'")
   }
 
-  test("StringLiteral: escapes single quotes") {
-    assert(printExpr(StringLiteral("it's")) === "'it\\'s'")
+  test("StringLiteral: single quoted output: single quotes are escaped but backticks are not") {
+    assert(printExpr(StringLiteral("it's a backtick `")) === """'it\'s a backtick `'""")
+  }
+
+  test("StringLiteral: backticks quoted output: backticks are ecaped but single quotes are not") {
+    assert(printExpr(StringLiteral(Seq(
+      StringPlainPart("""it's ta backtick `"""),
+      StringExpressionPart(Named("x")),
+    ))) === """`it's ta backtick \`${x}`""")
+  }
+
+  test("StringLiteral: possible escapes render correctly in single quoted output") {
+    assert(printExpr(StringLiteral(Seq(StringEscapePart(Seq("n", "r", "t"))))) === """'\n\r\t'""")
+    assert(printExpr(StringLiteral(Seq(StringEscapePart(Seq("$"))))) === "'$'")
+    assert(printExpr(StringLiteral(Seq(StringEscapePart(Seq("\"", """\"""))))) === """'"\\'""")
+    assert(printExpr(StringLiteral(Seq(StringEscapePart(Seq("u0041", "u10FFFF"))))) === """'\""" + """u{0041}\""" + """u{10FFFF}'""")
+  }
+
+  test("StringLiteral: possible escapes render correctly in backtick quoted output") {
+    val exp = StringExpressionPart(Named("x"))
+    assert(printExpr(StringLiteral(Seq(exp, StringEscapePart(Seq("n", "r", "t"))))) === """`${x}\n\r\t`""")
+    assert(printExpr(StringLiteral(Seq(exp, StringEscapePart(Seq("$"))))) === """`${x}\$`""")
+    assert(printExpr(StringLiteral(Seq(exp, StringEscapePart(Seq("\"", """\"""))))) === """`${x}"\\`""")
+    assert(printExpr(StringLiteral(Seq(exp, StringEscapePart(Seq("u0041", "u10FFFF"))))) === """`${x}\""" + """u{0041}\""" + """u{10FFFF}`""")
+  }
+
+  test("StringLiteral: mixed plain and escapes produces single quoted string output") {
+    assert(printExpr(StringLiteral(Seq(
+      StringPlainPart("a"),
+      StringEscapePart(Seq("n")),
+    ))) === "'a\\n'")
+  }
+
+  test("StringLiteral: mixed plain + escapes + expressions produces backtick string output") {
+    assert(printExpr(StringLiteral(Seq(
+      StringPlainPart("a"),
+      StringEscapePart(Seq("n")),
+      StringExpressionPart(Named("x")),
+      StringPlainPart("c"),
+    ))) === "`a\\n${x}c`")
   }
 
   test("ArrayLiteral: empty") {

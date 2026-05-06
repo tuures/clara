@@ -1,7 +1,7 @@
 package clara.analyzer.impl
 
 import clara.asg.{Terms, Types, TypeCons, Namespace}
-import clara.ast.{Ast, Pos, SourceMessage}
+import clara.ast.{Ast, LiteralValue, Pos, SourceMessage}
 
 import clara.util.Safe._
 
@@ -126,9 +126,15 @@ case class ValueExprAnalyzerImpl(env: Env) {
     case Ast.FloatLiteral(value, pos) => namedNullaryType("Float", pos).map { typ =>
       Terms.FloatLiteral(value, typ)
     }
-    case Ast.StringLiteral(parts, pos) => namedNullaryType("String", pos).map { typ =>
-      Terms.StringLiteral(parts, typ)
-    }
+    case Ast.StringLiteral(parts, pos) =>
+      val analyzedParts: An[Seq[Terms.StringPart]] = An.seq(parts.map {
+        case LiteralValue.StringPlainPart(value) => An.result(Terms.StringPlainPart(value))
+        case LiteralValue.StringEscapePart(escapes) => An.result(Terms.StringEscapePart(escapes))
+        case LiteralValue.StringExpressionPart(e) => valueExprTerm(e).map(Terms.StringExpressionPart(_))
+      })
+      analyzedParts.zip(namedNullaryType("String", pos)).map { case (parts, typ) =>
+        Terms.StringLiteral(parts, typ)
+      }
     case Ast.Tuple(es, _) => An.seq(es.map(valueExprTerm)).map { terms =>
       Terms.Tuple(terms, Types.Tuple(terms.map(_.typ)))
     }

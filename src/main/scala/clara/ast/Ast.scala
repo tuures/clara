@@ -41,20 +41,11 @@ object Ast {
   // TODO add typeArg for NamedValue or allow typeArg to be used on any expression with separate node?
   case class NamedValue(name: String, pos: Pos = NoPos) extends ValueExpr
   case class NamedType(name: NameWithPos, typeArgs: Seq[TypeExpr], pos: Pos = NoPos) extends TypeExpr
+  // TODO add escape syntax for lower case literal patterns
   case class NamedConstantPattern(name: String, pos: Pos = NoPos) extends Pattern
   case class CapturePattern(name: String, pos: Pos = NoPos) extends Pattern
-  // TODO add escape syntax for lower case literal patterns – perhaps $expression or @expression ?
-  // case class ExpressionConstantPattern
 
   //TODO case class PredicatePattern // <otherpatternOpt> ? expression
-
-  //TODO: conditional expression
-  // ?(
-  //   isAdmin & isRoot => 0
-  //   isDiscounted => 1
-  //   2
-  // )
-  // ?(isAdmin & isRoot => 0, isDiscounted => 1, 2)
 
   // TODO rename? ValueExprTyped, PatternTyped
   case class ValueAs(e: ValueExpr, t: TypeExpr, pos: Pos = NoPos) extends ValueExpr

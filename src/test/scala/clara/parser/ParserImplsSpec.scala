@@ -112,6 +112,15 @@ class ParserImplsSpec extends BaseSpec {
     LiteralValue.StringPlainPart("10"),
     LiteralValue.StringEscapePart(Seq("$", "n"))
   )))
+  parseAst(p.processedStringLiteral(_))(""""\r\t"""")(StringLiteral(Seq(
+    LiteralValue.StringEscapePart(Seq("r", "t"))
+  )))
+  parseAst(p.processedStringLiteral(_))("\"\\u0041\"")(StringLiteral(Seq(
+    LiteralValue.StringEscapePart(Seq("u0041"))
+  )))
+  parseAst(p.processedStringLiteral(_))("\"\\u10FFFF\"")(StringLiteral(Seq(
+    LiteralValue.StringEscapePart(Seq("u10FFFF"))
+  )))
   reject(p.processedStringLiteral(_))(""""10$"""")
   reject(p.processedStringLiteral(_))(""""10$$"""")
   reject(p.processedStringLiteral(_))(""""10\"""")

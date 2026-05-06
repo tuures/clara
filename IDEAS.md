@@ -81,6 +81,12 @@ admin @ #(?true => , 0)
 
 if admin printWarning
 
+?(
+  isAdmin & isRoot => 0
+  isDiscounted => 1
+  2
+)
+?(isAdmin & isRoot => 0, isDiscounted => 1, 2)
 
 ### reverse call / pipe syntax
 dir @ sort @ uniq
