@@ -19,12 +19,15 @@ object Terms {
     def attributes: MethodAttributes
   }
 
+  case class WildcardPattern(typ: Type) extends Pattern
+
   case class UnitLiteral() extends ValueExpr {
     def typ = Types.Uni
   }
   case class UnitPattern() extends Pattern {
     def typ = Types.Uni
   }
+
   case class IntegerLiteral(value: LiteralValue.Integer, typ: Type) extends ValueExpr
   case class IntegerPattern(value: LiteralValue.Integer, typ: Type) extends Pattern
 

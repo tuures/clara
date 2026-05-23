@@ -56,6 +56,10 @@ class ParserImplsSpec extends BaseSpec {
   parseAst(p.topType(_))("*")(TopType())
   parseAst(p.bottomType(_))("!")(BottomType())
 
+  parseAst(p.wildcardPattern(_))("_")(WildcardPattern())
+  reject(p.wildcardPattern(_))("_foo")
+  reject(p.wildcardPattern(_))("_1")
+
   parseAst(p.unitLiteral(_))("()")(UnitLiteral())
   parseAst(p.unitType(_))(   "()")(UnitType())
   parseAst(p.unitPattern(_))("()")(UnitPattern())
@@ -69,6 +73,8 @@ class ParserImplsSpec extends BaseSpec {
   reject(p.floatLiteral(_))("--1.2")
   reject(p.floatLiteral(_))("- 1.2")
   reject(p.floatLiteral(_))("1_.2")
+
+  parseAst(p.floatPattern(_))("3.14")(FloatPattern(LiteralValue.Float("3", "14")))
 
   parseAst(p.integerLiteral(_))("123")(IntegerLiteral(LiteralValue.IntegerDec("123")))
   // FIXME parseAst(p.integerLiteral(_))("-123")(IntegerLiteral(LiteralValue.IntegerDec("-123")))
@@ -90,6 +96,9 @@ class ParserImplsSpec extends BaseSpec {
   reject(p.integerLiteral(_))("#b2")
   reject(p.integerLiteral(_))("#b-2")
   reject(p.integerLiteral(_))("- #b2")
+
+  parseAst(p.integerPattern(_))("42")(IntegerPattern(LiteralValue.IntegerDec("42")))
+  parseAst(p.integerPattern(_))("#xFF")(IntegerPattern(LiteralValue.IntegerHex("FF")))
 
   parseAst(p.processedStringLiteral(_))(""""str($foo)"""")(StringLiteral(Seq(
     LiteralValue.StringPlainPart("str("),
@@ -145,6 +154,13 @@ class ParserImplsSpec extends BaseSpec {
     LiteralValue.StringPlainPart("'#")
   )))
   reject(p.verbatimStringLiteral(_))("""'''""")
+
+  parseAst(p.stringPattern(_))("\"foo\"")(StringPattern(Seq(
+    LiteralValue.StringPlainPart("foo")
+  )))
+  parseAst(p.stringPattern(_))("'bar'")(StringPattern(Seq(
+    LiteralValue.StringPlainPart("bar")
+  )))
 
   //////
   // Basic syntax
@@ -213,6 +229,23 @@ class ParserImplsSpec extends BaseSpec {
   parseAst(p.patternAs(_))("(): ()")(
     PatternAs(UnitPattern(), UnitType())
   )
+  parseAst(p.patternAs(_))("(Foo bar): ()")(
+    PatternAs(ConstructPattern(NameWithPos("Foo"), CapturePattern("bar")), UnitType())
+  )
+
+  parseAst(p.guardPattern(_))("x ? isValid")(
+    GuardPattern(Some(CapturePattern("x")), NamedValue("isValid"))
+  )
+  parseAst(p.guardPattern(_))("? isValid")(
+    GuardPattern(None, NamedValue("isValid"))
+  )
+  parseAst(p.guardPattern(_))("x ? isValid x")(
+    GuardPattern(Some(CapturePattern("x")), Call(NamedValue("isValid"), NamedValue("x")))
+  )
+
+  parseAst(p.defaultValuePattern(_))("x ?? 0")(
+    DefaultValuePattern(CapturePattern("x"), IntegerLiteral(LiteralValue.IntegerDec("0")))
+  )
 
   parseAst(p.record(_))("{}")(Record(Nil))
   parseAst(p.record(_))("{ a = foo, b: Bar = bar }")(Record(Seq(
@@ -235,12 +268,34 @@ class ParserImplsSpec extends BaseSpec {
     FieldDecl("b", NamedType("Bar"))
   )))
 
+  parseAst(p.recordPattern(_))("{}")(RecordPattern(Nil))
+  parseAst(p.recordPattern(_))("{ x }")(RecordPattern(Seq(
+    FieldPattern("x", None, None)
+  )))
+  parseAst(p.recordPattern(_))("{ x: Int }")(RecordPattern(Seq(
+    FieldPattern("x", Some(NamedType("Int")), None)
+  )))
+  parseAst(p.recordPattern(_))("{ x = (a, b) }")(RecordPattern(Seq(
+    FieldPattern("x", None, Some(TuplePattern(Seq(CapturePattern("a"), CapturePattern("b")))))
+  )))
+  parseAst(p.recordPattern(_))("{ x: Int, y }")(RecordPattern(Seq(
+    FieldPattern("x", Some(NamedType("Int")), None),
+    FieldPattern("y", None, None)
+  )))
+
   parseAst(p.unionType(_))("A | {} | ()")(
     UnionType(Seq(NamedType("A"), RecordType(Nil), UnitType()))
   )
 
   parseAst(p.intersectionType(_))("A & {} & ()")(
     IntersectionType(Seq(NamedType("A"), RecordType(Nil), UnitType()))
+  )
+
+  parseAst(p.orPattern(_))("A | B")(
+    OrPattern(Seq(NamedConstantPattern("A"), NamedConstantPattern("B")))
+  )
+  parseAst(p.orPattern(_))("A | B | C")(
+    OrPattern(Seq(NamedConstantPattern("A"), NamedConstantPattern("B"), NamedConstantPattern("C")))
   )
 
   parseAst(p.lambda(_))("() => ()")(
@@ -278,6 +333,12 @@ class ParserImplsSpec extends BaseSpec {
   )
   parseAst(p.piecewise(_))("#(\n  A => a,\n  B => b,\n)")(
     Piecewise(Seq(NamedConstantPattern("A") -> NamedValue("a"), NamedConstantPattern("B") -> NamedValue("b")))
+  )
+  parseAst(p.piecewise(_))("#(42 => foo, _ => bar)")(
+    Piecewise(Seq(
+      IntegerPattern(LiteralValue.IntegerDec("42")) -> NamedValue("foo"),
+      WildcardPattern() -> NamedValue("bar")
+    ))
   )
   parseAst(p.piecewise(_))("#()")(
     Piecewise(Nil)
@@ -512,4 +573,14 @@ class ParserImplsSpec extends BaseSpec {
   parseAst(p.valueExpr(_))("(a => a)")(Lambda(CapturePattern("a"), NamedValue("a")))
   reject(p.valueExpr(_))("foo square = 1")
   reject(p.valueExpr(_))("square = 1")
+
+  parseAst(p.pattern(_))("_")(WildcardPattern())
+  parseAst(p.pattern(_))("_foo")(CapturePattern("_foo"))
+  parseAst(p.pattern(_))("42")(IntegerPattern(LiteralValue.IntegerDec("42")))
+  parseAst(p.pattern(_))("Foo bar")(
+    ConstructPattern(NameWithPos("Foo"), CapturePattern("bar"))
+  )
+  parseAst(p.pattern(_))("A | B")(
+    OrPattern(Seq(NamedConstantPattern("A"), NamedConstantPattern("B")))
+  )
 }

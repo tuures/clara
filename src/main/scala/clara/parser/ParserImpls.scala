@@ -139,12 +139,16 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
 
   def integerLiteral[X: P] = P(pp(IntegerLiteralImpl.value)(IntegerLiteral.apply _))
 
+  def integerPattern[X: P] = P(pp(IntegerLiteralImpl.value)(IntegerPattern.apply _))
+
   object FloatLiteralImpl {
     def n[X: P] = decimalDigitsWithUnderscore
     def value[X: P] = P((n ~~ dot ~~ n).map(LiteralValue.Float.tupled))
   }
 
   def floatLiteral[X: P] = P(pp(FloatLiteralImpl.value)(FloatLiteral.apply _))
+
+  def floatPattern[X: P] = P(pp(FloatLiteralImpl.value)(FloatPattern.apply _))
 
   object ProcessedStringLiteralImpl {
     implicit class CharToString(c: Char) {
@@ -191,6 +195,8 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   def verbatimStringLiteral[X: P] = P(pp(VerbatimStringLiteralImpl.valueBetweenMarkers)(StringLiteral.apply _))
 
   def stringLiteral[X: P] = P(processedStringLiteral | verbatimStringLiteral)
+
+  def stringPattern[X: P] = P(pp(ProcessedStringLiteralImpl.parts | VerbatimStringLiteralImpl.valueBetweenMarkers)(StringPattern.apply _))
 
   //////
   // Tuples
@@ -285,6 +291,9 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   def fieldDecl[X: P] = P(pp(name ~ typed)(FieldDecl.apply _))
   def recordType[X: P] = P(pp(recordSyntax(fieldDecl))(RecordType.apply _))
 
+  def fieldPattern[X: P] = P(pp(name ~ typed.? ~ (equalsSign ~ pattern).?)(FieldPattern.apply _))
+  def recordPattern[X: P] = P(pp(recordSyntax(fieldPattern))(RecordPattern.apply _))
+
   //////
   // Simple
 
@@ -294,9 +303,13 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   def simpleType[X: P]: P[TypeExpr] =
     P(topType | bottomType | unitType | tupleType | typeParens | namedType | recordType)
 
-  // FIXME floatPattern integerPattern stringPattern
+  def wildcardPattern[X: P]: P[WildcardPattern] =
+    P(pp("_" ~~ &(End | CharPred(c => !Character.isLetterOrDigit(c))))(WildcardPattern.apply _))
+
   def simplePattern[X: P]: P[Pattern] =
-    P(unitPattern | tuplePattern | patternParens | namedConstantPattern | capturePattern)
+    P(wildcardPattern | unitPattern | floatPattern | integerPattern | stringPattern | tuplePattern | patternParens | recordPattern | namedConstantPattern | capturePattern)
+
+  def compoundPattern[X: P]: P[Pattern] = P(constructPattern | simplePattern)
 
   //////
   // Unions and intersections
@@ -306,6 +319,8 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   def unionType[X: P]: P[UnionType] = P(pp(simpleType.rep(min=2, sep=verticalBar))(UnionType.apply _))
 
   def intersectionType[X: P]: P[IntersectionType] = P(pp(simpleType.rep(min=2, sep=ampersand))(IntersectionType.apply _))
+
+  def orPattern[X: P]: P[OrPattern] = P(pp(compoundPattern.rep(min=2, sep=verticalBar))(OrPattern.apply _))
 
   //////
   // Function syntax
@@ -395,6 +410,16 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   // TODO: should we allow also lowercase name here?
   def constructPattern[X: P] = P(pp(&(anyUpperCaseChar) ~~ nameWithPos ~ simplePattern)(ConstructPattern.apply _))
 
+  val questionMark = "?"
+  val doubleQuestionMark = "??"
+
+  def patternEmbeddedExpression[X: P]: P[ValueExpr] = P(spaceCall | spaceCallPart)
+
+  def guardPattern[X: P]: P[GuardPattern] =
+    P(pp(compoundPattern.? ~ questionMark ~ nl.rep ~ patternEmbeddedExpression)(GuardPattern.apply _))
+
+  def defaultValuePattern[X: P]: P[DefaultValuePattern] =
+    P(pp(compoundPattern ~ doubleQuestionMark ~ nl.rep ~ patternEmbeddedExpression)(DefaultValuePattern.apply _))
 
   //////
   // Type parameters
@@ -478,7 +503,7 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
 
   def typeExpr[X: P]: P[TypeExpr] = P(funcType | unionType | intersectionType | simpleType)
 
-  def pattern[X: P]: P[Pattern] = P(patternAs | simplePattern)
+  def pattern[X: P]: P[Pattern] = P(patternAs | defaultValuePattern | guardPattern | orPattern | compoundPattern)
 
   //////
   // Start here

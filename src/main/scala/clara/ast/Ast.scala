@@ -15,7 +15,7 @@ object Ast {
 
   case class TopType(pos: Pos = NoPos) extends TypeExpr
   case class BottomType(pos: Pos = NoPos) extends TypeExpr
-  //TODO WilcardPattern _ extends Pattern
+  case class WildcardPattern(pos: Pos = NoPos) extends Pattern
 
   case class UnitLiteral(pos: Pos = NoPos) extends ValueExpr
   case class UnitType(pos: Pos = NoPos) extends TypeExpr
@@ -45,7 +45,8 @@ object Ast {
   case class NamedConstantPattern(name: String, pos: Pos = NoPos) extends Pattern
   case class CapturePattern(name: String, pos: Pos = NoPos) extends Pattern
 
-  //TODO case class PredicatePattern // <otherpatternOpt> ? expression
+  case class GuardPattern(p: Option[Pattern], guard: ValueExpr, pos: Pos = NoPos) extends Pattern
+  case class DefaultValuePattern(p: Pattern, default: ValueExpr, pos: Pos = NoPos) extends Pattern
 
   // TODO rename? ValueExprTyped, PatternTyped
   case class ValueAs(e: ValueExpr, t: TypeExpr, pos: Pos = NoPos) extends ValueExpr
@@ -57,18 +58,13 @@ object Ast {
   // FIXME NameWithPos
   case class FieldDecl(name: String, t: TypeExpr, pos: Pos = NoPos) extends Node
   case class RecordType(fields: Seq[FieldDecl], pos: Pos = NoPos) extends TypeExpr
-  // TODO case class RecordPattern(fields: Seq[FieldPattern], pos: Pos = NoPos) extends Pattern
-  // TODO support nested patterns? like: {point: Point = {x, y}, size: Int} => ... fields with = do not bind field name
-  // TODO support renaming for general patterns? like: (point @ p: Point) => ...
-  // TODO FieldPattern := name ~ maybeTyped ~ ('=' ~ pattern).?
-  // TODO i.e. FieldPattern = (NamePattern | PatternTyped(NamePattern, t), Pattern)
-  // TODO how to support default values in patterns?
-  //   (foo: Int ?? 1) => ...
-  //   {foo: Int = ?? 1}
+  case class FieldPattern(name: String, t: Option[TypeExpr], subPattern: Option[Pattern], pos: Pos = NoPos) extends Node
+  case class RecordPattern(fields: Seq[FieldPattern], pos: Pos = NoPos) extends Pattern
 
   case class UnionType(ts: Seq[TypeExpr], pos: Pos = NoPos) extends TypeExpr
   case class IntersectionType(ts: Seq[TypeExpr], pos: Pos = NoPos) extends TypeExpr
-  //TODO OrPattern |, AndPattern &
+  case class OrPattern(ps: Seq[Pattern], pos: Pos = NoPos) extends Pattern
+  // TODO AndPattern? Is it useful enough to justify added complexity?
 
   // sealed trait Variance
   // case object Covariant extends Variance
@@ -85,7 +81,7 @@ object Ast {
   case class Call(callee: ValueExpr, argument: ValueExpr, pos: Pos = NoPos) extends ValueExpr
   case class Pipe(argument: ValueExpr, callee: ValueExpr, pos: Pos = NoPos) extends ValueExpr
 
-  case class ConstructPattern(name: NameWithPos, selfPattern: Pattern, pos: Pos = NoPos) extends Pattern
+  case class ConstructPattern(name: NameWithPos, argumentPattern: Pattern, pos: Pos = NoPos) extends Pattern
 
   case class Attribute(key: String, value: Option[String], pos: Pos = NoPos) extends Node
 

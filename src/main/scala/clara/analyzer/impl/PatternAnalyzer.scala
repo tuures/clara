@@ -2,13 +2,12 @@ package clara.analyzer.impl
 
 import clara.asg.{Terms, Types}
 import clara.ast.{Ast, SourceMessage}
-import clara.ast.Ast.ConstructPattern
-import clara.ast.Ast.IntegerPattern
-import clara.ast.Ast.FloatPattern
-import clara.ast.Ast.StringPattern
 
 case class PatternAnalyzer(env: Env, allowShadow: Env) {
   def walkAssignment(targetPattern: Ast.Pattern, fromType: Option[Types.Type]): An[(Env, Terms.Pattern)] = targetPattern match {
+    case Ast.WildcardPattern(pos) =>
+      val typ = fromType.getOrElse(Types.Top)
+      An.result((env, Terms.WildcardPattern(typ)))
     case Ast.UnitPattern(pos) =>
       // FIXME default to Bottom type to simplify
       fromType.fold(An.result(())){ fromType =>
@@ -16,9 +15,35 @@ case class PatternAnalyzer(env: Env, allowShadow: Env) {
       }.map { case () =>
         (env, Terms.UnitPattern())
       }
-    case IntegerPattern(value, pos) => ???
-    case FloatPattern(value, pos) => ???
-    case StringPattern(parts, pos) => ???
+    case Ast.IntegerPattern(value, pos) =>
+      TypeExprAnalyzer.namedNullaryType(env, "Int", pos).flatMap { typ =>
+        fromType.fold(An.result(())){ fromType =>
+          TypeInterpreter.expectAssignable(fromType, typ, pos)
+        }.map { case () =>
+          (env, Terms.IntegerPattern(value, typ))
+        }
+      }
+    case Ast.FloatPattern(value, pos) =>
+      TypeExprAnalyzer.namedNullaryType(env, "Float", pos).flatMap { typ =>
+        fromType.fold(An.result(())){ fromType =>
+          TypeInterpreter.expectAssignable(fromType, typ, pos)
+        }.map { case () =>
+          (env, Terms.FloatPattern(value, typ))
+        }
+      }
+    case Ast.StringPattern(parts, pos) =>
+      val analyzedParts: An[Seq[Terms.StringPart]] = An.seq(parts.map {
+        case clara.ast.LiteralValue.StringPlainPart(value) => An.result(Terms.StringPlainPart(value))
+        case clara.ast.LiteralValue.StringEscapePart(escapes) => An.result(Terms.StringEscapePart(escapes))
+        case clara.ast.LiteralValue.StringExpressionPart(e) => ??? // FIXME
+      })
+      analyzedParts.zip(TypeExprAnalyzer.namedNullaryType(env, "String", pos)).flatMap { case (analyzedParts, typ) =>
+        fromType.fold(An.result(())){ fromType =>
+          TypeInterpreter.expectAssignable(fromType, typ, pos)
+        }.map { case () =>
+          (env, Terms.StringPattern(analyzedParts, typ))
+        }
+      }
     case Ast.TuplePattern(ps, pos) =>
       (fromType match {
         case None => An.result(ps.map(_ => None))
@@ -59,6 +84,6 @@ case class PatternAnalyzer(env: Env, allowShadow: Env) {
         }
       }
     //TODO OrPattern |, AndPattern &
-    case ConstructPattern(name, selfPattern, pos) => ???
+    case Ast.ConstructPattern(name, selfPattern, pos) => ???
   }
 }
