@@ -35,10 +35,10 @@ object JsAst {
 
   case class Member(obj: Expr, memberName: String) extends Expr
   case class UnaryCall(target: Expr, argument: Expr) extends Expr
-  case class BinaryOperation(operator: String, a: Expr, b: Expr) extends Expr
+  case class BinaryOperation(a: Expr, operator: String, b: Expr) extends Expr
 
   case class IfBranch(predicate: Expr, body: Seq[Content]) extends Node
-  case class If(ifBranches: Seq[IfBranch], elseBranch: Seq[Content]) extends Stmt
+  case class IfElse(ifBranches: Seq[IfBranch], elseBranch: Seq[Content]) extends Stmt
 
   case class Return(expr: Expr) extends Stmt
 

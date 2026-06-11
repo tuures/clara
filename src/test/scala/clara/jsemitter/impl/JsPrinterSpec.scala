@@ -167,17 +167,17 @@ class JsPrinterSpec extends BaseSpec {
   // Binary operations
 
   test("BinaryOperation: simple") {
-    assert(printExpr(BinaryOperation("+", Named("a"), Named("b"))) === "a + b")
+    assert(printExpr(BinaryOperation(Named("a"), "+", Named("b"))) === "a + b")
   }
 
   test("BinaryOperation: nested wraps in parens") {
-    val inner = BinaryOperation("+", Named("a"), Named("b"))
-    assert(printExpr(BinaryOperation("*", inner, Named("c"))) === "(a + b) * c")
+    val inner = BinaryOperation(Named("a"), "+", Named("b"))
+    assert(printExpr(BinaryOperation(inner, "*", Named("c"))) === "(a + b) * c")
   }
 
   test("BinaryOperation: nested on right side wraps in parens") {
-    val inner = BinaryOperation("+", Named("b"), Named("c"))
-    assert(printExpr(BinaryOperation("*", Named("a"), inner)) === "a * (b + c)")
+    val inner = BinaryOperation(Named("b"), "+", Named("c"))
+    assert(printExpr(BinaryOperation(Named("a"), "*", inner)) === "a * (b + c)")
   }
 
   // Statements
@@ -187,12 +187,12 @@ class JsPrinterSpec extends BaseSpec {
   }
 
   test("If: single branch, no else") {
-    val stmt = If(Seq(IfBranch(Named("cond"), Seq(Return(NumberLiteral("1"))))), Nil)
+    val stmt = IfElse(Seq(IfBranch(Named("cond"), Seq(Return(NumberLiteral("1"))))), Nil)
     assert(printContent(stmt) === "if (cond) {\n  return 1\n}")
   }
 
   test("If: two branches with else") {
-    val stmt = If(
+    val stmt = IfElse(
       Seq(
         IfBranch(Named("a"), Seq(Return(NumberLiteral("1")))),
         IfBranch(Named("b"), Seq(Return(NumberLiteral("2")))),

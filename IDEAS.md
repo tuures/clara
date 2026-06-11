@@ -326,6 +326,28 @@ The corresponding type could be presented as:
 ```
 
 
+## Type subtraction operator `T -- C`
+
+`T -- C` is a type-level operator that eliminates the type `C` from a union type `T`, returning the remaining union (or the single remaining type if only one branch is left).
+
+```clara
+type MaybeInt = Int | None
+type JustInt = MaybeInt -- None  // equivalent to Int
+```
+
+Primary motivation: collection methods that strip out a known singleton type from a heterogeneous collection:
+
+```clara
+// filterNot could return List<T -- C> when given a piecewise that matches exactly C
+xs: List<Int | None>
+xs.filterNot((| None => true | _ => false)): List<Int>
+```
+
+The compiler can enforce this statically when the predicate function's type is `C => Boolean` (or a piecewise exhaustively covering `C`), inferring the result element type as `T -- C`.
+
+Should produce a compile error if `C` is not a member of `T`?
+
+
 ## Potentially useful resources
 
 List of languages to look at for inspiration: Scala, Dotty, TypeScript, Reason/Ocaml, Rust, Swift, Nim, Python, PureScript, JS++

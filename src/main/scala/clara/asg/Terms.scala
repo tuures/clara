@@ -6,16 +6,18 @@ import clara.asg.TypeCons.TypeCon
 import clara.ast.LiteralValue
 
 object Terms {
+  sealed trait Node extends Product
+
   // program structure
-  sealed trait BlockContent
-  sealed trait Pattern {
+  sealed trait BlockContent extends Node
+  sealed trait Pattern extends Node {
     def typ: Type
   }
   sealed trait ValueExpr extends BlockContent {
     def typ: Type
   }
   sealed trait InBlockDecl extends BlockContent
-  sealed trait Member {
+  sealed trait Member extends Node {
     def attributes: MethodAttributes
   }
 
@@ -34,7 +36,7 @@ object Terms {
   case class FloatLiteral(value: LiteralValue.Float, typ: Type) extends ValueExpr
   case class FloatPattern(value: LiteralValue.Float, typ: Type) extends Pattern
 
-  sealed trait StringPart
+  sealed trait StringPart extends Node
   case class StringPlainPart(value: String) extends StringPart
   case class StringEscapePart(escapes: Seq[String]) extends StringPart
   case class StringExpressionPart(expr: ValueExpr) extends StringPart
@@ -64,7 +66,7 @@ object Terms {
   // FIXME
   case class Piecewise(pieces: Seq[(Pattern, ValueExpr)], typ: Type) extends ValueExpr
 
-  sealed trait SelectedMember
+  sealed trait SelectedMember extends Node
   case object SelectedField extends SelectedMember
   case class SelectedMethod(targetCon: TypeCon, attributes: MethodAttributes) extends SelectedMember
   case class MemberSelection(obj: ValueExpr, memberName: String, selectedMember: SelectedMember, typ: Type) extends ValueExpr

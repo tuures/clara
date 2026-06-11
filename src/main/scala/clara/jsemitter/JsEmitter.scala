@@ -21,6 +21,8 @@ object JsEmitter {
     JsAst.Module(moduleIntro ++ body)
   }
 
+  private def illegal(term: Terms.Node): Nothing = throw new java.lang.AssertionError(safe"unexpected term: ${term.productPrefix}")
+
   def emitValueExpr(valueExpr: Terms.ValueExpr): JsAst.Expr = valueExpr match {
     case _: Terms.UnitLiteral => JsAst.Undefined
     case Terms.IntegerLiteral(value, _) => emitIntegerLiteral(value)
@@ -34,21 +36,7 @@ object JsEmitter {
       }.entries)
     case Terms.Lambda(parameter, body, _) =>
       JsAst.UnaryArrowFunc(emitParameters(parameter), Seq(JsAst.Return(emitValueExpr(body))))
-    case Terms.Piecewise(pieces, _) => {
-      val ifBranches = pieces.map { case (pattern, body) =>
-        val predicateExpr = pattern match {
-          case Terms.CapturePattern(name, typ) => ???
-          case Terms.NamedConstantPattern(namedValue) =>
-            JsAst.BinaryOperation("===", JsAst.Named("$value"), emitValueExpr(namedValue))
-          case Terms.TuplePattern(ps, typ) => ???
-          case Terms.UnitPattern() => ???
-        }
-
-        JsAst.IfBranch(predicateExpr, Seq(JsAst.Return(emitValueExpr(body))))
-      }
-
-      JsAst.UnaryArrowFunc(JsAst.NamePattern("$value"), Seq(JsAst.If(ifBranches, Nil)))
-    }
+    case Terms.Piecewise(pieces, _) => emitPiecewise(pieces)
     case Terms.MemberSelection(obj, memberName, selectedMember, _) =>
       emitMemberSelection(obj, memberName, selectedMember)
     case Terms.Call(callee @ Terms.MemberSelection(obj, memberName, selectedMember, _), argument, _) =>
@@ -91,6 +79,35 @@ object JsEmitter {
     }
   }
 
+  def emitPiecewise(pieces: Seq[(Terms.Pattern, Terms.ValueExpr)]): JsAst.Expr = {
+    val WrapperParamName = "$value"
+    def equals(v: JsAst.Expr) = JsAst.BinaryOperation(JsAst.Named(WrapperParamName), "===", v)
+
+    val (beforeWildcard, wildcardAndAfter) = pieces.span { case (pattern, _) =>
+      !pattern.isInstanceOf[Terms.WildcardPattern]
+    }
+
+    val ifBranches = beforeWildcard.map { case (pattern, body) =>
+      val predicate: JsAst.Expr = pattern match {
+        case Terms.WildcardPattern(_) => illegal(pattern)
+        case Terms.UnitPattern() => equals(JsAst.Undefined)
+        case Terms.IntegerPattern(value, _) => equals(emitIntegerLiteral(value))
+        case Terms.FloatPattern(LiteralValue.Float(whole, fraction), _) => equals(emitFloatLiteral(whole, fraction))
+        case Terms.StringPattern(parts, _) => equals(emitStringLiteral(parts))
+        case Terms.TuplePattern(_, _) => ???
+        case Terms.CapturePattern(_, _) => ???
+        case Terms.NamedConstantPattern(namedValue) => equals(emitValueExpr(namedValue))
+      }
+      JsAst.IfBranch(predicate, Seq(JsAst.Return(emitValueExpr(body))))
+    }
+
+    val elseBranch = wildcardAndAfter.headOption.map { case (_, body) =>
+      Seq(JsAst.Return(emitValueExpr(body)))
+    }.getOrElse(Nil)
+
+    JsAst.UnaryArrowFunc(JsAst.NamePattern(WrapperParamName), Seq(JsAst.IfElse(ifBranches, elseBranch)))
+  }
+
   def emitBlockContent(blockContent: Terms.BlockContent): Option[JsAst.Content] = blockContent match {
     case e: Terms.ValueExpr => Some(emitValueExpr(e))
     case _: Terms.ValueDecl => None
@@ -103,13 +120,19 @@ object JsEmitter {
       case _ => None
     }
     case _: Terms.MethodDeclSection => None
-    case Terms.MethodDefSection(targetCon, selfPattern, methodDefs) => Some(emitMethodDefSection(targetCon, selfPattern, methodDefs))
+    case Terms.MethodDefSection(targetCon, selfPattern, methodDefs) =>
+      Some(emitMethodDefSection(targetCon, selfPattern, methodDefs))
   }
 
   def emitValueDefTarget(target: Terms.Pattern): JsAst.Pattern = target match {
+    case Terms.WildcardPattern(_) => JsAst.NamePattern("_")
     case Terms.UnitPattern() => JsAst.UnitPattern
+    case Terms.IntegerPattern(_, _) => ???
+    case Terms.FloatPattern(_, _) => ???
+    case Terms.StringPattern(_, _) => ???
     case Terms.TuplePattern(ps, _) => JsAst.ArrayPattern(ps.map(emitValueDefTarget))
     case Terms.CapturePattern(name, _) => JsAst.NamePattern(name)
+    case Terms.NamedConstantPattern(_) => ???
   }
 
   def emitMethodDefSection(targetCon: TypeCons.TypeCon, selfPattern: Terms.Pattern, methodDefs: Namespace[Terms.MethodDef]) = {
@@ -141,7 +164,7 @@ object JsEmitter {
       case Terms.SelectedMethod(targetCon, attributes) => attributes.emitKind match {
         case Some(Attributes.InstanceProperty) => selectInstanceProperty
         case Some(Attributes.BinaryOperator) =>
-          JsAst.UnaryArrowFunc(JsAst.NamePattern("_"), Seq(JsAst.Return(JsAst.BinaryOperation(name, emitValueExpr(obj), JsAst.Named("_")))))
+          JsAst.UnaryArrowFunc(JsAst.NamePattern("_"), Seq(JsAst.Return(JsAst.BinaryOperation(emitValueExpr(obj), name, JsAst.Named("_")))))
         case None => JsAst.UnaryCall(JsAst.Member(JsAst.Named(NameMangler.methodsCompanionName(targetCon)), name), emitValueExpr(obj))
       }
       case Terms.SelectedField => selectInstanceProperty
@@ -149,15 +172,20 @@ object JsEmitter {
   }
 
   def emitBinaryOperation(obj: Terms.ValueExpr, memberName: String, selectedMember: Terms.SelectedMember, argument: Terms.ValueExpr) =
-    JsAst.BinaryOperation(emitMemberName(memberName, selectedMember), emitValueExpr(obj), emitValueExpr(argument))
+    JsAst.BinaryOperation(emitValueExpr(obj), emitMemberName(memberName, selectedMember), emitValueExpr(argument))
 
   def emitCall(callee: Terms.ValueExpr, argument: Terms.ValueExpr) =
     JsAst.UnaryCall(emitValueExpr(callee), emitValueExpr(argument))
 
   def emitParameters(pattern: Terms.Pattern): JsAst.Pattern = pattern match {
+    case Terms.WildcardPattern(_) => ???
     case Terms.UnitPattern() => JsAst.UnitPattern
+    case Terms.IntegerPattern(_, _) => ???
+    case Terms.FloatPattern(_, _) => ???
+    case Terms.StringPattern(_, _) => ???
     case Terms.TuplePattern(ps, _) => JsAst.ArrayPattern(ps.map(emitParameters))
     case Terms.CapturePattern(name, _) => JsAst.NamePattern(name)
+    case Terms.NamedConstantPattern(_) => ???
   }
 }
 

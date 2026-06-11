@@ -35,7 +35,7 @@ object JsPrinterImpl {
     case Iife(body) => safe"(${printArrowFunc(UnitPattern, body)})()"
     case Member(obj, memberName) => safe"${printExpr(obj)}.$memberName"
     case UnaryCall(target, argument) => printCall(target, printExpr(argument))
-    case BinaryOperation(operator, a, b) => printBinaryOperation(operator, a, b)
+    case BinaryOperation(a, operator, b) => printBinaryOperation(a, operator, b)
   }
 
   def printObjectLiteral(entries: Seq[(String, Expr)]): String = entries match {
@@ -118,17 +118,17 @@ object JsPrinterImpl {
 
   def printBinaryOperand(e: Expr): String = e match {
     // wrap inner binary operations in parens to avoid problems with precendence
-    case BinaryOperation(operator, a, b) => safe"(${printBinaryOperation(operator, a, b)})"
+    case BinaryOperation(a, operator, b) => safe"(${printBinaryOperation(a, operator, b)})"
     case _ => printExpr(e)
   }
 
-  def printBinaryOperation(operator: String, a: Expr, b: Expr): String = {
+  def printBinaryOperation(a: Expr, operator: String, b: Expr): String = {
     safe"${printBinaryOperand(a)} $operator ${printBinaryOperand(b)}"
   }
 
   def printStmt(stmt: Stmt): String = stmt match {
     case Return(expr) => safe"return ${printExpr(expr)}"
-    case If(ifBranches, elseBranch) => {
+    case IfElse(ifBranches, elseBranch) => {
       val ifs = ifBranches.zipWithIndex.map { case (IfBranch(predicate, body), index) =>
         val keyword = if (index > 0) "else if" else "if"
         safe"$keyword (${printExpr(predicate)}) ${printBlock(body)}"

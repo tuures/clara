@@ -9,7 +9,7 @@ case class PatternAnalyzer(env: Env, allowShadow: Env) {
       val typ = fromType.getOrElse(Types.Top)
       An.result((env, Terms.WildcardPattern(typ)))
     case Ast.UnitPattern(pos) =>
-      // FIXME default to Bottom type to simplify
+      // FIXME remove repetition of this fromType check in all patterns
       fromType.fold(An.result(())){ fromType =>
         TypeInterpreter.expectAssignable(fromType, Types.Uni, pos)
       }.map { case () =>

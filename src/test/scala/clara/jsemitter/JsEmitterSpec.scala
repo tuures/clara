@@ -139,9 +139,9 @@ class JsEmitterSpec extends BaseSpec {
       (Terms.NamedConstantPattern(falseVal), Terms.IntegerLiteral(LiteralValue.IntegerDec("0"), dummyType)),
     ), dummyType)
     assert(emitExpr(expr) === JsAst.UnaryArrowFunc(JsAst.NamePattern("$value"), Seq(
-      JsAst.If(Seq(
-        JsAst.IfBranch(JsAst.BinaryOperation("===", JsAst.Named("$value"), JsAst.Named("True")), Seq(JsAst.Return(JsAst.NumberLiteral("1")))),
-        JsAst.IfBranch(JsAst.BinaryOperation("===", JsAst.Named("$value"), JsAst.Named("False")), Seq(JsAst.Return(JsAst.NumberLiteral("0")))),
+      JsAst.IfElse(Seq(
+          JsAst.IfBranch(JsAst.BinaryOperation(JsAst.Named("$value"), "===", JsAst.Named("True")), Seq(JsAst.Return(JsAst.NumberLiteral("1")))),
+          JsAst.IfBranch(JsAst.BinaryOperation(JsAst.Named("$value"), "===", JsAst.Named("False")), Seq(JsAst.Return(JsAst.NumberLiteral("0")))),
       ), Nil)
     )))
   }
@@ -219,7 +219,7 @@ class JsEmitterSpec extends BaseSpec {
       dummyType
     )
     val expr = Terms.Call(callee, Terms.NamedValue("b", dummyType), dummyType)
-    assert(emitExpr(expr) === JsAst.BinaryOperation("+", JsAst.Named("a"), JsAst.Named("b")))
+    assert(emitExpr(expr) === JsAst.BinaryOperation(JsAst.Named("a"), "+", JsAst.Named("b")))
   }
 
   // emitModule / emitBlockContent
