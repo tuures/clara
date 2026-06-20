@@ -2,8 +2,7 @@ package clara.jsemitter
 
 // Asg => JsAst
 
-import clara.asg.{Attributes, Terms, TypeCons, Namespace}
-import clara.ast.LiteralValue
+import clara.asg.{Attributes, TermLiteral, Terms, TypeCons, Namespace}
 
 import impl._
 
@@ -21,12 +20,12 @@ object JsEmitter {
     JsAst.Module(moduleIntro ++ body)
   }
 
-  private def illegal(term: Terms.Node): Nothing = throw new java.lang.AssertionError(safe"unexpected term: ${term.productPrefix}")
+  private def illegal(term: Product): Nothing = throw new java.lang.AssertionError(safe"unexpected term: ${term.productPrefix}")
 
   def emitValueExpr(valueExpr: Terms.ValueExpr): JsAst.Expr = valueExpr match {
     case _: Terms.UnitLiteral => JsAst.Undefined
     case Terms.IntegerLiteral(value, _) => emitIntegerLiteral(value)
-    case Terms.FloatLiteral(LiteralValue.Float(whole, fraction), _) => emitFloatLiteral(whole, fraction)
+    case Terms.FloatLiteral(TermLiteral.Float(whole, fraction), _) => emitFloatLiteral(whole, fraction)
     case Terms.StringLiteral(parts, _) => emitStringLiteral(parts)
     case Terms.Tuple(es, _) => JsAst.ArrayLiteral(es.map(emitValueExpr))
     case Terms.Block(bcs, _) => emitBlock(bcs)
@@ -50,18 +49,18 @@ object JsEmitter {
     case Terms.Call(callee, argument, _) => emitCall(callee, argument)
   }
 
-  def emitIntegerLiteral(value: LiteralValue.Integer) = value match {
-    case LiteralValue.IntegerBin(value) => JsAst.NumberLiteral(safe"0b$value")
-    case LiteralValue.IntegerDec(value) => JsAst.NumberLiteral(value)
-    case LiteralValue.IntegerHex(value) => JsAst.NumberLiteral(safe"0x$value")
+  def emitIntegerLiteral(value: TermLiteral.Integer) = value match {
+    case TermLiteral.IntegerBin(value) => JsAst.NumberLiteral(safe"0b$value")
+    case TermLiteral.IntegerDec(value) => JsAst.NumberLiteral(value)
+    case TermLiteral.IntegerHex(value) => JsAst.NumberLiteral(safe"0x$value")
   }
 
   def emitFloatLiteral(whole: String, fraction: String) = JsAst.NumberLiteral(safe"$whole.$fraction")
 
-  def emitStringLiteral(parts: Seq[Terms.StringPart]) = JsAst.StringLiteral(parts.map {
-    case Terms.StringEscapePart(escapes) => JsAst.StringEscapePart(escapes)
-    case Terms.StringExpressionPart(e) => JsAst.StringExpressionPart(emitValueExpr(e))
-    case Terms.StringPlainPart(value) => JsAst.StringPlainPart(value)
+  def emitStringLiteral(parts: Seq[TermLiteral.StringValuePart]) = JsAst.StringLiteral(parts.map {
+    case TermLiteral.StringPlainPart(value) => JsAst.StringPlainPart(value)
+    case TermLiteral.StringEscapePart(escapes) => JsAst.StringEscapePart(escapes)
+    case TermLiteral.StringValueExprPart(e) => JsAst.StringExpressionPart(emitValueExpr(e))
   })
 
   def emitBlock(bcs: Seq[Terms.BlockContent]): JsAst.Expr = {
@@ -83,6 +82,25 @@ object JsEmitter {
     val WrapperParamName = "$value"
     def equals(v: JsAst.Expr) = JsAst.BinaryOperation(JsAst.Named(WrapperParamName), "===", v)
 
+    def emitPiecewiseStringEquals(parts: Seq[TermLiteral.StringPatternPart]) = {
+      val hasCaptures = parts.exists {
+        case _: TermLiteral.StringCapturePart => true
+        case _ => false
+      }
+
+      if (hasCaptures) {
+        ??? // TODO: emit regex-based pattern matching for string captures
+      } else {
+        equals(JsAst.StringLiteral(parts.map {
+          case TermLiteral.StringPlainPart(value) => JsAst.StringPlainPart(value)
+          case TermLiteral.StringEscapePart(escapes) => JsAst.StringEscapePart(escapes)
+          case TermLiteral.StringNamedConstantPart(Terms.NamedConstantPattern(namedValue)) =>
+            JsAst.StringExpressionPart(emitValueExpr(namedValue))
+          case capture: TermLiteral.StringCapturePart => illegal(capture)
+        }))
+      }
+    }
+
     val (beforeWildcard, wildcardAndAfter) = pieces.span { case (pattern, _) =>
       !pattern.isInstanceOf[Terms.WildcardPattern]
     }
@@ -92,8 +110,8 @@ object JsEmitter {
         case Terms.WildcardPattern(_) => illegal(pattern)
         case Terms.UnitPattern() => equals(JsAst.Undefined)
         case Terms.IntegerPattern(value, _) => equals(emitIntegerLiteral(value))
-        case Terms.FloatPattern(LiteralValue.Float(whole, fraction), _) => equals(emitFloatLiteral(whole, fraction))
-        case Terms.StringPattern(parts, _) => equals(emitStringLiteral(parts))
+        case Terms.FloatPattern(TermLiteral.Float(whole, fraction), _) => equals(emitFloatLiteral(whole, fraction))
+        case Terms.StringPattern(parts, _) => emitPiecewiseStringEquals(parts)
         case Terms.TuplePattern(_, _) => ???
         case Terms.CapturePattern(_, _) => ???
         case Terms.NamedConstantPattern(namedValue) => equals(emitValueExpr(namedValue))

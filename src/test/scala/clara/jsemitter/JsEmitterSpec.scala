@@ -2,8 +2,8 @@ package clara.jsemitter
 
 import clara.testutil.BaseSpec
 
-import clara.asg.{Attributes, Namespace, Terms, TypeCons, Types}
-import clara.ast.{LiteralValue, NoPos}
+import clara.asg.{Attributes, Namespace, TermLiteral, Terms, TypeCons, Types}
+import clara.ast.NoPos
 import clara.jsemitter.impl.{JsAst, JsPrinter}
 
 class JsEmitterSpec extends BaseSpec {
@@ -22,40 +22,40 @@ class JsEmitterSpec extends BaseSpec {
   }
 
   test("emitValueExpr: IntegerLiteral decimal") {
-    val expr = Terms.IntegerLiteral(LiteralValue.IntegerDec("42"), dummyType)
+    val expr = Terms.IntegerLiteral(TermLiteral.IntegerDec("42"), dummyType)
     assert(emitExpr(expr) === JsAst.NumberLiteral("42"))
   }
 
   test("emitValueExpr: IntegerLiteral binary") {
-    val expr = Terms.IntegerLiteral(LiteralValue.IntegerBin("1010"), dummyType)
+    val expr = Terms.IntegerLiteral(TermLiteral.IntegerBin("1010"), dummyType)
     assert(emitExpr(expr) === JsAst.NumberLiteral("0b1010"))
   }
 
   test("emitValueExpr: IntegerLiteral hex") {
-    val expr = Terms.IntegerLiteral(LiteralValue.IntegerHex("ff"), dummyType)
+    val expr = Terms.IntegerLiteral(TermLiteral.IntegerHex("ff"), dummyType)
     assert(emitExpr(expr) === JsAst.NumberLiteral("0xff"))
   }
 
   test("emitValueExpr: FloatLiteral") {
-    val expr = Terms.FloatLiteral(LiteralValue.Float("3", "14"), dummyType)
+    val expr = Terms.FloatLiteral(TermLiteral.Float("3", "14"), dummyType)
     assert(emitExpr(expr) === JsAst.NumberLiteral("3.14"))
   }
 
   test("emitValueExpr: StringLiteral plain") {
-    val expr = Terms.StringLiteral(Seq(Terms.StringPlainPart("hello")), dummyType)
+    val expr = Terms.StringLiteral(Seq(TermLiteral.StringPlainPart("hello")), dummyType)
     assert(emitExpr(expr) === JsAst.StringLiteral("hello"))
   }
 
   test("emitValueExpr: StringLiteral escapes") {
     val values = Seq("n", "\"", "\\", "t", "$", "r", "u0041", "u10FFFF")
-    val expr = Terms.StringLiteral(Seq(Terms.StringEscapePart(values)), dummyType)
+    val expr = Terms.StringLiteral(Seq(TermLiteral.StringEscapePart(values)), dummyType)
     assert(emitExpr(expr) === JsAst.StringLiteral(Seq(JsAst.StringEscapePart(values))))
   }
 
   test("emitValueExpr: StringLiteral with expression") {
     val expr = Terms.StringLiteral(Seq(
-      Terms.StringPlainPart("hello "),
-      Terms.StringExpressionPart(Terms.NamedValue("x", dummyType)),
+      TermLiteral.StringPlainPart("hello "),
+      TermLiteral.StringValueExprPart(Terms.NamedValue("x", dummyType)),
     ), dummyType)
     assert(emitExpr(expr) === JsAst.StringLiteral(Seq(
       JsAst.StringPlainPart("hello "),
@@ -65,8 +65,8 @@ class JsEmitterSpec extends BaseSpec {
 
   test("emitValueExpr: Tuple") {
     val expr = Terms.Tuple(Seq(
-      Terms.IntegerLiteral(LiteralValue.IntegerDec("1"), dummyType),
-      Terms.IntegerLiteral(LiteralValue.IntegerDec("2"), dummyType),
+      Terms.IntegerLiteral(TermLiteral.IntegerDec("1"), dummyType),
+      Terms.IntegerLiteral(TermLiteral.IntegerDec("2"), dummyType),
     ), dummyType)
     assert(emitExpr(expr) === JsAst.ArrayLiteral(Seq(
       JsAst.NumberLiteral("1"),
@@ -96,7 +96,7 @@ class JsEmitterSpec extends BaseSpec {
 
   test("emitValueExpr: Block with defs and expressions") {
     val block = Terms.Block(Seq(
-      Terms.ValueDef(Terms.CapturePattern("x", dummyType), Terms.IntegerLiteral(LiteralValue.IntegerDec("1"), dummyType)),
+      Terms.ValueDef(Terms.CapturePattern("x", dummyType), Terms.IntegerLiteral(TermLiteral.IntegerDec("1"), dummyType)),
       Terms.NamedValue("x", dummyType),
     ), dummyType)
     val result = JsEmitter.emitValueExpr(block)
@@ -113,7 +113,7 @@ class JsEmitterSpec extends BaseSpec {
 
   test("emitValueExpr: Record") {
     val expr = Terms.Record(
-      Namespace("a" -> Terms.Field(Terms.IntegerLiteral(LiteralValue.IntegerDec("1"), dummyType))),
+      Namespace("a" -> Terms.Field(Terms.IntegerLiteral(TermLiteral.IntegerDec("1"), dummyType))),
       Types.Record("a" -> dummyType)
     )
     assert(emitExpr(expr) === JsAst.ObjectLiteral(Seq("a" -> JsAst.NumberLiteral("1"))))
@@ -135,8 +135,8 @@ class JsEmitterSpec extends BaseSpec {
     val trueVal = Terms.NamedValue("True", dummyType)
     val falseVal = Terms.NamedValue("False", dummyType)
     val expr = Terms.Piecewise(Seq(
-      (Terms.NamedConstantPattern(trueVal), Terms.IntegerLiteral(LiteralValue.IntegerDec("1"), dummyType)),
-      (Terms.NamedConstantPattern(falseVal), Terms.IntegerLiteral(LiteralValue.IntegerDec("0"), dummyType)),
+      (Terms.NamedConstantPattern(trueVal), Terms.IntegerLiteral(TermLiteral.IntegerDec("1"), dummyType)),
+      (Terms.NamedConstantPattern(falseVal), Terms.IntegerLiteral(TermLiteral.IntegerDec("0"), dummyType)),
     ), dummyType)
     assert(emitExpr(expr) === JsAst.UnaryArrowFunc(JsAst.NamePattern("$value"), Seq(
       JsAst.IfElse(Seq(
@@ -203,7 +203,7 @@ class JsEmitterSpec extends BaseSpec {
   test("emitValueExpr: Call") {
     val expr = Terms.Call(
       Terms.NamedValue("f", dummyType),
-      Terms.IntegerLiteral(LiteralValue.IntegerDec("1"), dummyType),
+      Terms.IntegerLiteral(TermLiteral.IntegerDec("1"), dummyType),
       dummyType
     )
     assert(emitExpr(expr) === JsAst.UnaryCall(JsAst.Named("f"), JsAst.NumberLiteral("1")))
@@ -234,7 +234,7 @@ class JsEmitterSpec extends BaseSpec {
     val program = Terms.Block(Seq(
       Terms.ValueDef(
         Terms.CapturePattern("x", dummyType),
-        Terms.IntegerLiteral(LiteralValue.IntegerDec("42"), dummyType)
+        Terms.IntegerLiteral(TermLiteral.IntegerDec("42"), dummyType)
       )
     ), dummyType)
     val module = JsEmitter.emitModule(program)
@@ -252,8 +252,8 @@ class JsEmitterSpec extends BaseSpec {
           Terms.UnitPattern(),
         ), dummyType),
         Terms.Tuple(Seq(
-          Terms.IntegerLiteral(LiteralValue.IntegerDec("1"), dummyType),
-          Terms.IntegerLiteral(LiteralValue.IntegerDec("2"), dummyType),
+          Terms.IntegerLiteral(TermLiteral.IntegerDec("1"), dummyType),
+          Terms.IntegerLiteral(TermLiteral.IntegerDec("2"), dummyType),
           Terms.UnitLiteral(),
         ), dummyType)
       )
@@ -338,7 +338,7 @@ class JsEmitterSpec extends BaseSpec {
 
   test("Emitter: program with def and expression") {
     val program = Terms.Block(Seq(
-      Terms.ValueDef(Terms.CapturePattern("x", dummyType), Terms.IntegerLiteral(LiteralValue.IntegerDec("1"), dummyType)),
+      Terms.ValueDef(Terms.CapturePattern("x", dummyType), Terms.IntegerLiteral(TermLiteral.IntegerDec("1"), dummyType)),
       Terms.NamedValue("x", dummyType),
     ), dummyType)
     assert(modulePrinted(program) === "const x = 1\n\nx")

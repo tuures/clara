@@ -3,7 +3,7 @@ package clara.asg
 import clara.asg.Attributes.MethodAttributes
 import clara.asg.Types.Type
 import clara.asg.TypeCons.TypeCon
-import clara.ast.LiteralValue
+import clara.asg.TermLiteral
 
 object Terms {
   sealed trait Node extends Product
@@ -30,19 +30,14 @@ object Terms {
     def typ = Types.Uni
   }
 
-  case class IntegerLiteral(value: LiteralValue.Integer, typ: Type) extends ValueExpr
-  case class IntegerPattern(value: LiteralValue.Integer, typ: Type) extends Pattern
+  case class IntegerLiteral(value: TermLiteral.Integer, typ: Type) extends ValueExpr
+  case class IntegerPattern(value: TermLiteral.Integer, typ: Type) extends Pattern
 
-  case class FloatLiteral(value: LiteralValue.Float, typ: Type) extends ValueExpr
-  case class FloatPattern(value: LiteralValue.Float, typ: Type) extends Pattern
+  case class FloatLiteral(value: TermLiteral.Float, typ: Type) extends ValueExpr
+  case class FloatPattern(value: TermLiteral.Float, typ: Type) extends Pattern
 
-  sealed trait StringPart extends Node
-  case class StringPlainPart(value: String) extends StringPart
-  case class StringEscapePart(escapes: Seq[String]) extends StringPart
-  case class StringExpressionPart(expr: ValueExpr) extends StringPart
-
-  case class StringLiteral(parts: Seq[StringPart], typ: Type) extends ValueExpr
-  case class StringPattern(parts: Seq[StringPart], typ: Type) extends Pattern
+  case class StringLiteral(parts: Seq[TermLiteral.StringValuePart], typ: Type) extends ValueExpr
+  case class StringPattern(parts: Seq[TermLiteral.StringPatternPart], typ: Type) extends Pattern
 
   case class Tuple(es: Seq[ValueExpr], typ: Type) extends ValueExpr
   case class TuplePattern(ps: Seq[Pattern], typ: Type) extends Pattern

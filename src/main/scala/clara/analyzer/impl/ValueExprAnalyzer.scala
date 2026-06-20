@@ -1,7 +1,7 @@
 package clara.analyzer.impl
 
-import clara.asg.{Terms, Types, TypeCons, Namespace}
-import clara.ast.{Ast, LiteralValue, Pos, SourceMessage}
+import clara.asg.{TermLiteral, Terms, Types, TypeCons, Namespace}
+import clara.ast.{Ast, AstLiteral, Pos, SourceMessage}
 
 import clara.util.Safe._
 
@@ -121,16 +121,16 @@ case class ValueExprAnalyzerImpl(env: Env) {
   def valueExprTerm(valueExpr: Ast.ValueExpr): An[Terms.ValueExpr] = valueExpr match {
     case Ast.UnitLiteral(_) => An.result(Terms.UnitLiteral())
     case Ast.IntegerLiteral(value, pos) => namedNullaryType("Int", pos).map { typ =>
-      Terms.IntegerLiteral(value, typ)
+      Terms.IntegerLiteral(TermLiteral.integer(value), typ)
     }
-    case Ast.FloatLiteral(value, pos) => namedNullaryType("Float", pos).map { typ =>
-      Terms.FloatLiteral(value, typ)
+    case Ast.FloatLiteral(AstLiteral.Float(whole, fraction), pos) => namedNullaryType("Float", pos).map { typ =>
+      Terms.FloatLiteral(TermLiteral.Float(whole, fraction), typ)
     }
     case Ast.StringLiteral(parts, pos) =>
-      val analyzedParts: An[Seq[Terms.StringPart]] = An.seq(parts.map {
-        case LiteralValue.StringPlainPart(value) => An.result(Terms.StringPlainPart(value))
-        case LiteralValue.StringEscapePart(escapes) => An.result(Terms.StringEscapePart(escapes))
-        case LiteralValue.StringExpressionPart(e) => valueExprTerm(e).map(Terms.StringExpressionPart(_))
+      val analyzedParts: An[Seq[TermLiteral.StringValuePart]] = An.seq(parts.map {
+        case AstLiteral.StringPlainPart(value) => An.result(TermLiteral.StringPlainPart(value))
+        case AstLiteral.StringEscapePart(escapes) => An.result(TermLiteral.StringEscapePart(escapes))
+        case AstLiteral.StringValueExprPart(e) => valueExprTerm(e).map(TermLiteral.StringValueExprPart(_))
       })
       analyzedParts.zip(namedNullaryType("String", pos)).map { case (parts, typ) =>
         Terms.StringLiteral(parts, typ)

@@ -21,15 +21,14 @@ object Ast {
   case class UnitType(pos: Pos = NoPos) extends TypeExpr
   case class UnitPattern(pos: Pos = NoPos) extends Pattern
 
-  case class IntegerLiteral(value: LiteralValue.Integer, pos: Pos = NoPos) extends ValueExpr
-  case class IntegerPattern(value: LiteralValue.Integer, pos: Pos = NoPos) extends Pattern
+  case class IntegerLiteral(value: AstLiteral.Integer, pos: Pos = NoPos) extends ValueExpr
+  case class IntegerPattern(value: AstLiteral.Integer, pos: Pos = NoPos) extends Pattern
 
-  case class FloatLiteral(value: LiteralValue.Float, pos: Pos = NoPos) extends ValueExpr
-  case class FloatPattern(value: LiteralValue.Float, pos: Pos = NoPos) extends Pattern
+  case class FloatLiteral(value: AstLiteral.Float, pos: Pos = NoPos) extends ValueExpr
+  case class FloatPattern(value: AstLiteral.Float, pos: Pos = NoPos) extends Pattern
 
-  case class StringLiteral(parts: Seq[LiteralValue.StringPart], pos: Pos = NoPos) extends ValueExpr
-  // FIXME need to replace LiteralValue.StringPart with something for pattern, support capture
-  case class StringPattern(parts: Seq[LiteralValue.StringPart], pos: Pos = NoPos) extends Pattern
+  case class StringLiteral(parts: Seq[AstLiteral.StringValuePart], pos: Pos = NoPos) extends ValueExpr
+  case class StringPattern(parts: Seq[AstLiteral.StringPatternPart], pos: Pos = NoPos) extends Pattern
 
   case class Tuple(es: Seq[ValueExpr], pos: Pos = NoPos) extends ValueExpr
   case class TupleType(ts: Seq[TypeExpr], pos: Pos = NoPos) extends TypeExpr

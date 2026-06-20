@@ -1,7 +1,7 @@
 package clara.parser
 
 import clara.util.Safe.SafeStringContext
-import clara.ast.{Ast, LiteralValue}
+import clara.ast.{Ast, AstLiteral}
 import clara.testutil.{AstTestHelpers, BaseSpec}
 
 import scala.reflect.ClassTag
@@ -64,8 +64,8 @@ class ParserImplsSpec extends BaseSpec {
   parseAst(p.unitType(_))(   "()")(UnitType())
   parseAst(p.unitPattern(_))("()")(UnitPattern())
 
-  parseAst(p.floatLiteral(_))("3.14")(FloatLiteral(LiteralValue.Float("3", "14")))
-  parseAst(p.floatLiteral(_))("1_000.123_456")(FloatLiteral(LiteralValue.Float("1000", "123456")))
+  parseAst(p.floatLiteral(_))("3.14")(FloatLiteral(AstLiteral.Float("3", "14")))
+  parseAst(p.floatLiteral(_))("1_000.123_456")(FloatLiteral(AstLiteral.Float("1000", "123456")))
   // FIXME parseAst(p.floatLiteral(_))("-1.1")(FloatLiteral(LiteralValue.Float("-1", "1")))
   reject(p.floatLiteral(_))("_100.0")
   reject(p.floatLiteral(_))("1._2")
@@ -74,16 +74,16 @@ class ParserImplsSpec extends BaseSpec {
   reject(p.floatLiteral(_))("- 1.2")
   reject(p.floatLiteral(_))("1_.2")
 
-  parseAst(p.floatPattern(_))("3.14")(FloatPattern(LiteralValue.Float("3", "14")))
+  parseAst(p.floatPattern(_))("3.14")(FloatPattern(AstLiteral.Float("3", "14")))
 
-  parseAst(p.integerLiteral(_))("123")(IntegerLiteral(LiteralValue.IntegerDec("123")))
+  parseAst(p.integerLiteral(_))("123")(IntegerLiteral(AstLiteral.IntegerDec("123")))
   // FIXME parseAst(p.integerLiteral(_))("-123")(IntegerLiteral(LiteralValue.IntegerDec("-123")))
-  parseAst(p.integerLiteral(_))("1_000")(IntegerLiteral(LiteralValue.IntegerDec("1000")))
-  parseAst(p.integerLiteral(_))("1_\n000")(IntegerLiteral(LiteralValue.IntegerDec("1000")))
-  parseAst(p.integerLiteral(_))("#x1a")(IntegerLiteral(LiteralValue.IntegerHex("1a")))
+  parseAst(p.integerLiteral(_))("1_000")(IntegerLiteral(AstLiteral.IntegerDec("1000")))
+  parseAst(p.integerLiteral(_))("1_\n000")(IntegerLiteral(AstLiteral.IntegerDec("1000")))
+  parseAst(p.integerLiteral(_))("#x1a")(IntegerLiteral(AstLiteral.IntegerHex("1a")))
   // FIXME parseAst(p.integerLiteral(_))("-#x1a")(IntegerLiteral(LiteralValue.IntegerHex("-1a")))
-  parseAst(p.integerLiteral(_))("#x1A")(IntegerLiteral(LiteralValue.IntegerHex("1A")))
-  parseAst(p.integerLiteral(_))("#b0010")(IntegerLiteral(LiteralValue.IntegerBin("0010")))
+  parseAst(p.integerLiteral(_))("#x1A")(IntegerLiteral(AstLiteral.IntegerHex("1A")))
+  parseAst(p.integerLiteral(_))("#b0010")(IntegerLiteral(AstLiteral.IntegerBin("0010")))
   // FIXME parseAst(p.integerLiteral(_))("-#b0010")(IntegerLiteral(LiteralValue.IntegerBin("-0010")))
   reject(p.integerLiteral(_))("1 0")
   reject(p.integerLiteral(_))("_100")
@@ -97,69 +97,122 @@ class ParserImplsSpec extends BaseSpec {
   reject(p.integerLiteral(_))("#b-2")
   reject(p.integerLiteral(_))("- #b2")
 
-  parseAst(p.integerPattern(_))("42")(IntegerPattern(LiteralValue.IntegerDec("42")))
-  parseAst(p.integerPattern(_))("#xFF")(IntegerPattern(LiteralValue.IntegerHex("FF")))
+  parseAst(p.integerPattern(_))("42")(IntegerPattern(AstLiteral.IntegerDec("42")))
+  parseAst(p.integerPattern(_))("#xFF")(IntegerPattern(AstLiteral.IntegerHex("FF")))
 
-  parseAst(p.processedStringLiteral(_))(""""str($foo)"""")(StringLiteral(Seq(
-    LiteralValue.StringPlainPart("str("),
-    LiteralValue.StringExpressionPart(NamedValue("foo")),
-    LiteralValue.StringPlainPart(")")
-  )))
-  parseAst(p.processedStringLiteral(_))("\" line1 \n line2\"")(StringLiteral(Seq(
-    LiteralValue.StringPlainPart(" line1 \n line2")
-  )))
-  parseAst(p.processedStringLiteral(_))(""""str$(bar)"""")(StringLiteral(Seq(
-    LiteralValue.StringPlainPart("str"),
-    LiteralValue.StringExpressionPart(NamedValue("bar"))
-  )))
-  parseAst(p.processedStringLiteral(_))(""""$(bar)str"""")(StringLiteral(Seq(
-    LiteralValue.StringExpressionPart(NamedValue("bar")),
-    LiteralValue.StringPlainPart("str")
-  )))
-  parseAst(p.processedStringLiteral(_))(""""\"\\10\$\n"""")(StringLiteral(Seq(
-    LiteralValue.StringEscapePart(Seq('"'.toString, """\""")),
-    LiteralValue.StringPlainPart("10"),
-    LiteralValue.StringEscapePart(Seq("$", "n"))
-  )))
-  parseAst(p.processedStringLiteral(_))(""""\r\t"""")(StringLiteral(Seq(
-    LiteralValue.StringEscapePart(Seq("r", "t"))
-  )))
-  parseAst(p.processedStringLiteral(_))("\"\\u0041\"")(StringLiteral(Seq(
-    LiteralValue.StringEscapePart(Seq("u0041"))
-  )))
-  parseAst(p.processedStringLiteral(_))("\"\\u10FFFF\"")(StringLiteral(Seq(
-    LiteralValue.StringEscapePart(Seq("u10FFFF"))
-  )))
-  reject(p.processedStringLiteral(_))(""""10$"""")
-  reject(p.processedStringLiteral(_))(""""10$$"""")
-  reject(p.processedStringLiteral(_))(""""10\"""")
-  reject(p.processedStringLiteral(_))(""""10\ö"""")
+  parseAst(p.processedStringValueParts(_))(""""str($val)"""")(Seq(
+    AstLiteral.StringPlainPart("str("),
+    AstLiteral.StringValueExprPart(NamedValue("val")),
+    AstLiteral.StringPlainPart(")")
+  ))
+  parseAst(p.processedStringPatternParts(_))(""""str($cap)"""")(Seq(
+    AstLiteral.StringPlainPart("str("),
+    AstLiteral.StringCapturePart(Ast.CapturePattern("cap")),
+    AstLiteral.StringPlainPart(")")
+  ))
+  parseAst(p.processedStringPatternParts(_))(""""str($Const)"""")(Seq(
+    AstLiteral.StringPlainPart("str("),
+    AstLiteral.StringNamedConstantPart(Ast.NamedConstantPattern("Const")),
+    AstLiteral.StringPlainPart(")")
+  ))
+  parseAst(p.processedStringValueParts(_))("\" line1 \n line2\"")(Seq(
+    AstLiteral.StringPlainPart(" line1 \n line2")
+  ))
+  parseAst(p.processedStringValueParts(_))(""""str$val"""")(Seq(
+    AstLiteral.StringPlainPart("str"),
+    AstLiteral.StringValueExprPart(NamedValue("val"))
+  ))
+  parseAst(p.processedStringPatternParts(_))(""""str$cap"""")(Seq(
+    AstLiteral.StringPlainPart("str"),
+    AstLiteral.StringCapturePart(Ast.CapturePattern("cap"))
+  ))
+  parseAst(p.processedStringPatternParts(_))(""""str$Const"""")(Seq(
+    AstLiteral.StringPlainPart("str"),
+    AstLiteral.StringNamedConstantPart(Ast.NamedConstantPattern("Const"))
+  ))
+  parseAst(p.processedStringValueParts(_))(""""str$(val)"""")(Seq(
+    AstLiteral.StringPlainPart("str"),
+    AstLiteral.StringValueExprPart(NamedValue("val"))
+  ))
+  parseAst(p.processedStringPatternParts(_))(""""str$(cap)"""")(Seq(
+    AstLiteral.StringPlainPart("str"),
+    AstLiteral.StringCapturePart(Ast.CapturePattern("cap"))
+  ))
+  parseAst(p.processedStringPatternParts(_))(""""str$(Const)"""")(Seq(
+    AstLiteral.StringPlainPart("str"),
+    AstLiteral.StringNamedConstantPart(Ast.NamedConstantPattern("Const"))
+  ))
+  parseAst(p.processedStringValueParts(_))(""""$(val)str"""")(Seq(
+    AstLiteral.StringValueExprPart(NamedValue("val")),
+    AstLiteral.StringPlainPart("str")
+  ))
+  parseAst(p.processedStringPatternParts(_))(""""$(cap)str"""")(Seq(
+    AstLiteral.StringCapturePart(Ast.CapturePattern("cap")),
+    AstLiteral.StringPlainPart("str")
+  ))
+  parseAst(p.processedStringPatternParts(_))(""""$(Const)str"""")(Seq(
+    AstLiteral.StringNamedConstantPart(Ast.NamedConstantPattern("Const")),
+    AstLiteral.StringPlainPart("str")
+  ))
+  parseAst(p.processedStringValueParts(_))(""""$val\nstr"""")(Seq(
+    AstLiteral.StringValueExprPart(NamedValue("val")),
+    AstLiteral.StringEscapePart(Seq("n")),
+    AstLiteral.StringPlainPart("str")
+  ))
+  parseAst(p.processedStringPatternParts(_))(""""$cap\nstr"""")(Seq(
+    AstLiteral.StringCapturePart(Ast.CapturePattern("cap")),
+    AstLiteral.StringEscapePart(Seq("n")),
+    AstLiteral.StringPlainPart("str")
+  ))
+  parseAst(p.processedStringPatternParts(_))(""""$Const\nstr"""")(Seq(
+    AstLiteral.StringNamedConstantPart(Ast.NamedConstantPattern("Const")),
+    AstLiteral.StringEscapePart(Seq("n")),
+    AstLiteral.StringPlainPart("str")
+  ))
+  parseAst(p.processedStringValueParts(_))(""""\"\\10\$\n"""")(Seq(
+    AstLiteral.StringEscapePart(Seq('"'.toString, """\""")),
+    AstLiteral.StringPlainPart("10"),
+    AstLiteral.StringEscapePart(Seq("$", "n"))
+  ))
+  parseAst(p.processedStringValueParts(_))(""""\r\t"""")(Seq(
+    AstLiteral.StringEscapePart(Seq("r", "t"))
+  ))
+  parseAst(p.processedStringValueParts(_))("\"\\u0041\"")(Seq(
+    AstLiteral.StringEscapePart(Seq("u0041"))
+  ))
+  parseAst(p.processedStringValueParts(_))("\"\\u10FFFF\"")(Seq(
+    AstLiteral.StringEscapePart(Seq("u10FFFF"))
+  ))
+  reject(p.processedStringValueParts(_))(""""10$"""")
+  reject(p.processedStringValueParts(_))(""""10$$"""")
+  reject(p.processedStringValueParts(_))(""""10\"""")
+  reject(p.processedStringValueParts(_))(""""10\ö"""")
 
-  parseAst(p.verbatimStringLiteral(_))("' str '")(StringLiteral(Seq(
-    LiteralValue.StringPlainPart(" str ")
-  )))
-  parseAst(p.verbatimStringLiteral(_))("'line1 \n line2'")(StringLiteral(Seq(
-    LiteralValue.StringPlainPart("line1 \n line2")
-  )))
-  parseAst(p.verbatimStringLiteral(_))("""'"'""")(StringLiteral(Seq(
-    LiteralValue.StringPlainPart('"'.toString)
-  )))
-  parseAst(p.verbatimStringLiteral(_))("""'c:\n\$BAR\\a\'""")(StringLiteral(Seq(
-    LiteralValue.StringPlainPart("""c:\n\$BAR\\a\""")
-  )))
-  parseAst(p.verbatimStringLiteral(_))("""#'''#""")(StringLiteral(Seq(
-    LiteralValue.StringPlainPart("'")
-  )))
-  parseAst(p.verbatimStringLiteral(_))("""##''#'##""")(StringLiteral(Seq(
-    LiteralValue.StringPlainPart("'#")
-  )))
-  reject(p.verbatimStringLiteral(_))("""'''""")
+  parseAst(p.verbatimStringPlainPart(_))("' str '")(Seq(
+    AstLiteral.StringPlainPart(" str ")
+  ))
+  parseAst(p.verbatimStringPlainPart(_))("'line1 \n line2'")(Seq(
+    AstLiteral.StringPlainPart("line1 \n line2")
+  ))
+  parseAst(p.verbatimStringPlainPart(_))("""'"'""")(Seq(
+    AstLiteral.StringPlainPart('"'.toString)
+  ))
+  parseAst(p.verbatimStringPlainPart(_))("""'c:\n\$BAR\\a\'""")(Seq(
+    AstLiteral.StringPlainPart("""c:\n\$BAR\\a\""")
+  ))
+  parseAst(p.verbatimStringPlainPart(_))("""#'''#""")(Seq(
+    AstLiteral.StringPlainPart("'")
+  ))
+  parseAst(p.verbatimStringPlainPart(_))("""##''#'##""")(Seq(
+    AstLiteral.StringPlainPart("'#")
+  ))
+  reject(p.verbatimStringPlainPart(_))("""'''""")
 
   parseAst(p.stringPattern(_))("\"foo\"")(StringPattern(Seq(
-    LiteralValue.StringPlainPart("foo")
+    AstLiteral.StringPlainPart("foo")
   )))
   parseAst(p.stringPattern(_))("'bar'")(StringPattern(Seq(
-    LiteralValue.StringPlainPart("bar")
+    AstLiteral.StringPlainPart("bar")
   )))
 
   //////
@@ -244,7 +297,7 @@ class ParserImplsSpec extends BaseSpec {
   )
 
   parseAst(p.defaultValuePattern(_))("x ?? 0")(
-    DefaultValuePattern(CapturePattern("x"), IntegerLiteral(LiteralValue.IntegerDec("0")))
+    DefaultValuePattern(CapturePattern("x"), IntegerLiteral(AstLiteral.IntegerDec("0")))
   )
 
   parseAst(p.record(_))("{}")(Record(Nil))
@@ -336,7 +389,7 @@ class ParserImplsSpec extends BaseSpec {
   )
   parseAst(p.piecewise(_))("#(42 => foo, _ => bar)")(
     Piecewise(Seq(
-      IntegerPattern(LiteralValue.IntegerDec("42")) -> NamedValue("foo"),
+      IntegerPattern(AstLiteral.IntegerDec("42")) -> NamedValue("foo"),
       WildcardPattern() -> NamedValue("bar")
     ))
   )
@@ -568,7 +621,7 @@ class ParserImplsSpec extends BaseSpec {
   //      |""".stripMargin
   // )
 
-  parseAst(p.valueExpr(_))("1234")(IntegerLiteral(LiteralValue.IntegerDec("1234")))
+  parseAst(p.valueExpr(_))("1234")(IntegerLiteral(AstLiteral.IntegerDec("1234")))
   parseAst(p.valueExpr(_))("(a = (); a)")(Block(Seq(ValueDef(CapturePattern("a"), UnitLiteral()), NamedValue("a"))))
   parseAst(p.valueExpr(_))("(a => a)")(Lambda(CapturePattern("a"), NamedValue("a")))
   reject(p.valueExpr(_))("foo square = 1")
@@ -576,7 +629,7 @@ class ParserImplsSpec extends BaseSpec {
 
   parseAst(p.pattern(_))("_")(WildcardPattern())
   parseAst(p.pattern(_))("_foo")(CapturePattern("_foo"))
-  parseAst(p.pattern(_))("42")(IntegerPattern(LiteralValue.IntegerDec("42")))
+  parseAst(p.pattern(_))("42")(IntegerPattern(AstLiteral.IntegerDec("42")))
   parseAst(p.pattern(_))("Foo bar")(
     ConstructPattern(NameWithPos("Foo"), CapturePattern("bar"))
   )

@@ -1,6 +1,6 @@
 package clara.parser
 
-import clara.ast.{Ast, LiteralValue, NoPos, Pos, SourcePos, SourceInfo}
+import clara.ast.{Ast, AstLiteral, NoPos, Pos, SourcePos, SourceInfo}
 import clara.util.Safe._
 
 // TODO add more cuts to optimise and improve the error messages
@@ -127,14 +127,14 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
       P((hash + prefix) ~~ withUnderscores(digits))
 
     def binaryDigits[X: P] = CharsWhileIn("0-1")
-    def binary[X: P] = P(withPrefixAndUnderscores("b", binaryDigits).map(LiteralValue.IntegerBin.apply _))
+    def binary[X: P] = P(withPrefixAndUnderscores("b", binaryDigits).map(AstLiteral.IntegerBin.apply _))
 
-    def decimal[X: P] = P(decimalDigitsWithUnderscore.map(LiteralValue.IntegerDec.apply _))
+    def decimal[X: P] = P(decimalDigitsWithUnderscore.map(AstLiteral.IntegerDec.apply _))
 
     def hexDigits[X: P] = CharsWhileIn("0-9a-fA-F")
-    def hex[X: P] = P(withPrefixAndUnderscores("x", hexDigits).map(LiteralValue.IntegerHex.apply _))
+    def hex[X: P] = P(withPrefixAndUnderscores("x", hexDigits).map(AstLiteral.IntegerHex.apply _))
 
-    def value[X: P]: P[LiteralValue.Integer] = P(binary | decimal | hex)
+    def value[X: P]: P[AstLiteral.Integer] = P(binary | decimal | hex)
   }
 
   def integerLiteral[X: P] = P(pp(IntegerLiteralImpl.value)(IntegerLiteral.apply _))
@@ -143,7 +143,7 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
 
   object FloatLiteralImpl {
     def n[X: P] = decimalDigitsWithUnderscore
-    def value[X: P] = P((n ~~ dot ~~ n).map(LiteralValue.Float.tupled))
+    def value[X: P] = P((n ~~ dot ~~ n).map(AstLiteral.Float.tupled))
   }
 
   def floatLiteral[X: P] = P(pp(FloatLiteralImpl.value)(FloatLiteral.apply _))
@@ -161,26 +161,39 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
 
     def boundary[X: P] = CharPred(_ === quote).opaque("quote")
 
-    def plainPart[X: P]: P[LiteralValue.StringPlainPart] = P {
+    def plainPart[X: P]: P[AstLiteral.StringPlainPart] = P {
       val nothingSpecial = (c: Char) => c != quote && c != escapeStart && c != exprStart
 
-      CharsWhile(nothingSpecial).!.map(LiteralValue.StringPlainPart(_))
+      CharsWhile(nothingSpecial).!.map(AstLiteral.StringPlainPart(_))
     }
 
     def unicodeEscapeBody[X: P] = P("u" ~~ CharIn("0-9a-fA-F").repX(min=1, max=6))
     def escapeBody[X: P] = P(unicodeEscapeBody | quote.s | escapeStart.s | exprStart.s | "n" | "t" | "r")
-    def escapePart[X: P]: P[LiteralValue.StringEscapePart] =
-      P((escapeStart.s ~~ escapeBody.!).repX(1).map(LiteralValue.StringEscapePart(_)))
+    def escapePart[X: P]: P[AstLiteral.StringEscapePart] =
+      P((escapeStart.s ~~ escapeBody.!).repX(1).map(AstLiteral.StringEscapePart(_)))
 
-    def exprPart[X: P]: P[LiteralValue.StringExpressionPart] =
-      P((exprStart.s ~~ (parens | namedValue)).map(LiteralValue.StringExpressionPart(_)))
+    def valueExprPart[X: P]: P[AstLiteral.StringValueExprPart] =
+      P((exprStart.s ~~ (parens | namedValue)).map(AstLiteral.StringValueExprPart(_)))
 
-    def part[X: P]: P[LiteralValue.StringPart] = P(plainPart | escapePart | exprPart)
+    object StringPatternPartImpl {
+      def withoutParens[X: P]: P[AstLiteral.StringPatternPart] =
+        P(namedConstantPattern.map(AstLiteral.StringNamedConstantPart(_)) | capturePattern.map(AstLiteral.StringCapturePart(_)))
+      def withParens[X: P]: P[AstLiteral.StringPatternPart] =
+        P(parensSyntax(withoutParens))
 
-    def parts[X: P] = P(boundary ~~ part.repX(1) ~~ boundary)
+      def withOrWithoutParens[X: P]: P[AstLiteral.StringPatternPart] =
+        P(exprStart.s ~~ (withParens | withoutParens))
+    }
+
+    def valuePart[X: P]: P[AstLiteral.StringValuePart] = P(plainPart | escapePart | valueExprPart)
+    def valueParts[X: P] = P(boundary ~~ valuePart.repX(1) ~~ boundary)
+
+    def patternPart[X: P]: P[AstLiteral.StringPatternPart] =
+      P(plainPart | escapePart | StringPatternPartImpl.withOrWithoutParens)
+    def patternParts[X: P] = P(boundary ~~ patternPart.repX(1) ~~ boundary)
   }
-
-  def processedStringLiteral[X: P] = P(pp(ProcessedStringLiteralImpl.parts)(StringLiteral.apply _))
+  def processedStringValueParts[X: P] = P(ProcessedStringLiteralImpl.valueParts)
+  def processedStringPatternParts[X: P] = P(ProcessedStringLiteralImpl.patternParts)
 
   object VerbatimStringLiteralImpl {
     val quote = '\''
@@ -188,15 +201,14 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
     def startMarker[X: P]: P[Int] = P(hash.repX.!.map(_.length) ~~ boundary)
     def endMarker[X: P](hashCount: Int) = P(boundary ~~ hash.repX(exactly=hashCount))
 
-    def valueBetweenMarkers[X: P] = P(startMarker.flatMapX { hashCount =>
-      (anythingBefore(endMarker(hashCount)).! ~~ endMarker(hashCount)).map(s => Seq(LiteralValue.StringPlainPart(s)))
+    def plainPart[X: P] = P(startMarker.flatMapX { hashCount =>
+      (anythingBefore(endMarker(hashCount)).! ~~ endMarker(hashCount)).map(s => Seq(AstLiteral.StringPlainPart(s)))
     })
   }
-  def verbatimStringLiteral[X: P] = P(pp(VerbatimStringLiteralImpl.valueBetweenMarkers)(StringLiteral.apply _))
+  def verbatimStringPlainPart[X: P] = P(VerbatimStringLiteralImpl.plainPart)
 
-  def stringLiteral[X: P] = P(processedStringLiteral | verbatimStringLiteral)
-
-  def stringPattern[X: P] = P(pp(ProcessedStringLiteralImpl.parts | VerbatimStringLiteralImpl.valueBetweenMarkers)(StringPattern.apply _))
+  def stringLiteral[X: P] = P(pp(processedStringValueParts | verbatimStringPlainPart)(StringLiteral.apply _))
+  def stringPattern[X: P] = P(pp(processedStringPatternParts | verbatimStringPlainPart)(StringPattern.apply _))
 
   //////
   // Tuples
