@@ -2,7 +2,7 @@ package clara.testutil
 
 import clara.ast.NoPos
 import clara.asg.{Namespace, TypeCons, Types}
-import clara.analyzer.impl.Env
+import clara.analyzer.impl.{Env, BlockScope}
 
 // TODO: see later if this will be actually shared or if it will just be used in PatternAnalyzerSpec
 object AnalyzerTestPrelude {
@@ -16,7 +16,7 @@ object AnalyzerTestPrelude {
     ("String", stringCon)
   )
 
-  val env: Env = Env.empty.copy(typeCons = typeCons)
+  val env: Env = Env.empty.copy(local = BlockScope(Namespace.empty, typeCons))
 
   val intType: Types.Type = Types.Opaque(intCon, Nil)
   val floatType: Types.Type = Types.Opaque(floatCon, Nil)

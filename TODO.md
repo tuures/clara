@@ -1,5 +1,7 @@
 # Done
 
+- warn on unused value definitions
+
 # Todo
 
 - implement piecewise/patterns missing pieces

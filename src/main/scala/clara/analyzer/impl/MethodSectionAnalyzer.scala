@@ -43,7 +43,7 @@ case class MethodSectionAnalyzerImpl(targetCon: TypeCons.TypeCon) {
 
         An.fromSomeOrError(ns.add((name, Terms.MethodDecl(memberAttributes, typ))), duplicateName).
           flatMap { updatedNs =>
-            env.addMethod(targetCon, (name, EnvMethod(memberAttributes, typ)), namePos).map { nextEnv =>
+            env.addMethod(targetCon, name, EnvMethod(memberAttributes, typ), namePos).map { nextEnv =>
               DeclSectionState(nextEnv, updatedNs)
             }
           }
@@ -77,7 +77,7 @@ case class MethodSectionAnalyzerImpl(targetCon: TypeCons.TypeCon) {
 
         An.fromSomeOrError(ns.add((name, Terms.MethodDef(memberAttributes, bodyTerm))), duplicateName).
           flatMap { updatedNs =>
-            env.addMethod(targetCon, (name, EnvMethod(memberAttributes, bodyTerm.typ)), namePos).map { nextEnv =>
+            env.addMethod(targetCon, name, EnvMethod(memberAttributes, bodyTerm.typ), namePos).map { nextEnv =>
               WalkDefState(nextEnv, updatedNs)
             }
           }
@@ -101,7 +101,7 @@ case class MethodSectionAnalyzerImpl(targetCon: TypeCons.TypeCon) {
   }
 
   def methodDefSection(withTypeParamsEnv: Env, targetType: Types.Type, selfPattern: Ast.Pattern, methodAsts: Seq[Ast.Method]) = {
-    PatternAnalyzer(withTypeParamsEnv, withTypeParamsEnv).
+    PatternAnalyzer(withTypeParamsEnv).
       // TODO should pattern be for the unwrapped value? (rename selfPattern, and unwrap targetType)
       walkAssignment(selfPattern, Some(targetType)).flatMap { case (selfEnv, selfPatternTerm) =>
         An.step(methodAsts)(WalkDefState.begin(selfEnv)){ case (currentState, methodAst) =>

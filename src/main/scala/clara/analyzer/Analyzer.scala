@@ -11,7 +11,7 @@ import impl._
 
 case class AnalyzedProgram(analysis: An[Terms.Block]) {
   def program: Option[Terms.Block] = analysis.value.toOption
-  def messages: Seq[Message] = analysis.log ++ analysis.value.left.getOrElse(Seq())
+  def messages: Seq[Message] = analysis.log.warnings ++ analysis.value.left.getOrElse(Seq())
 }
 
 object Analyzer {

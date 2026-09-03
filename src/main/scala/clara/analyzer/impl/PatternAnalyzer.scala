@@ -3,7 +3,7 @@ package clara.analyzer.impl
 import clara.asg.{TermLiteral, Terms, Types}
 import clara.ast.{Ast, AstLiteral, Pos, SourceMessage}
 
-case class PatternAnalyzer(env: Env, allowShadow: Env) {
+case class PatternAnalyzer(env: Env) {
   def walkAssignment(targetPattern: Ast.Pattern, fromType: Option[Types.Type]): An[(Env, Terms.Pattern)] = targetPattern match {
     case Ast.WildcardPattern(pos) =>
       val typ = fromType.getOrElse(Types.Top)
@@ -42,7 +42,7 @@ case class PatternAnalyzer(env: Env, allowShadow: Env) {
         val initialState = (env, Vector.empty[Terms.Pattern])
 
         An.step(ps.zip(fromTypes))(initialState){ case ((currentEnv, currentPatternTerms), (pattern, fromType)) =>
-          PatternAnalyzer(currentEnv, env).walkAssignment(pattern, fromType).map { case (nextEnv, patternTerm) =>
+          PatternAnalyzer(currentEnv).walkAssignment(pattern, fromType).map { case (nextEnv, patternTerm) =>
             (nextEnv, currentPatternTerms :+ patternTerm)
           }
         }.map { case(env, patternTerms) =>
@@ -80,11 +80,11 @@ case class PatternAnalyzer(env: Env, allowShadow: Env) {
         case AstLiteral.StringEscapePart(escapes) =>
           An.result((currentEnv, currentParts :+ TermLiteral.StringEscapePart(escapes)))
         case AstLiteral.StringNamedConstantPart(Ast.NamedConstantPattern(name, pos)) =>
-          PatternAnalyzer(currentEnv, allowShadow).namedConstant(name, Some(typ), pos).map { case (nextEnv, pattern) =>
+          PatternAnalyzer(currentEnv).namedConstant(name, Some(typ), pos).map { case (nextEnv, pattern) =>
             (nextEnv, currentParts :+ TermLiteral.StringNamedConstantPart(pattern))
           }
         case AstLiteral.StringCapturePart(Ast.CapturePattern(name, pos)) =>
-          PatternAnalyzer(currentEnv, allowShadow).capture(name, Some(typ), pos).map { case (nextEnv, pattern) =>
+          PatternAnalyzer(currentEnv).capture(name, Some(typ), pos).map { case (nextEnv, pattern) =>
             (nextEnv, currentParts :+ TermLiteral.StringCapturePart(pattern))
           }
       }
@@ -109,7 +109,7 @@ case class PatternAnalyzer(env: Env, allowShadow: Env) {
   def capture(name: String, fromType: Option[Types.Type], pos: Pos): An[(Env, Terms.CapturePattern)] =
     // FIXME default to Top type and just give warning?
     An.fromSomeOrError(fromType, SourceMessage(pos, "Could not infer type")).flatMap { fromType =>
-      env.addOrShadowValue((name, fromType), allowShadow, pos).map { nextEnv =>
+      env.addOrShadowValue(name, fromType, pos).map { nextEnv =>
         (nextEnv, Terms.CapturePattern(name, fromType))
       }
     }

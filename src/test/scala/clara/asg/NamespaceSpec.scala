@@ -4,37 +4,45 @@ import clara.testutil.BaseSpec
 
 class NamespaceSpec extends BaseSpec {
 
-  val ns1 = Namespace("foo" -> 1)
-  val ns2 = Namespace("foo" -> 1, "bar" -> 2)
-
   test("add(newName) -> Some") {
-    val res = ns1.add("bar" -> 2)
+    val res = Namespace("foo" -> 1).add("bar" -> 2)
 
     assert(res === Some(Namespace("foo" -> 1, "bar" -> 2)))
   }
 
   test("add(existingName) -> None") {
-    val res = ns1.add("foo" -> 2)
+    val res = Namespace("foo" -> 1).add("foo" -> 2)
 
     assert(res === None)
   }
 
-  test("addOrModify(existingName) -> Some") {
-    val ns = ns2.addOrModify("foo" -> 3)
+  test("addOrModify(existingName) should modify the existing binding and put it last in iteration order") {
+    val ns = Namespace("foo" -> 1, "bar" -> 2).addOrModify("foo" -> 3)
 
-    // TODO: order of entries is preserved (foo still first) – is this good?
+    // equality doesn't care about order
     assert(ns === Namespace("foo" -> 3, "bar" -> 2))
+    // modified binding should go last in iteration order since it was added last
+    assert(ns.m.toSeq === Seq("bar" -> 2, "foo" -> 3))
   }
 
-  // FIXME addOrShadow doesn't really work: you can shadow twice in the same block
-  // test("addOrShadow") {
-  //   val ns2 = {
-  //     val res = ns1.addOrShadow("bar" -> 2, ns1)
+  test("get(name) should return the item bound to the name if it exists, otherwise None") {
+    val ns = Namespace("foo" -> 1)
 
-  //     assert(res === Some(Namespace(ListMap("foo" -> 1, "bar" -> 2))))
-  //     res.get
-  //   }
+    assert(ns.get("foo") === Some(1))
+    assert(ns.get("bar") === None)
+  }
 
-  //   val res1 = ns2.addOrShadow()
-  // }
+  test("entries should return all name-item pairs in the namespace") {
+    val ns = Namespace("foo" -> 1, "bar" -> 2)
+
+    assert(ns.entries === Seq("foo" -> 1, "bar" -> 2))
+  }
+
+  test("mapValues should apply the function to all items in the namespace") {
+    val ns = Namespace("foo" -> 1, "bar" -> 2)
+    val mapped = ns.mapValues(_ * 10)
+
+    assert(mapped === Namespace("foo" -> 10, "bar" -> 20))
+  }
+
 }

@@ -11,9 +11,13 @@ case class ValueExprAnalyzerImpl(env: Env) {
     TypeExprAnalyzer.namedNullaryType(env, name, pos)
 
   def namedValue(name: String, pos: Pos): An[Terms.NamedValue] = {
-    env.values.get(name).map(typ => An.result(Terms.NamedValue(name, typ))).orElse {
-      env.typeCons.get(name).map { con =>
+    env.getValue(name).map { case EnvValue(typ, _, uniq) =>
+      // TODO: if singleton type, record the type also as used
+      An.result(Terms.NamedValue(name, typ)).tellValueDefUsage(uniq, pos)
+    }.orElse {
+      env.getTypeCon(name).map { con =>
         con match {
+          // TODO: record TypeCon usage
           case con: TypeCons.WrapperTypeCon =>
             An.result(Terms.NamedValue(name, TypeCons.wrapperConstructorFunc(con)))
           case _ => An.error(SourceMessage(pos, safe"Unknown value `$name`. Type `$name` cannot be used as a value."))
@@ -26,7 +30,7 @@ case class ValueExprAnalyzerImpl(env: Env) {
     val Ast.Lambda(typeParams, parameter, body, _) = lambda
 
     TypeParamAnalyzer(env).walkTypeParams(typeParams).flatMap { case (withTypeParamsEnv, typeParamCons) =>
-      PatternAnalyzer(withTypeParamsEnv, withTypeParamsEnv).walkAssignment(parameter, expectedParameterType).
+      PatternAnalyzer(withTypeParamsEnv).walkAssignment(parameter, expectedParameterType).
         flatMap { case (funcBodyEnv, parameterTerm) =>
           ValueExprAnalyzerImpl(funcBodyEnv).valueExprTerm(body).map { bodyTerm =>
             val typ = Types.Func(typeParamCons, parameterTerm.typ, bodyTerm.typ)
@@ -170,7 +174,7 @@ case class ValueExprAnalyzerImpl(env: Env) {
       case class PieceState(pieces: Seq[((Terms.Pattern, Terms.ValueExpr), Types.Func)])
       An.step(pieces)(PieceState(Nil)) { case (state, (pattern, body)) =>
 
-        PatternAnalyzer(env, env).walkAssignment(pattern, None).
+        PatternAnalyzer(env).walkAssignment(pattern, None).
           flatMap { case (funcBodyEnv, parameterTerm) =>
             ValueExprAnalyzerImpl(funcBodyEnv).valueExprTerm(body).map { bodyTerm =>
               val typ = Types.Func(Nil, parameterTerm.typ, bodyTerm.typ)

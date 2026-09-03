@@ -2,10 +2,26 @@ package clara.ast
 
 import clara.util.Safe._
 
-sealed trait Pos {
+sealed trait Pos extends Ordered[Pos] {
+  def compare(that: Pos): Int = (this, that) match {
+    case (pos1: SourcePos, pos2: SourcePos) => {
+      def sortKey(pos: SourcePos) = (pos.sourceInfo.name, pos.fromIndex, pos.untilIndex.getOrElse(0))
+
+      Ordering[(String, Int, Int)].compare(sortKey(pos1), sortKey(pos2))
+    }
+    case (NoPos, NoPos) => 0
+    case (NoPos, _) => -1
+    case (_, NoPos) => 1
+  }
   def humanFormat: String
   def join(later: Pos): Pos = (this, later) match {
-    case (pos1: SourcePos, pos2: SourcePos) => SourcePos(pos1.sourceInfo, pos1.fromIndex, pos2.untilIndex)
+    case (pos1: SourcePos, pos2: SourcePos) => {
+      require(pos1.sourceInfo.name === pos2.sourceInfo.name,
+        s"Cannot join positions from different sources: ${pos1.sourceInfo.name} and ${pos2.sourceInfo.name}"
+      )
+
+      SourcePos(pos1.sourceInfo, pos1.fromIndex, pos2.untilIndex)
+    }
     case _ => NoPos
   }
 }

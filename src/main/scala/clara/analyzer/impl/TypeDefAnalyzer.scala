@@ -6,7 +6,7 @@ import clara.ast.{Ast, SourceMessage}
 import clara.util.Safe._
 
 object TypeDefAnalyzer {
-  def typeDefTerm(env: Env, allowShadow: Env, typeDef: Ast.TypeDef): An[(Env, Terms.TypeDef)] = {
+  def typeDefTerm(env: Env, typeDef: Ast.TypeDef): An[(Env, Terms.TypeDef)] = {
     val Ast.TypeDef(typeDefKind, target, maybeTypeExpr, pos) = typeDef
     val Ast.DeclTargetType(Ast.NameWithPos(name, namePos), typeParams, targetPos) = target
 
@@ -47,12 +47,12 @@ object TypeDefAnalyzer {
         case con: TypeCons.SingletonTypeCon =>
           val typ = Types.Singleton(con)
 
-          env.addOrShadowTypeCon((name, con), allowShadow, namePos).
-            flatMap(_.addOrShadowValue((name, typ), allowShadow, namePos))
+          env.addOrShadowTypeCon(name, con, namePos).
+            flatMap(_.addOrShadowValue(name, typ, namePos))
 
         case con =>
           // FIXME add constructor function to value env
-          env.addOrShadowTypeCon((name, con), allowShadow, namePos)
+          env.addOrShadowTypeCon(name, con, namePos)
 
       }).map(nextEnv => (nextEnv, Terms.TypeDef(typeCon)))
     }

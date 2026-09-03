@@ -15,7 +15,7 @@ object Compiler {
   def dumpAst(inputPath: String): Either[Seq[Message], String] =
     Impl.parseFile(inputPath).map(AstPrinter.print(_))
 
-  private object Impl {
+  object Impl {
     def parseFile(inputPath: String): Either[Seq[Message], Ast.Block] =
       FileIo.readFile(inputPath).flatMap { input =>
         Parser.parseString(inputPath, input)

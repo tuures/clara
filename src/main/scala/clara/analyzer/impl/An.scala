@@ -1,20 +1,55 @@
 package clara.analyzer.impl
 
 import clara.util.Message
+import clara.asg.Uniq
+import clara.ast.Pos
 
-case class An[+A](w: An.Impl[A]) {
-  def flatMap[B](f: A => An[B]): An[B] = w.value match {
+
+// TODO: tracking usage of: 1) record fields (Uniq, String), 2) methods (Uniq, String)
+// TODO: use UniqInfo
+case class UsageTrace(valueDefs: Map[Uniq, Set[Pos]] = Map.empty, typeCons: Map[Uniq, Set[Pos]] = Map.empty) {
+  def append(other: UsageTrace): UsageTrace = UsageTrace(
+    mergePositions(valueDefs, other.valueDefs),
+    mergePositions(typeCons, other.typeCons)
+  )
+
+  private def mergePositions(
+    left: Map[Uniq, Set[Pos]],
+    right: Map[Uniq, Set[Pos]]
+  ): Map[Uniq, Set[Pos]] =
+    right.foldLeft(left) { case (acc, (uniq, positions)) =>
+      acc.updated(uniq, acc.getOrElse(uniq, Set.empty) ++ positions)
+    }
+}
+
+case class AnLog(warnings: Vector[Message] = Vector.empty, usageTrace: UsageTrace = UsageTrace()) {
+  def append(other: AnLog): AnLog =
+    AnLog(warnings ++ other.warnings, usageTrace.append(other.usageTrace))
+}
+
+case class An[+A](v: Either[An.Errors, A], l: AnLog) {
+  def value: Either[An.Errors, A] = v
+  def log: AnLog = l
+
+  def zipLog: An[(A, AnLog)] = map((_, l))
+
+  def flatMap[B](f: A => An[B]): An[B] = v match {
     case Left(_) => this.asInstanceOf[An[B]]
-    case Right(result) => An(Writer(result, w.log).flatMap(a => f(a).w))
+    case Right(result) =>
+      val next = f(result)
+      An(next.v, l.append(next.l))
   }
 
-  def map[B](f: A => B): An[B] = w.value match {
+  def map[B](f: A => B): An[B] = v match {
     case Left(_) => this.asInstanceOf[An[B]]
-    case Right(result) => An(Writer(result, w.log).map(a => Right(f(a))))
+    case Right(result) => An(Right(f(result)), l)
   }
 
-  def tell(ms: Seq[Message]) = An(w.tell(ms))
-  def tell(m: Message): An[A] = tell(Vector(m))
+  def tellWarnings(ms: Seq[Message]): An[A] = An(v, l.append(AnLog(warnings = ms.toVector)))
+  def tellWarning(m: Message): An[A] = tellWarnings(Vector(m))
+  def tellUsage(usageTrace: UsageTrace): An[A] = An(v, l.append(AnLog(usageTrace = usageTrace)))
+  def tellValueDefUsage(uniq: Uniq, pos: Pos): An[A] = tellUsage(UsageTrace(valueDefs = Map(uniq -> Set(pos))))
+  def tellTypeConUsage(uniq: Uniq, pos: Pos): An[A] = tellUsage(UsageTrace(typeCons = Map(uniq -> Set(pos))))
 
   /**
    * Combines two analyses together.
@@ -22,58 +57,54 @@ case class An[+A](w: An.Impl[A]) {
    * Returns a Success with the results tupled if both are Successes.
    */
   def zip[B](b: An[B]): An[(A, B)] = {
-    val Writer(value, log) = w.zip(b.w)
-    val zippedValue = value match {
+    val zippedValue = (v, b.v) match {
       case (Left(aErrors), Left(bErrors)) => Left(aErrors ++ bErrors)
       case (Left(aErrors), Right(_)) => Left(aErrors)
       case (Right(_), Left(bErrors)) => Left(bErrors)
       case (Right(aResult), Right(bResult)) => Right((aResult, bResult))
     }
 
-    An(Writer(zippedValue, log))
+    An(zippedValue, l.append(b.l))
   }
-
-  def value: Either[Seq[Message], A] = w.value
-  def log: Seq[Message] = w.log
 }
 
 object An {
   type Errors = Vector[Message]
 
-  type Impl[+A] = Writer[Either[Errors, A], Message]
-
   /** Successful analysis which produced a complete result */
   object Success {
-    def apply[A](a: A, log: Vector[Message]): An[A] = An(Writer(Right(a), log))
-    def unapply[A](an: An[A]): Option[(A, Vector[Message])] = an.w.value match {
-      case Right(a) => Some((a, an.w.log))
+    def apply[A](a: A, log: AnLog): An[A] = An(Right(a), log)
+    def unapply[A](an: An[A]): Option[(A, AnLog)] = an.v match {
+      case Right(a) => Some((a, an.l))
       case Left(_) => None
     }
   }
   /** Builds a Success with the result and no log. */
-  def result[A](a: A): An[A] = Success(a, Vector())
+  def result[A](a: A): An[A] = Success(a, AnLog())
 
   /** Failed analysis which could not be completed due to errors */
   object Failure {
-    def apply[A](errors: Vector[Message], log: Vector[Message]): An[Nothing] = An(Writer(Left(errors), log))
-    def unapply[A](an: An[A]): Option[(Vector[Message], Vector[Message])] = an.w.value match {
+    def apply[A](errors: Vector[Message], log: AnLog): An[Nothing] = An(Left(errors), log)
+    def unapply[A](an: An[A]): Option[(Vector[Message], AnLog)] = an.v match {
       case Right(_) => None
-      case Left(errors) => Some((errors, an.w.log))
+      case Left(errors) => Some((errors, an.l))
     }
   }
   /** Builds a Failure with the error and no log. */
-  def error(e: Message): An[Nothing] = Failure(Vector(e), Vector())
+  def error(e: Message): An[Nothing] = Failure(Vector(e), AnLog())
 
   def errorIf(pred: Boolean)(e: Message): An[Unit] = if (pred) error(e) else result(())
 
   def errorFromSome[A](o: Option[A])(f: A => Message): An[Unit] = o.map(a => error(f(a))).getOrElse(result(()))
 
   /**
-   * Combines sequence of analyses together. Returns a combiend Failure if any of the analyses had failed.
+   * Combines sequence of analyses together. Returns a combined Failure if any of the analyses had failed.
    * All logs are always combined.
    */
   def seq[A](ans: Seq[An[A]]): An[Seq[A]] = {
-    val Writer(values, log) = Writer.seq(ans.map(_.w))
+    val (values, log) = ans.foldLeft((Vector.empty[Either[Errors, A]], AnLog())) { case ((vs, l), an) =>
+      (vs :+ an.v, l.append(an.l))
+    }
     val (allErrors, allResults) = values.foldLeft((Vector.empty: Errors, Vector.empty[A])) { case ((errorsAcc, resultsAcc), value) =>
       value match {
         case Right(result) => (errorsAcc, resultsAcc :+ result)
@@ -87,7 +118,7 @@ object An {
       Left(allErrors)
     }
 
-    An(Writer(seqValue, log))
+    An(seqValue, log)
   }
 
   def fromSomeOrElse[A](o: Option[A], fallback: => An[A]): An[A] = o.map(An.result).getOrElse(fallback)
@@ -115,25 +146,25 @@ object An {
 
   case class StepState[B](
     currentErrors: Vector[Message],
-    currentLog: Vector[Message],
-    currentResult: B
+    currentResult: B,
+    currentLog: AnLog,
   ) {
-    def step[A](a: A, f: (B, A) => An[B]): StepState[B] = f(currentResult, a) match {
-      case An.Success(result, log) => StepState(currentErrors, currentLog ++ log, result)
-      case An.Failure(errors, log) => StepState(currentErrors ++ errors, currentLog ++ log, currentResult)
+    def step[A](a: A, f: (B, A) => An[B]): StepState[B] = {
+      val An(nextValue, nextLog) = f(currentResult, a)
+      val combinedLog = currentLog.append(nextLog)
+      nextValue match {
+        case Right(result) => StepState(currentErrors, result, combinedLog)
+        case Left(errors) => StepState(currentErrors ++ errors, currentResult, combinedLog)
+      }
     }
-    def end = currentErrors.isEmpty match {
-      case true => An(Writer(Right(currentResult), currentLog))
-      case false => An(Writer(Left(currentErrors), currentLog))
+    def end: An[B] = currentErrors.isEmpty match {
+      case true => An(Right(currentResult), currentLog)
+      case false => An(Left(currentErrors), currentLog)
     }
   }
 
   object StepState {
-    def begin[B](currentResult: B) = StepState(Vector[Message](), Vector[Message](), currentResult)
+    def begin[B](currentResult: B): StepState[B] = StepState(Vector.empty, currentResult, AnLog())
   }
 
 }
-
-
-
-

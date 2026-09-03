@@ -8,7 +8,10 @@ import clara.asg.TypeCons
 
 case class TypeExprAnalyzerImpl(env: Env) {
   def namedTypeCon(n: Ast.NameWithPos): An[TypeCons.TypeCon] =
-    An.fromSomeOrError(env.typeCons.get(n.name), SourceMessage(n.pos, safe"Unknown type `${n.name}`"))
+    env.getTypeCon(n.name) match {
+      case Some(con) => An.result(con).tellTypeConUsage(con.uniq, n.pos)
+      case None => An.error(SourceMessage(n.pos, safe"Unknown type `${n.name}`"))
+    }
 
   def namedType(n: Ast.NameWithPos, typeArgs: Seq[Ast.TypeExpr], pos: Pos): An[Types.Type] =
     namedTypeCon(n).zip(An.seq(typeArgs.map(typeExprType))).flatMap { case (typeCon, args) =>

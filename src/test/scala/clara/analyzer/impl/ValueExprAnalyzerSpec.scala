@@ -1,12 +1,20 @@
 package clara.analyzer.impl
 
+import clara.ast.NoPos
+import clara.asg.Types
 import clara.testutil.BaseSpec
 
 class ValueExprAnalyzerSpec extends BaseSpec {
 
-  // test("???") {
-  //   ???
-  // }
+  test("named value records the resolved definition usage") {
+    val env = Env.empty.addOrShadowValue("value", Types.Uni, NoPos).value.value
+    val envValue = env.getValue("value").get
+
+    val result = ValueExprAnalyzer.namedValue(env, "value", NoPos)
+
+    assert(result.value.value.typ === Types.Uni)
+    assert(result.log.usageTrace.valueDefs === Map(envValue.uniq -> Set(NoPos)))
+  }
 
   // piecewise function with one piece should not produce intersection type
   // empty piecewise function

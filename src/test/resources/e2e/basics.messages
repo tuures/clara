@@ -1,0 +1,3 @@
+src/test/resources/e2e/basics.clara:1:10(–12): Unused type `Int`
+src/test/resources/e2e/basics.clara:5:9(–15): Unused type `Boolean`
+src/test/resources/e2e/basics.clara:14:1(–7): Unused value `flipped`
