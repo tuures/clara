@@ -121,7 +121,7 @@ object Types {
       case t => Seq(t)
     } match {
       case Nil => Bottom
-      case ts => new Union(ts)
+      case ts => new Union(ts.distinct)
     }
   }
 
@@ -133,7 +133,7 @@ object Types {
       case t => Seq(t)
     } match {
       case Nil => Top
-      case ts => new Intersection(ts)
+      case ts => new Intersection(ts.distinct)
     }
   }
 
@@ -148,7 +148,7 @@ object Types {
 
   // nominal composite types
   // TODO: drop `name`s and lazily get name from Env?
-  // TODO: add `definedAt: Pos` ?
+  // TODO add more verbose/useful error messages for assignability failure with breakdown etc
   // Unable to assign type
   //   ::tagged Foo (defined at firstfoo.clara:123)
   // to expected type
@@ -199,9 +199,15 @@ object Types {
     case (Bottom, _) => true
     case (Uni, Uni)  => true
     case (Func(typeParams1, p1, r1), Func(typeParams2, p2, r2)) =>
-      // FIXME handle type params: <A>A => A should be assignable to <B>B => B
-      // substitute A for B in t2 an then check if r and p types are compatible
-      isAssignable(p2, p1) && isAssignable(r1, r2)
+      typeParams1.length == typeParams2.length && {
+        val substitutions = typeParams2.zip(typeParams1).map { case (param2, param1) =>
+          param2.uniq -> Param(param1)
+        }.toMap
+        val p2Renamed = substituteParams(substitutions, p2)
+        val r2Renamed = substituteParams(substitutions, r2)
+
+        isAssignable(p2Renamed, p1) && isAssignable(r1, r2Renamed)
+      }
     case (r1: Record, r2: Record) =>
       r2.fields.entries.forall { case (name, t2) =>
         r1.fields.get(name).exists(t1 => isAssignable(t1, t2))
@@ -233,7 +239,7 @@ object Types {
   //   case _  => Top // &
   // }
 
-  def findSubstitutions(params: Set[Uniq], t1: Type, t2: Type): Map[Uniq, Type] = {
+  def findSubstitutions(params: Set[Uniq], parameterType: Type, argumentType: Type): Map[Uniq, Type] = {
     def candidates(t1: Type, t2: Type): Seq[(Uniq, Type)] = (t1, t2) match {
       case (p: Param, t2) if params(p.con.uniq) => Seq(p.con.uniq -> t2)
       case (Func(Nil, p1, r1), Func(Nil, p2, r2)) => candidates(p1, p2) ++ candidates(r1, r2)
@@ -247,13 +253,10 @@ object Types {
       case _ => Nil
     }
 
-    val candidatesByParam = candidates(t1, t2).groupBy(_._1).map { case(_, candidateGroup) =>
-      (candidateGroup.head._1, candidateGroup.map(_._2))
-    }
-
-    candidatesByParam.map { case(param, candidates) =>
-      // FIXME
-      // (param, leastCommonSupertype(candidates))
+    candidates(parameterType, argumentType).groupMap(_._1)(_._2).map { case(param, candidates) =>
+      // FIXME something like <A> (A, A) => A called with (Uni, Top) will find A -> Seq(Uni, Top) but the head
+      // turns that into <A = Uni> (Uni, Uni) => Uni which is completely wrong.
+      // Proper solution is to use a least common supertype for covariant occurrences and a greatest common subtype for contravariant occurrences
       (param, candidates.head)
     }
   }
@@ -262,7 +265,7 @@ object Types {
     def substitute(typ: Type): Type = typ match {
       case t @ (Top | Bottom | Uni) => t
       case Func(typeParams, parameter, result) =>
-        // NOTE typeParams is not touched. If you are instantiating this func with type args, remember to Nil params
+        // NOTE no need to touch typeParams because they are always fresh with distinct uniqs for each func
         Func(typeParams, substitute(parameter), substitute(result))
       case Record(fields) => Record(fields.mapValues(substitute))
       case Tuple(ts) => Tuple(ts.map(substitute))
@@ -272,7 +275,7 @@ object Types {
       case Alias(con, typeArgs, wrappedType) => Alias(con, typeArgs.map(substitute), substitute(wrappedType))
       case Tagged(con, typeArgs, wrappedType) => Tagged(con, typeArgs.map(substitute), substitute(wrappedType))
       case Boxed(con, typeArgs, wrappedType) => Boxed(con, typeArgs.map(substitute), substitute(wrappedType))
-      case t: Opaque => t
+      case Opaque(con, typeArgs) => Opaque(con, typeArgs.map(substitute))
       case t: Singleton => t
     }
 
