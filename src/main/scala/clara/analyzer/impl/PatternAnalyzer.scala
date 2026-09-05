@@ -51,6 +51,8 @@ case class PatternAnalyzer(env: Env) {
       }
     case Ast.NamedConstantPattern(name, pos) => namedConstant(name, fromType, pos)
     case Ast.CapturePattern(name, pos) => capture(name, fromType, pos)
+    case Ast.GuardPattern(p, guard, pos) => ???
+    case Ast.DefaultValuePattern(p, default, pos) => ???
     // TODO: this actually changes the type of the nested pattern to targetType even if it's wider than fromType
     // in ValueExpr the ValueAs does not change the type. This should be made consistent either way.
     case Ast.PatternAs(p, t, _) =>
@@ -62,7 +64,8 @@ case class PatternAnalyzer(env: Env) {
           walkAssignment(p, Some(targetType))
         }
       }
-    //TODO OrPattern |, AndPattern &
+    case Ast.RecordPattern(fields, pos) => ???
+    case Ast.OrPattern(ps, pos) => ???
     case Ast.ConstructPattern(name, selfPattern, pos) => ???
   }
 

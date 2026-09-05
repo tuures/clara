@@ -158,19 +158,25 @@ object Types {
     con: TypeCons.WrapperTypeCon,
     typeArgs: Seq[Type],
     wrappedType: Types.Type,
-  ) extends Nominal
+  ) extends Nominal {
+    require(con.typeDefKind == TypeDefKind.Alias, "Alias type constructor must be of kind Alias")
+  }
 
   case class Tagged(
     con: TypeCons.WrapperTypeCon,
     typeArgs: Seq[Type],
     wrappedType: Types.Type,
-  ) extends Nominal
+  ) extends Nominal {
+    require(con.typeDefKind == TypeDefKind.Tagged, "Tagged type constructor must be of kind Tagged")
+  }
 
   case class Boxed(
     con: TypeCons.WrapperTypeCon,
     typeArgs: Seq[Type],
     wrappedType: Types.Type,
-  ) extends Nominal
+  ) extends Nominal {
+    require(con.typeDefKind == TypeDefKind.Boxed, "Boxed type constructor must be of kind Boxed")
+  }
 
   // nominal non-composite types
 
@@ -209,6 +215,7 @@ object Types {
     case (t1, Intersection(ts2)) => ts2.forall(t2 => isAssignable(t1, t2))
     case (p1: Param, p2: Param) => sameCon(p1, p2)
     case (t1: Tagged, t2: Tagged) => sameCon(t1, t2) && isAssignable(t1.wrappedType, t2.wrappedType)
+    case (t1: Tagged, t2) => isAssignable(t1.wrappedType, t2)
     case (t1: Boxed, t2: Boxed) => sameCon(t1, t2) && isAssignable(t1.wrappedType, t2.wrappedType)
     case (t1: Opaque, t2: Opaque) => sameCon(t1, t2) &&
       t1.typeArgs.zip(t2.typeArgs).forall { case (t1a, t2a) =>

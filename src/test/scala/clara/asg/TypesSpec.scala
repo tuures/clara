@@ -35,13 +35,13 @@ class TypesSpec extends BaseSpec {
   )
   val funcUniUniAliasType = Alias(funcAliasCon, Seq(Uni, Uni), Func(Uni, Uni))
 
-  var justTaggedCon = WrapperTypeCon(TypeDefKind.Tagged, "JustTagged", Seq(aParam.con), aParam, NoPos)
+  val justTaggedCon = WrapperTypeCon(TypeDefKind.Tagged, "JustTagged", Seq(aParam.con), aParam, NoPos)
   val justUniTaggedType = Tagged(justTaggedCon, Seq(Uni), Uni)
   val justTopTaggedType = Tagged(justTaggedCon, Seq(Top), Top)
 
-  var justBoxedCon = WrapperTypeCon(TypeDefKind.Tagged, "JustBoxed", Seq(aParam.con), aParam, NoPos)
-  val justUniBoxedType = Tagged(justBoxedCon, Seq(Uni), Uni)
-  val justTopBoxedType = Tagged(justBoxedCon, Seq(Top), Top)
+  val justBoxedCon = WrapperTypeCon(TypeDefKind.Boxed, "JustBoxed", Seq(aParam.con), aParam, NoPos)
+  val justUniBoxedType = Boxed(justBoxedCon, Seq(Uni), Uni)
+  val justTopBoxedType = Boxed(justBoxedCon, Seq(Top), Top)
 
   val fooOpaqueCon = OpaqueTypeCon("FooOpaque", Seq(aParam.con), NoPos)
   val fooUniOpaqueType = Opaque(fooOpaqueCon, Seq(Uni))
@@ -120,7 +120,7 @@ class TypesSpec extends BaseSpec {
   testAssignable(true)(justUniTaggedType, justUniTaggedType, "JustTagged<Uni>, JustTagged<Uni>")
   testAssignable(true)(justUniTaggedType, justTopTaggedType, "JustTagged<Uni>, JustTagged<Top>")
   testAssignable(false)(justTopTaggedType, justUniTaggedType, "JustTagged<Top>, JustTagged<Uni>")
-  testAssignable(false)(justUniTaggedType, Uni, "JustTagged<Uni>, Uni")
+  testAssignable(true)(justUniTaggedType, Uni, "JustTagged<Uni>, Uni")
   testAssignable(false)(Uni, justUniTaggedType, "Uni, JustTagged<Uni>")
 
   testAssignable(true)(justUniBoxedType, justUniBoxedType, "JustBoxed<Uni>, JustBoxed<Uni>")
