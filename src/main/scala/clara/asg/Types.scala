@@ -127,6 +127,7 @@ object Types {
 
   case class Intersection(types: Seq[Type]) extends Type
   object Intersection {
+    // only trivial simplification so that types are shown as written, see normalizeHead for the checking form
     def apply(types: Seq[Type]): Type = types.flatMap {
       case nested: Intersection => nested.types
       case Top => Seq()
@@ -191,13 +192,26 @@ object Types {
 
   def sameCon(t1: Nominal, t2: Nominal): Boolean = t1.con.uniq === t2.con.uniq
 
+  // Normal form used by the checking logic. Intersections become unions of intersections
+  // ((A | B) & C becomes (A & C) | (B & C)), aliases unwrap, records merge and disjoint members reduce to Bottom.
+  // Only the outermost level is normalized; nested types get normalized when a comparison reaches them,
+  // which keeps this finite for recursive types.
+  def normalizeHead(typ: Type): Type = typ match {
+    case Intersection(types) => normalizeIntersection(types)
+    case t => t
+  }
+
   def isAssignable(t1: Type, t2: Type): Boolean = (t1, t2) match {
-    // alias needs to be unwrapped first
+    // Check for equality before any decomposition or subtyping based rules
+    case _ if t1 == t2 => true
+    // Alias needs to be unwrapped first
     case (Alias(_, _, wrappedType), t2) => isAssignable(wrappedType, t2)
     case (t1, Alias(_, _, wrappedType)) => isAssignable(t1, wrappedType)
     case (_, Top)    => true
     case (Bottom, _) => true
-    case (Uni, Uni)  => true
+    case (t1 @ (_: Record | _: Tuple), _) if hasEmptyMember(t1) => true
+    // Only a source intersection needs normalizing, a target intersection is fully handled by the forall rule below
+    case (NormalizableIntersection(normalized), t2) => isAssignable(normalized, t2)
     case (Func(typeParams1, p1, r1), Func(typeParams2, p2, r2)) =>
       typeParams1.length == typeParams2.length && {
         val substitutions = typeParams2.zip(typeParams1).map { case (param2, param1) =>
@@ -212,22 +226,52 @@ object Types {
       r2.fields.entries.forall { case (name, t2) =>
         r1.fields.get(name).exists(t1 => isAssignable(t1, t2))
       }
-    case (Tuple(ts1), Tuple(ts2)) => ts1.length == ts2.length && ts1.zip(ts2).forall { case (t1, t2) =>
-      isAssignable(t1, t2)
-    }
+    case (Tuple(ts1), Tuple(ts2)) => isAssignableTuple(ts1, ts2)
+    // Apply the universal (forall) union/intersection rules before the existential rules (exists) below
     case (Union(ts1), t2) => ts1.forall(t1 => isAssignable(t1, t2))
-    case (t1, Union(ts2)) => ts2.exists(t2 => isAssignable(t1, t2))
-    case (Intersection(ts1), t2) => ts1.exists(t1 => isAssignable(t1, t2))
     case (t1, Intersection(ts2)) => ts2.forall(t2 => isAssignable(t1, t2))
+    // A source intersection or target union needs only one sufficient part to match. When both apply, try both:
+    // a single part may match the whole union (e.g. an alias of a union) or the whole intersection may match one branch
+    case (Intersection(ts1), Union(ts2)) =>
+      ts1.exists(isAssignable(_, t2)) || ts2.exists(isAssignable(t1, _)) || isAssignableExpanded(t1, t2)
+    case (t1, Union(ts2)) => ts2.exists(t2 => isAssignable(t1, t2)) || isAssignableExpanded(t1, t2)
+    case (Intersection(ts1), f2: Func) => ts1.exists(isAssignable(_, f2)) || isAssignableFuncs(ts1, f2)
+    case (Intersection(ts1), t2) => ts1.exists(t1 => isAssignable(t1, t2))
     case (p1: Param, p2: Param) => sameCon(p1, p2)
-    case (t1: Tagged, t2: Tagged) => sameCon(t1, t2) && isAssignable(t1.wrappedType, t2.wrappedType)
+    case (t1: Tagged, t2: Tagged) => sameCon(t1, t2) &&
+      isAssignableWrapper(t1.con, t1.typeArgs, t2.typeArgs, t1.wrappedType, t2.wrappedType)
     case (t1: Tagged, t2) => isAssignable(t1.wrappedType, t2)
-    case (t1: Boxed, t2: Boxed) => sameCon(t1, t2) && isAssignable(t1.wrappedType, t2.wrappedType)
-    case (t1: Opaque, t2: Opaque) => sameCon(t1, t2) &&
-      t1.typeArgs.zip(t2.typeArgs).forall { case (t1a, t2a) =>
-        isAssignable(t1a, t2a) && isAssignable(t2a, t1a)
-      }
+    case (t1: Boxed, t2: Boxed) => sameCon(t1, t2) &&
+      isAssignableWrapper(t1.con, t1.typeArgs, t2.typeArgs, t1.wrappedType, t2.wrappedType)
+    case (t1: Opaque, t2: Opaque) => sameCon(t1, t2) && isAssignableInvariantArgs(t1.typeArgs, t2.typeArgs)
     case (t1: Singleton, t2: Singleton) => sameCon(t1, t2)
+    case _ => false
+  }
+
+  // True when no value can have both types. Conservative: false whenever overlap can't be ruled out.
+  // Distinct opaque (host provided) types are assumed disjoint from each other and from Clara's own singleton and
+  // boxed values. Host types that genuinely overlap must not be declared as separate opaque types,
+  // e.g. ::alias Number = Int | Float instead of ::opaque Number
+  def disjoint(t1: Type, t2: Type): Boolean = (t1, t2) match {
+    case (Bottom, _) | (_, Bottom) => true
+    case (Alias(_, _, wrappedType), t2) => disjoint(wrappedType, t2)
+    case (t1, Alias(_, _, wrappedType)) => disjoint(t1, wrappedType)
+    case (Union(ts), t2) => ts.forall(disjoint(_, t2))
+    case (t1, Union(ts)) => ts.forall(disjoint(t1, _))
+    case (Intersection(ts), t2) => ts.exists(disjoint(_, t2))
+    case (t1, Intersection(ts)) => ts.exists(disjoint(t1, _))
+    case (t1: Tagged, t2) => disjoint(t1.wrappedType, t2)
+    case (t1, t2: Tagged) => disjoint(t1, t2.wrappedType)
+    case (Tuple(ts1), Tuple(ts2)) =>
+      ts1.length != ts2.length || ts1.zip(ts2).exists { case (t1, t2) => disjoint(t1, t2) }
+    // only shared fields matter, e.g. {a: Red} and {b: Blue} share the value {a: Red, b: Blue}
+    case (Record(fields1), Record(fields2)) =>
+      fields1.entries.exists { case (name, t1) => fields2.get(name).exists(disjoint(t1, _)) }
+    case (t1: Boxed, t2: Boxed) => !sameCon(t1, t2) || disjoint(t1.wrappedType, t2.wrappedType)
+    case (t1: Singleton, t2: Singleton) => !sameCon(t1, t2)
+    case (_: Singleton, _: Boxed) | (_: Boxed, _: Singleton) => true
+    case (t1: Opaque, t2: Opaque) => !sameCon(t1, t2)
+    case (_: Opaque, _: Singleton | _: Boxed) | (_: Singleton | _: Boxed, _: Opaque) => true
     case _ => false
   }
 
@@ -313,6 +357,182 @@ object Types {
     def toSourceWithAutoParens(typ: Type): String = typ match {
       case _: Func | _: Union | _: Intersection => parens(toSource(typ))
       case _ => toSource(typ)
+    }
+
+    def normalizeIntersection(types: Seq[Type]): Type =
+      types.flatMap(flattenIntersectionMembers).distinct.span(!_.isInstanceOf[Union]) match {
+        case (before, Union(alternatives) +: after) =>
+          // map instead of flatMap because Union constructor flattens nested unions which
+          // the recursive call to normalizeIntersection might produce
+          Union(alternatives.map(t => normalizeIntersection(before ++ (t +: after))))
+        case (members, _) => normalizeIntersectionMembers(members)
+      }
+
+    def flattenIntersectionMembers(typ: Type): Seq[Type] = typ match {
+      case Intersection(types) => types.flatMap(flattenIntersectionMembers)
+      case Alias(_, _, wrappedType) => flattenIntersectionMembers(wrappedType)
+      case Top => Seq()
+      case t => Seq(t)
+    }
+
+    def normalizeIntersectionMembers(types: Seq[Type]): Type = {
+      val (records, others) = types.partitionMap {
+        case record: Record => Left(record)
+        case t => Right(t)
+      }
+      val members = if (records.isEmpty) others else others :+ mergeRecords(records)
+
+      if (members.contains(Bottom) || members.combinations(2).exists { case Seq(t1, t2) => disjoint(t1, t2) }) Bottom
+      else members match {
+        case Seq() => Top
+        case Seq(single) => single
+        case many => new Intersection(many)
+      }
+    }
+
+    // {a: X} & {a: Y, b: Z} = {a: X & Y, b: Z}
+    def mergeRecords(records: Seq[Record]): Type = {
+      val fields = records.flatMap(_.fields.entries).foldLeft(Namespace.empty[Type]) { case (fields, (name, t)) =>
+        fields.addOrModify(name -> normalizeIntersection(fields.get(name).toSeq :+ t))
+      }
+      if (fields.entries.exists { case (_, t) => t == Bottom }) Bottom else Record(fields)
+    }
+
+    // Optimization: same as `case (t1: Intersection, t2) if normalizeHead(t1) != t1 => isAssignable(normalizeHead(t1), t2)`
+    // but normalizes only once. normalizeHead is relatively heavy (distribution and pairwise disjointness checks), and an
+    // extractor is needed to fall through to the later rules when the intersection is already normalized.
+    object NormalizableIntersection {
+      def unapply(typ: Intersection): Option[Type] = Some(normalizeHead(typ)).filter(_ != typ)
+    }
+
+    // Limits the combinations of expandUnions like TypeScript does, beyond it the type is left unexpanded
+    val MaxUnionCombinations = 25
+
+    // All combinations of the unions nested in a type: directly, through aliases, tuple elements, record fields,
+    // intersection members and wrapped types of tagged and boxed types, e.g. (X | Y, Z) expands to (X, Z) and (Y, Z).
+    // returns None if there are more than MaxUnionCombinations combinations.
+    // NOTE the results are only for checking assignability, never keep or show them: expanded tagged and boxed types
+    // have type args that don't match their wrapped type (see below) so toSource would show them wrong.
+    def expandUnions(typ: Type): Option[Seq[Type]] = {
+      def expandEach(types: Seq[Type]): Option[Seq[Seq[Type]]] =
+        types.foldLeft(Option(Seq(Seq.empty[Type]))) { case (combinations, t) =>
+          for {
+            heads <- combinations
+            alternatives <- expandUnions(t)
+            expanded = for { head <- heads; alternative <- alternatives } yield head :+ alternative
+            if expanded.length <= MaxUnionCombinations
+          } yield expanded
+        }
+
+      typ match {
+        case Union(ts) => ts.foldLeft(Option(Seq.empty[Type])) { case (alternatives, t) =>
+          for {
+            previous <- alternatives
+            expanded <- expandUnions(t)
+            if previous.length + expanded.length <= MaxUnionCombinations
+          } yield previous ++ expanded
+        }
+        case Alias(_, _, wrappedType) => expandUnions(wrappedType)
+        case Tuple(ts) => expandEach(ts).map(_.map(Tuple(_)))
+        case Record(fields) =>
+          // From N fields, expand each field's type if it contains unions
+          // into flat list of N-tuples of all combinations of the field types
+          // Thus those N-tuples can be zipped back with the field names
+          val (names, ts) = fields.entries.unzip
+          expandEach(ts).map(_.map(expanded => Record(names.zip(expanded): _*)))
+        // Narrow only the wrapped type and keep the con and type args, e.g. Some<Red | Blue> expands to a Some wrapping
+        // Red and a Some wrapping Blue. Same-con types are compared by their wrapped types, so these compare correctly.
+        // Type args can't be narrowed in general since the union might not come from a type param,
+        // e.g. ::tagged Counted<A> {value: A, size: Small | Large} becomes (internally for this logic):
+        // Counted<A>{value: A, size: Small} | Counted<A>{value: A, size: Large}
+        case t: Tagged => expandUnions(t.wrappedType).map {
+          // did not contain an union to expand so keep the original tagged type
+          case Seq(_) => Seq(t)
+          case unionMembers => unionMembers.map(unionMember => t.copy(wrappedType = unionMember))
+        }
+        case t: Boxed => expandUnions(t.wrappedType).map {
+          case Seq(_) => Seq(t)
+          case unionMembers => unionMembers.map(unionMember => t.copy(wrappedType = unionMember))
+        }
+        case t: Intersection => normalizeHead(t) match {
+          case Intersection(members) => expandEach(members).map(_.map(Intersection(_)))
+          case normalized => expandUnions(normalized)
+        }
+        case t => Some(Seq(t))
+      }
+    }
+
+    // Each combination of the nested unions of t1 must be assignable on its own, e.g. (X | Y, Z) <: (X, Z) | (Y, Z).
+    // If the source itself is among the combinations nothing was split, so there's nothing (more) to expand.
+    def isAssignableExpanded(t1: Type, t2: Type): Boolean = expandUnions(t1) match {
+      case Some(combinations) if !combinations.contains(t1) => combinations.forall(isAssignable(_, t2))
+      case _ => false
+    }
+
+    // An intersection of functions (e.g. the cases of #()) is assignable to a function when each combination of the
+    // function's parameter is accepted by one of them, e.g. (True => S) & (False => S) <: Boolean => S
+    def isAssignableFuncs(types: Seq[Type], f2: Func): Boolean = f2.typeParams.isEmpty && {
+      val funcs = types.collect { case f: Func if f.typeParams.isEmpty => f }
+      funcs.nonEmpty && expandUnions(f2.parameter).exists(_.forall { parameter =>
+        funcs.exists(f => isAssignable(parameter, f.parameter) && isAssignable(f.result, f2.result))
+      })
+    }
+
+    // A record or tuple with an empty member has no values, e.g. {a: Red & Blue}, so it's assignable to anything
+    def hasEmptyMember(typ: Type): Boolean = typ match {
+      case Record(fields) => fields.entries.exists { case (_, t) => isEmpty(t) }
+      case Tuple(ts) => ts.exists(isEmpty)
+      case _ => false
+    }
+
+    def isEmpty(typ: Type): Boolean = typ match {
+      case Bottom => true
+      case t: Intersection => normalizeHead(t) == Bottom
+      case t => hasEmptyMember(t)
+    }
+
+    def isAssignableTuple(types1: Seq[Type], types2: Seq[Type]): Boolean =
+      types1.length == types2.length && types1.zip(types2).forall { case (type1, type2) => isAssignable(type1, type2) }
+
+    def isAssignableInvariantArgs(types1: Seq[Type], types2: Seq[Type]): Boolean =
+      isAssignableTuple(types1, types2) && isAssignableTuple(types2, types1)
+
+    // Variance of type params used in the wrapped type follows from comparing the wrapped types, e.g.
+    // ::tagged Handler<A> (A => ()) is contravariant in A. Phantom (unused) type params are invariant.
+    // TODO: with variance annotations, infer each type con's variance once from its definition (covariant: only in
+    // output positions, contravariant: only in input positions i.e. flipped by func params, invariant: both,
+    // phantom: unused) and compare same-con types by their type args according to it instead of by wrapped types.
+    // Replaces isAssignableWrapper and mentionsParam, gives annotations something to be checked against
+    // ("declared covariant but used as input"), makes unannotated phantom type params an error, and is cheaper and
+    // terminates for recursive types since args are compared instead of expanded wrapped types.
+    def isAssignableWrapper(
+      con: TypeCons.WrapperTypeCon,
+      typeArgs1: Seq[Type],
+      typeArgs2: Seq[Type],
+      wrappedType1: Type,
+      wrappedType2: Type,
+    ): Boolean = {
+      val phantom = con.typeParams.map(param => !mentionsParam(param.uniq, con.wrappedType))
+      def phantomArgs(typeArgs: Seq[Type]) = typeArgs.zip(phantom).collect { case (t, true) => t }
+
+      isAssignableInvariantArgs(phantomArgs(typeArgs1), phantomArgs(typeArgs2)) && isAssignable(wrappedType1, wrappedType2)
+    }
+
+    def mentionsParam(uniq: Uniq, typ: Type): Boolean = {
+      def mentions(t: Type) = mentionsParam(uniq, t)
+      typ match {
+        case p: Param => p.con.uniq === uniq
+        case Func(_, parameter, result) => mentions(parameter) || mentions(result)
+        case Record(fields) => fields.entries.exists { case (_, t) => mentions(t) }
+        case Tuple(ts) => ts.exists(mentions)
+        case Union(ts) => ts.exists(mentions)
+        case Intersection(ts) => ts.exists(mentions)
+        case Alias(_, typeArgs, _) => typeArgs.exists(mentions)
+        case Tagged(_, typeArgs, _) => typeArgs.exists(mentions)
+        case Boxed(_, typeArgs, _) => typeArgs.exists(mentions)
+        case Opaque(_, typeArgs) => typeArgs.exists(mentions)
+        case Top | Bottom | Uni | _: Singleton => false
+      }
     }
   }
 }
