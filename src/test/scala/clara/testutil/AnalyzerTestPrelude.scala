@@ -21,4 +21,7 @@ object AnalyzerTestPrelude {
   val intType: Types.Type = Types.Opaque(intCon, Nil)
   val floatType: Types.Type = Types.Opaque(floatCon, Nil)
   val stringType: Types.Type = Types.Opaque(stringCon, Nil)
+
+  val aParamCon: TypeCons.ParamCon = TypeCons.ParamCon("A", NoPos)
+  val aParam: Types.Param = Types.Param(aParamCon)
 }

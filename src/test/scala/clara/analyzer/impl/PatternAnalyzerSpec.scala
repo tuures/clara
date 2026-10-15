@@ -1,7 +1,7 @@
 package clara.analyzer.impl
 
-import clara.ast.{Ast, AstLiteral, NoPos}
-import clara.asg.{Namespace, TermLiteral, Terms, Types, Uniq}
+import clara.ast.{Ast, AstLiteral, NoPos, SourceInfo, SourcePos}
+import clara.asg.{Namespace, TermLiteral, Terms, TypeCons, Types, Uniq}
 import clara.testutil.{AnalyzerTestPrelude, BaseSpec}
 
 class PatternAnalyzerSpec extends BaseSpec {
@@ -24,25 +24,25 @@ class PatternAnalyzerSpec extends BaseSpec {
   }
 
   test("WildcardPattern with unknown source type should use Top") {
-    val result = PatternAnalyzer(Env.empty).walkAssignment(Ast.WildcardPattern(), None)
+    val result = PatternAnalyzer.walkAssignment(Env.empty, Ast.WildcardPattern(), None)
 
     assertAnSuccess(result, (Env.empty, Terms.WildcardPattern(Types.Top)))
   }
 
   test("WildcardPattern with known source type should keep that type") {
-    val result = PatternAnalyzer(Env.empty).walkAssignment(Ast.WildcardPattern(), Some(Types.Uni))
+    val result = PatternAnalyzer.walkAssignment(Env.empty, Ast.WildcardPattern(), Some(Types.Uni))
 
     assertAnSuccess(result, (Env.empty, Terms.WildcardPattern(Types.Uni)))
   }
 
   test("UnitPattern should succeed with unknown source type") {
-    val result = PatternAnalyzer(testEnv).walkAssignment(Ast.UnitPattern(), None)
+    val result = PatternAnalyzer.walkAssignment(testEnv, Ast.UnitPattern(), None)
 
     assertAnSuccess(result, (testEnv, Terms.UnitPattern()))
   }
 
   test("UnitPattern should fail when source type is incompatible") {
-    val result = PatternAnalyzer(testEnv).walkAssignment(Ast.UnitPattern(), Some(AnalyzerTestPrelude.intType))
+    val result = PatternAnalyzer.walkAssignment(testEnv, Ast.UnitPattern(), Some(AnalyzerTestPrelude.intType))
 
     assertNotAssignableError(result)
   }
@@ -50,7 +50,7 @@ class PatternAnalyzerSpec extends BaseSpec {
   test("IntegerPattern should resolve Int and return typed pattern") {
     val pattern = Ast.IntegerPattern(AstLiteral.IntegerDec("42"))
 
-    val result = PatternAnalyzer(testEnv).walkAssignment(pattern, None)
+    val result = PatternAnalyzer.walkCase(testEnv, pattern, None)
 
     assertAnSuccess(result, (testEnv, Terms.IntegerPattern(TermLiteral.IntegerDec("42"), AnalyzerTestPrelude.intType)))
   }
@@ -58,15 +58,23 @@ class PatternAnalyzerSpec extends BaseSpec {
   test("IntegerPattern should fail when source type is incompatible") {
     val pattern = Ast.IntegerPattern(AstLiteral.IntegerDec("42"))
 
-    val result = PatternAnalyzer(testEnv).walkAssignment(pattern, Some(Types.Uni))
+    val result = PatternAnalyzer.walkCase(testEnv, pattern, Some(AnalyzerTestPrelude.stringType))
 
-    assertNotAssignableError(result)
+    assertAnSingleErrorContains(result, "can never match")
+  }
+
+  test("IntegerPattern should fail in an assignment since it can fail to match") {
+    val pattern = Ast.IntegerPattern(AstLiteral.IntegerDec("42"))
+
+    val result = PatternAnalyzer.walkAssignment(testEnv, pattern, Some(AnalyzerTestPrelude.intType))
+
+    assertAnSingleErrorContains(result, "can fail to match")
   }
 
   test("FloatPattern should resolve Float and return typed pattern") {
     val pattern = Ast.FloatPattern(AstLiteral.Float("3", "14"))
 
-    val result = PatternAnalyzer(testEnv).walkAssignment(pattern, None)
+    val result = PatternAnalyzer.walkCase(testEnv, pattern, None)
 
     assertAnSuccess(result, (testEnv, Terms.FloatPattern(TermLiteral.Float("3", "14"), AnalyzerTestPrelude.floatType)))
   }
@@ -74,15 +82,23 @@ class PatternAnalyzerSpec extends BaseSpec {
   test("FloatPattern should fail when source type is incompatible") {
     val pattern = Ast.FloatPattern(AstLiteral.Float("3", "14"))
 
-    val result = PatternAnalyzer(testEnv).walkAssignment(pattern, Some(Types.Uni))
+    val result = PatternAnalyzer.walkCase(testEnv, pattern, Some(AnalyzerTestPrelude.stringType))
 
-    assertNotAssignableError(result)
+    assertAnSingleErrorContains(result, "can never match")
+  }
+
+  test("FloatPattern should fail in an assignment since it can fail to match") {
+    val pattern = Ast.FloatPattern(AstLiteral.Float("3", "14"))
+
+    val result = PatternAnalyzer.walkAssignment(testEnv, pattern, Some(AnalyzerTestPrelude.floatType))
+
+    assertAnSingleErrorContains(result, "can fail to match")
   }
 
   test("StringPattern should resolve String and return typed pattern") {
     val pattern = Ast.StringPattern(Seq(AstLiteral.StringPlainPart("hello")))
 
-    val result = PatternAnalyzer(testEnv).walkAssignment(pattern, None)
+    val result = PatternAnalyzer.walkCase(testEnv, pattern, None)
 
     assertAnSuccess(result, (testEnv, Terms.StringPattern(Seq(TermLiteral.StringPlainPart("hello")), AnalyzerTestPrelude.stringType)))
   }
@@ -90,9 +106,27 @@ class PatternAnalyzerSpec extends BaseSpec {
   test("StringPattern should fail when source type is incompatible") {
     val pattern = Ast.StringPattern(Seq(AstLiteral.StringPlainPart("hello")))
 
-    val result = PatternAnalyzer(testEnv).walkAssignment(pattern, Some(Types.Uni))
+    val result = PatternAnalyzer.walkCase(testEnv, pattern, Some(AnalyzerTestPrelude.intType))
 
-    assertNotAssignableError(result)
+    assertAnSingleErrorContains(result, "can never match")
+  }
+
+  test("StringPattern should fail in an assignment since it can fail to match") {
+    val pattern = Ast.StringPattern(Seq(AstLiteral.StringPlainPart("hello")))
+
+    val result = PatternAnalyzer.walkAssignment(testEnv, pattern, Some(AnalyzerTestPrelude.stringType))
+
+    assertAnSingleErrorContains(result, "can fail to match")
+  }
+
+  test("StringPattern with a single capture matches every string so it can be used in an assignment") {
+    val pattern = Ast.StringPattern(Seq(AstLiteral.StringCapturePart(Ast.CapturePattern("s"))))
+
+    val result = PatternAnalyzer.walkAssignment(testEnv, pattern, Some(AnalyzerTestPrelude.stringType))
+
+    inside(result.value) {
+      case Right((nextEnv, _)) => assert(nextEnv.getValue("s").map(_.typ) === Some(AnalyzerTestPrelude.stringType))
+    }
   }
 
   test("StringPattern should handle escape sequences, captures and named constants") {
@@ -106,7 +140,7 @@ class PatternAnalyzerSpec extends BaseSpec {
       AstLiteral.StringEscapePart(Seq("n"))
     ))
 
-    val result = PatternAnalyzer(envWithConstant).walkAssignment(pattern, None)
+    val result = PatternAnalyzer.walkCase(envWithConstant, pattern, None)
 
     inside(result.value) {
       case Right((nextEnv, term)) =>
@@ -116,30 +150,30 @@ class PatternAnalyzerSpec extends BaseSpec {
   }
 
   test("TuplePattern should succeed with unknown source type") {
-    val pattern = Ast.TuplePattern(Seq(Ast.UnitPattern(), Ast.IntegerPattern(AstLiteral.IntegerDec("42"))))
+    val pattern = Ast.TuplePattern(Seq(Ast.UnitPattern(), Ast.WildcardPattern()))
 
-    val result = PatternAnalyzer(testEnv).walkAssignment(pattern, None)
+    val result = PatternAnalyzer.walkAssignment(testEnv, pattern, None)
 
     val expectedTerm = Terms.TuplePattern(
-      Seq(Terms.UnitPattern(), Terms.IntegerPattern(TermLiteral.IntegerDec("42"), AnalyzerTestPrelude.intType)),
-      Types.Tuple(Seq(Types.Uni, AnalyzerTestPrelude.intType))
+      Seq(Terms.UnitPattern(), Terms.WildcardPattern(Types.Top)),
+      Types.Tuple(Seq(Types.Uni, Types.Top))
     )
     assertAnSuccess(result, (testEnv, expectedTerm))
   }
 
   test("TuplePattern should fail when source type is not a tuple") {
-    val pattern = Ast.TuplePattern(Seq(Ast.UnitPattern(), Ast.IntegerPattern(AstLiteral.IntegerDec("42"))))
+    val pattern = Ast.TuplePattern(Seq(Ast.UnitPattern(), Ast.WildcardPattern()))
 
-    val result = PatternAnalyzer(testEnv).walkAssignment(pattern, Some(AnalyzerTestPrelude.intType))
+    val result = PatternAnalyzer.walkAssignment(testEnv, pattern, Some(AnalyzerTestPrelude.intType))
 
     assertNotAssignableError(result)
   }
 
   test("TuplePattern should fail when source tuple has incompatible element types") {
-    val pattern = Ast.TuplePattern(Seq(Ast.UnitPattern(), Ast.IntegerPattern(AstLiteral.IntegerDec("42"))))
-    val fromType = Types.Tuple(Seq(Types.Uni, Types.Uni))
+    val pattern = Ast.TuplePattern(Seq(Ast.UnitPattern(), Ast.UnitPattern()))
+    val fromType = Types.Tuple(Seq(Types.Uni, AnalyzerTestPrelude.intType))
 
-    val result = PatternAnalyzer(testEnv).walkAssignment(pattern, Some(fromType))
+    val result = PatternAnalyzer.walkAssignment(testEnv, pattern, Some(fromType))
 
     assertNotAssignableError(result)
   }
@@ -150,7 +184,7 @@ class PatternAnalyzerSpec extends BaseSpec {
     )))
     val pattern = Ast.NamedConstantPattern("Const1")
 
-    val result = PatternAnalyzer(envWithValue).walkAssignment(pattern, None)
+    val result = PatternAnalyzer.walkAssignment(envWithValue, pattern, None)
 
     assertAnSuccess(result, (
       envWithValue,
@@ -161,7 +195,7 @@ class PatternAnalyzerSpec extends BaseSpec {
   test("NamedConstantPattern should fail for unknown value") {
     val pattern = Ast.NamedConstantPattern("MissingValue")
 
-    val result = PatternAnalyzer(testEnv).walkAssignment(pattern, None)
+    val result = PatternAnalyzer.walkAssignment(testEnv, pattern, None)
 
     assertAnSingleErrorContains(result, "Unknown value")
   }
@@ -169,7 +203,7 @@ class PatternAnalyzerSpec extends BaseSpec {
   test("CapturePattern should bind captured name with inferred source type") {
     val pattern = Ast.CapturePattern("captured")
 
-    val result = PatternAnalyzer(testEnv).walkAssignment(pattern, Some(AnalyzerTestPrelude.intType))
+    val result = PatternAnalyzer.walkAssignment(testEnv, pattern, Some(AnalyzerTestPrelude.intType))
 
     inside(result.value) {
       case Right((nextEnv, term)) =>
@@ -181,7 +215,7 @@ class PatternAnalyzerSpec extends BaseSpec {
   test("CapturePattern should fail when source type cannot be inferred") {
     val pattern = Ast.CapturePattern("captured")
 
-    val result = PatternAnalyzer(testEnv).walkAssignment(pattern, None)
+    val result = PatternAnalyzer.walkAssignment(testEnv, pattern, None)
 
     assertAnSingleErrorContains(result, "Could not infer type")
   }
@@ -192,7 +226,7 @@ class PatternAnalyzerSpec extends BaseSpec {
     )))
     val pattern = Ast.CapturePattern("captured")
 
-    val result = PatternAnalyzer(envWithCaptured).walkAssignment(pattern, Some(AnalyzerTestPrelude.intType))
+    val result = PatternAnalyzer.walkAssignment(envWithCaptured, pattern, Some(AnalyzerTestPrelude.intType))
 
     assertAnSingleErrorContains(result, "Cannot shadow existing value with same name `captured`")
   }
@@ -203,7 +237,7 @@ class PatternAnalyzerSpec extends BaseSpec {
       Ast.NamedType(Ast.NameWithPos("Int"), Nil)
     )
 
-    val result = PatternAnalyzer(testEnv).walkAssignment(pattern, None)
+    val result = PatternAnalyzer.walkAssignment(testEnv, pattern, None)
 
     assertAnSuccess(result, (testEnv, Terms.WildcardPattern(AnalyzerTestPrelude.intType)))
   }
@@ -214,8 +248,116 @@ class PatternAnalyzerSpec extends BaseSpec {
       Ast.NamedType(Ast.NameWithPos("Int"), Nil)
     )
 
-    val result = PatternAnalyzer(testEnv).walkAssignment(pattern, Some(Types.Uni))
+    val result = PatternAnalyzer.walkAssignment(testEnv, pattern, Some(Types.Uni))
 
     assertNotAssignableError(result)
+  }
+
+  // refutable patterns (cases of #()) only need to be able to match some value of the source type
+
+  private val intOrString = Types.Union(Seq(AnalyzerTestPrelude.intType, AnalyzerTestPrelude.stringType))
+  private val trueType = Types.Singleton(TypeCons.SingletonTypeCon("True", NoPos))
+  private val falseType = Types.Singleton(TypeCons.SingletonTypeCon("False", NoPos))
+  private val booleanEnv = testEnv.copy(local = testEnv.local.copy(values = Namespace(
+    ("True", EnvValue(trueType, NoPos, Uniq())),
+    ("False", EnvValue(falseType, NoPos, Uniq())),
+  )))
+
+  test("refutable IntegerPattern should narrow a union source type to Int") {
+    val pattern = Ast.IntegerPattern(AstLiteral.IntegerDec("1"))
+
+    val result = PatternAnalyzer.walkCase(testEnv, pattern, Some(intOrString))
+
+    assertAnSuccess(result, (testEnv, Terms.IntegerPattern(TermLiteral.IntegerDec("1"), AnalyzerTestPrelude.intType)))
+  }
+
+  test("refutable IntegerPattern should fail when it can never match the source type") {
+    val pattern = Ast.IntegerPattern(AstLiteral.IntegerDec("1"))
+
+    val result = PatternAnalyzer.walkCase(testEnv, pattern, Some(AnalyzerTestPrelude.stringType))
+
+    assertAnSingleErrorContains(result, "Pattern of type `Int` can never match a value of type `String`")
+  }
+
+  test("refutable NamedConstantPattern should match a member of a union of singletons") {
+    val result = PatternAnalyzer.walkCase(booleanEnv, Ast.NamedConstantPattern("True"), Some(Types.Union(Seq(trueType, falseType))))
+
+    assertAnSuccess(result, (booleanEnv, Terms.NamedConstantPattern(Terms.NamedValue("True", trueType))))
+  }
+
+  test("refutable NamedConstantPattern should fail when it can never match the source type") {
+    val result = PatternAnalyzer.walkCase(booleanEnv, Ast.NamedConstantPattern("True"), Some(AnalyzerTestPrelude.intType))
+
+    assertAnSingleErrorContains(result, "can never match")
+  }
+
+  test("refutable TuplePattern should narrow to the tuples of a union source type") {
+    val pattern = Ast.TuplePattern(Seq(Ast.IntegerPattern(AstLiteral.IntegerDec("1")), Ast.CapturePattern("x")))
+    val fromType = Types.Union(Seq(
+      Types.Tuple(Seq(AnalyzerTestPrelude.intType, AnalyzerTestPrelude.stringType)),
+      AnalyzerTestPrelude.intType,
+    ))
+
+    val result = PatternAnalyzer.walkCase(testEnv, pattern, Some(fromType))
+
+    inside(result.value) {
+      case Right((nextEnv, term)) =>
+        assert(nextEnv.getValue("x").map(_.typ) === Some(AnalyzerTestPrelude.stringType))
+        assert(term.typ === Types.Tuple(Seq(AnalyzerTestPrelude.intType, AnalyzerTestPrelude.stringType)))
+    }
+  }
+
+  test("refutable TuplePattern should fail when the source type has no tuples") {
+    val pattern = Ast.TuplePattern(Seq(Ast.CapturePattern("x"), Ast.CapturePattern("y")))
+
+    val result = PatternAnalyzer.walkCase(testEnv, pattern, Some(AnalyzerTestPrelude.intType))
+
+    assertAnSingleErrorContains(result, "can never match")
+  }
+
+  test("irrefutable TuplePattern should destructure a union of tuples") {
+    val pattern = Ast.TuplePattern(Seq(Ast.CapturePattern("x"), Ast.CapturePattern("y")))
+    val fromType = Types.Union(Seq(
+      Types.Tuple(Seq(AnalyzerTestPrelude.intType, AnalyzerTestPrelude.intType)),
+      Types.Tuple(Seq(AnalyzerTestPrelude.stringType, AnalyzerTestPrelude.intType)),
+    ))
+
+    val result = PatternAnalyzer.walkAssignment(testEnv, pattern, Some(fromType))
+
+    inside(result.value) {
+      case Right((nextEnv, _)) =>
+        assert(nextEnv.getValue("x").map(_.typ) === Some(intOrString))
+        assert(nextEnv.getValue("y").map(_.typ) === Some(AnalyzerTestPrelude.intType))
+    }
+  }
+
+  test("refutable PatternAs should narrow the nested pattern to the target type") {
+    val pattern = Ast.PatternAs(Ast.CapturePattern("n"), Ast.NamedType(Ast.NameWithPos("Int"), Nil))
+
+    val result = PatternAnalyzer.walkCase(testEnv, pattern, Some(intOrString))
+
+    inside(result.value) {
+      case Right((nextEnv, _)) =>
+        assert(nextEnv.getValue("n").map(_.typ) === Some(AnalyzerTestPrelude.intType))
+    }
+  }
+
+  test("refutable PatternAs should fail when the target type can never match") {
+    val pattern = Ast.PatternAs(Ast.CapturePattern("n"), Ast.NamedType(Ast.NameWithPos("Int"), Nil))
+
+    val result = PatternAnalyzer.walkCase(testEnv, pattern, Some(AnalyzerTestPrelude.stringType))
+
+    assertAnSingleErrorContains(result, "can never match")
+  }
+
+  test("refutable pattern that can never match quotes the pattern's source in the error") {
+    val source = "\"a\""
+    val pos = SourcePos(SourceInfo.fromString("test", source), 0, Some(source.length))
+    val pattern = Ast.StringPattern(Seq(AstLiteral.StringPlainPart("a")), pos)
+
+    val result = PatternAnalyzer.walkCase(testEnv, pattern, Some(AnalyzerTestPrelude.intType))
+
+    //TODO: Instead of embedding source quote to the message, maybe have error printer handle it based on the Pos?
+    assertAnSingleErrorContains(result, "Pattern `\"a\"` of type `String` can never match a value of type `Int`")
   }
 }

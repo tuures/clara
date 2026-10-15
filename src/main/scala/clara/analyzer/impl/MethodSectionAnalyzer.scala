@@ -101,9 +101,8 @@ case class MethodSectionAnalyzerImpl(targetCon: TypeCons.TypeCon) {
   }
 
   def methodDefSection(withTypeParamsEnv: Env, targetType: Types.Type, selfPattern: Ast.Pattern, methodAsts: Seq[Ast.Method]) = {
-    PatternAnalyzer(withTypeParamsEnv).
-      // TODO should pattern be for the unwrapped value? (rename selfPattern, and unwrap targetType)
-      walkAssignment(selfPattern, Some(targetType)).flatMap { case (selfEnv, selfPatternTerm) =>
+    // TODO should pattern be for the unwrapped value? (rename selfPattern, and unwrap targetType)
+    PatternAnalyzer.walkAssignment(withTypeParamsEnv, selfPattern, Some(targetType)).flatMap { case (selfEnv, selfPatternTerm) =>
         An.step(methodAsts)(WalkDefState.begin(selfEnv)){ case (currentState, methodAst) =>
           (methodAst match {
             case _: Ast.MethodDecl => An.error(SourceMessage(methodAst.pos, "Method definition expected"))

@@ -60,7 +60,7 @@ object BlockAnalyzerImpl {
       }
     case Ast.ValueDef(target, e, _) =>
       ValueExprAnalyzer.valueExprTerm(currentEnv, e).flatMap { valueExprTerm =>
-        PatternAnalyzer(currentEnv).walkAssignment(target, Some(valueExprTerm.typ)).
+        PatternAnalyzer.walkAssignment(currentEnv, target, Some(valueExprTerm.typ)).
           map { case (nextEnv, targetTerm) =>
             BlockContentStep(nextEnv, Terms.ValueDef(targetTerm, valueExprTerm), None)
           }

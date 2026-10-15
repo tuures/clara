@@ -30,6 +30,7 @@ object JsEmitter {
     case Terms.Tuple(es, _) => JsAst.ArrayLiteral(es.map(emitValueExpr))
     case Terms.Block(bcs, _) => emitBlock(bcs)
     case Terms.NamedValue(name, _) => JsAst.Named(name)
+    case Terms.ValueAs(term, _) => emitValueExpr(term)
     case Terms.Record(fields, _) => JsAst.ObjectLiteral(fields.mapValues { case Terms.Field(body) =>
         emitValueExpr(body)
       }.entries)

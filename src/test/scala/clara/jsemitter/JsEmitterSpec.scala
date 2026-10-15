@@ -111,6 +111,11 @@ class JsEmitterSpec extends BaseSpec {
     assert(emitExpr(expr) === JsAst.Named("foo"))
   }
 
+  test("emitValueExpr: ValueAs emits just the annotated value") {
+    val expr = Terms.ValueAs(Terms.IntegerLiteral(TermLiteral.IntegerDec("42"), dummyType), dummyType)
+    assert(emitExpr(expr) === JsAst.NumberLiteral("42"))
+  }
+
   test("emitValueExpr: Record") {
     val expr = Terms.Record(
       Namespace("a" -> Terms.Field(Terms.IntegerLiteral(TermLiteral.IntegerDec("1"), dummyType))),

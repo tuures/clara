@@ -14,6 +14,8 @@ sealed trait Pos extends Ordered[Pos] {
     case (_, NoPos) => 1
   }
   def humanFormat: String
+  // the source code at this position, e.g. for quoting it in messages
+  def sourceText: Option[String]
   def join(later: Pos): Pos = (this, later) match {
     case (pos1: SourcePos, pos2: SourcePos) => {
       require(pos1.sourceInfo.name === pos2.sourceInfo.name,
@@ -59,9 +61,12 @@ case class SourcePos(sourceInfo: SourceInfo, fromIndex: Int, untilIndex: Option[
     safe"${sourceInfo.name}:$start${end.fold("")(end => safe"($ndash$end)")}"
   }
 
+  def sourceText = untilIndex.map(sourceInfo.text.substring(fromIndex, _))
+
   override def toString() = safe"SourcePos($humanFormat)"
 }
 
 case object NoPos extends Pos {
   val humanFormat = "unknown position"
+  val sourceText = None
 }

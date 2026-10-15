@@ -90,7 +90,7 @@ object TypeCons {
 
 // type lattice
 object Types {
-  import Impl._
+  import ToSourceImpl._, NormalizeImpl._, ExpandUnionsImpl._, AssignableImpl._, DisjointImpl._
 
   sealed trait Type
 
@@ -119,9 +119,10 @@ object Types {
       case nested: Union => nested.types
       case Bottom => Seq()
       case t => Seq(t)
-    } match {
+    }.distinct match {
       case Nil => Bottom
-      case ts => new Union(ts.distinct)
+      case Seq(single) => single
+      case ts => new Union(ts)
     }
   }
 
@@ -132,9 +133,10 @@ object Types {
       case nested: Intersection => nested.types
       case Top => Seq()
       case t => Seq(t)
-    } match {
+    }.distinct match {
       case Nil => Top
-      case ts => new Intersection(ts.distinct)
+      case Seq(single) => single
+      case ts => new Intersection(ts)
     }
   }
 
@@ -264,6 +266,8 @@ object Types {
     case (t1, t2: Tagged) => disjoint(t1, t2.wrappedType)
     case (Tuple(ts1), Tuple(ts2)) =>
       ts1.length != ts2.length || ts1.zip(ts2).exists { case (t1, t2) => disjoint(t1, t2) }
+    case (_: Tuple, t2) => isDisjointFromTuples(t2)
+    case (t1, _: Tuple) => isDisjointFromTuples(t1)
     // only shared fields matter, e.g. {a: Red} and {b: Blue} share the value {a: Red, b: Blue}
     case (Record(fields1), Record(fields2)) =>
       fields1.entries.exists { case (name, t1) => fields2.get(name).exists(disjoint(t1, _)) }
@@ -273,6 +277,26 @@ object Types {
     case (t1: Opaque, t2: Opaque) => !sameCon(t1, t2)
     case (_: Opaque, _: Singleton | _: Boxed) | (_: Singleton | _: Boxed, _: Opaque) => true
     case _ => false
+  }
+
+  def narrow(t1: Type, t2: Type): Type =
+    if (isAssignable(t1, t2)) t1
+    else if (isAssignable(t2, t1)) t2
+    else Intersection(Seq(t1, t2))
+
+  // Normalize type into tuple form. e.g. (Int, Bool) | (String, Bool) | Int gives (Int | String, Bool).
+  // Types that can't be decomposed but could be such a tuple (e.g. Top or a type param) give Top.
+  def tupleElementTypes(typ: Type, length: Int): Seq[Type] = typ match {
+    case Tuple(ts) if ts.length == length => ts
+    case Alias(_, _, wrappedType) => tupleElementTypes(wrappedType, length)
+    case t: Tagged => tupleElementTypes(t.wrappedType, length)
+    case Union(ts) => ts.map(tupleElementTypes(_, length)).transpose.map(Union(_))
+    case t: Intersection => normalizeHead(t) match {
+      case Intersection(members) => members.map(tupleElementTypes(_, length)).transpose.map(Intersection(_))
+      case normalized => tupleElementTypes(normalized, length)
+    }
+    case t if disjoint(t, Tuple(Seq.fill(length)(Top))) => Seq.fill(length)(Bottom)
+    case _ => Seq.fill(length)(Top)
   }
 
   // def leastCommonSupertype(t1: Type, t2: Type): Type = (t1, t2) match {
@@ -331,7 +355,7 @@ object Types {
     case Bottom => "!"
     case Uni    => "()"
     case Func(typeParams, parameter, result) =>
-      val paramsList = ToSourceImpl.typeListSource(typeParams.map(TypeCons.toSource))
+      val paramsList = typeListSource(typeParams.map(TypeCons.toSource))
       safe"$paramsList${toSource(parameter)} => ${toSource(result)}"
     case Record(fields) =>
       fields.mapValues(toSource).entries.map { case (name, v) => safe"$name: $v" }.safeString("{", ", ", "}")
@@ -346,19 +370,7 @@ object Types {
     case Singleton(con) => con.name
   }
 
-  object Impl {
-    import ToSourceImpl._
-
-    def nominalToSource(con: TypeCons.TypeCon, typeArgs: Seq[Types.Type]): String =
-      con.name + typeListSource(typeArgs.map(toSource))
-
-    def parens(str: String) = s"($str)"
-
-    def toSourceWithAutoParens(typ: Type): String = typ match {
-      case _: Func | _: Union | _: Intersection => parens(toSource(typ))
-      case _ => toSource(typ)
-    }
-
+  object NormalizeImpl {
     def normalizeIntersection(types: Seq[Type]): Type =
       types.flatMap(flattenIntersectionMembers).distinct.span(!_.isInstanceOf[Union]) match {
         case (before, Union(alternatives) +: after) =>
@@ -397,14 +409,9 @@ object Types {
       }
       if (fields.entries.exists { case (_, t) => t == Bottom }) Bottom else Record(fields)
     }
+  }
 
-    // Optimization: same as `case (t1: Intersection, t2) if normalizeHead(t1) != t1 => isAssignable(normalizeHead(t1), t2)`
-    // but normalizes only once. normalizeHead is relatively heavy (distribution and pairwise disjointness checks), and an
-    // extractor is needed to fall through to the later rules when the intersection is already normalized.
-    object NormalizableIntersection {
-      def unapply(typ: Intersection): Option[Type] = Some(normalizeHead(typ)).filter(_ != typ)
-    }
-
+  object ExpandUnionsImpl {
     // Limits the combinations of expandUnions like TypeScript does, beyond it the type is left unexpanded
     val MaxUnionCombinations = 25
 
@@ -460,6 +467,15 @@ object Types {
         }
         case t => Some(Seq(t))
       }
+    }
+  }
+
+  object AssignableImpl {
+    // Optimization: same as `case (t1: Intersection, t2) if normalizeHead(t1) != t1 => isAssignable(normalizeHead(t1), t2)`
+    // but normalizes only once. normalizeHead is relatively heavy (distribution and pairwise disjointness checks), and an
+    // extractor is needed to fall through to the later rules when the intersection is already normalized.
+    object NormalizableIntersection {
+      def unapply(typ: Intersection): Option[Type] = Some(normalizeHead(typ)).filter(_ != typ)
     }
 
     // Each combination of the nested unions of t1 must be assignable on its own, e.g. (X | Y, Z) <: (X, Z) | (Y, Z).
@@ -535,9 +551,29 @@ object Types {
       }
     }
   }
+
+  object DisjointImpl {
+    def isDisjointFromTuples(typ: Type): Boolean = typ match {
+      case Bottom | Uni | _: Record | _: Func | _: Singleton | _: Boxed | _: Opaque => true
+      // can hold tuples (Top, Param), is one (Tuple), or is decomposed by disjoint before this is reached
+      case Top | _: Tuple | _: Param | _: Union | _: Intersection | _: Alias | _: Tagged => false
+    }
+  }
 }
 
 object ToSourceImpl {
+  import Types.{Type, Func, Union, Intersection, toSource}
+
   def typeListSource(items: Seq[String]): String =
     Some(items).filter(_.nonEmpty).map(_.safeString("<", ", ", ">")).getOrElse("")
+
+  def nominalToSource(con: TypeCons.TypeCon, typeArgs: Seq[Type]): String =
+    con.name + typeListSource(typeArgs.map(toSource))
+
+  def parens(str: String) = s"($str)"
+
+  def toSourceWithAutoParens(typ: Type): String = typ match {
+    case _: Func | _: Union | _: Intersection => parens(toSource(typ))
+    case _ => toSource(typ)
+  }
 }

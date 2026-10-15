@@ -51,6 +51,8 @@ object Terms {
   }
   case class CapturePattern(name: String, typ: Type) extends Pattern
 
+  case class ValueAs(term: ValueExpr, typ: Type) extends ValueExpr
+
   case class Field(body: ValueExpr)
   case class Record(fields: Namespace[Field], typ: Types.Record) extends ValueExpr
   // TODO case class RecordPattern(fields: Namespace[Pattern], typ: Types.Record) extends Pattern

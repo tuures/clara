@@ -24,6 +24,8 @@ class TypesSpec extends BaseSpec {
 
   testSimplification(Union(Nil), Bottom, "empty union = Bottom")
   testSimplification(Intersection(Nil), Top, "empty intersection = Top")
+  testSimplification(Union(Seq(Uni)), Uni, "single member union is the member")
+  testSimplification(Intersection(Seq(Uni)), Uni, "single member intersection is the member")
 
   testSimplification(
     Union(Seq(Uni, Uni)), Union(Seq(Uni)),

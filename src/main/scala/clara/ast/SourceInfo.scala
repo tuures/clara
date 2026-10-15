@@ -11,8 +11,11 @@ case class LineCol(line: Int, col: Int) {
   def humanFormat = safe"$humanFormatLine:$humanFormatCol"
 }
 
-case class SourceInfo(name: String, newlineIndices: Vector[Int], length: Int) {
+// TODO: make text somehow lazy
+case class SourceInfo(name: String, newlineIndices: Vector[Int], length: Int, text: String) {
   require(length >= 0, "length must be non-negative")
+
+  override def toString() = safe"SourceInfo($name)"
 
   def lineCol(index: Int): LineCol = {
     require(index >= 0 && index < length, s"index ${index} out of range")
@@ -30,5 +33,5 @@ case class SourceInfo(name: String, newlineIndices: Vector[Int], length: Int) {
 
 object SourceInfo {
   def fromString(name: String, input: String) =
-    SourceInfo(name, "\n".r.findAllMatchIn(input).map(_.start).toVector, input.length)
+    SourceInfo(name, "\n".r.findAllMatchIn(input).map(_.start).toVector, input.length, input)
 }

@@ -30,7 +30,7 @@ case class ValueExprAnalyzerImpl(env: Env) {
     val Ast.Lambda(typeParams, parameter, body, _) = lambda
 
     TypeParamAnalyzer(env).walkTypeParams(typeParams).flatMap { case (withTypeParamsEnv, typeParamCons) =>
-      PatternAnalyzer(withTypeParamsEnv).walkAssignment(parameter, expectedParameterType).
+      PatternAnalyzer.walkAssignment(withTypeParamsEnv, parameter, expectedParameterType).
         flatMap { case (funcBodyEnv, parameterTerm) =>
           ValueExprAnalyzerImpl(funcBodyEnv).valueExprTerm(body).map { bodyTerm =>
             val typ = Types.Func(typeParamCons, parameterTerm.typ, bodyTerm.typ)
@@ -40,15 +40,103 @@ case class ValueExprAnalyzerImpl(env: Env) {
       }
   }
 
-  def funcCallArgumentTerm(calleeParameter: Types.Type, argument: Ast.ValueExpr): An[Terms.ValueExpr] =
-    (calleeParameter, argument) match {
-      // for lambda literal in call expression argument position, infer the lambda's parameter type from the callee's parameter type
-      // avoiding the need for type annotations on the parameter pattern of the lambda
-      case (Types.Func(Nil, p, _), l: Ast.Lambda) => lambdaTerm(l, Some(p))
-      // TODO case (Type.Tuple, Ast.Tuple) with nested lambdas
-      // TODO case (Type.Record, Ast.Record) with nested lambdas
-      case _ => valueExprTerm(argument)
+  def piecewiseTerm(piecewise: Ast.Piecewise, expectedParameterType: Option[Types.Type]): An[Terms.Piecewise] = {
+    // TODO review and clean the code, extract?
+    // TODO exhaustiveness check
+    // TODO dead branch check
+    case class PieceState(pieces: Seq[((Terms.Pattern, Terms.ValueExpr), Types.Func)])
+    An.step(piecewise.pieces)(PieceState(Nil)) { case (state, (pattern, body)) =>
+
+      PatternAnalyzer.walkCase(env, pattern, expectedParameterType).
+        flatMap { case (funcBodyEnv, parameterTerm) =>
+          ValueExprAnalyzerImpl(funcBodyEnv).valueExprTerm(body).map { bodyTerm =>
+            val typ = Types.Func(Nil, parameterTerm.typ, bodyTerm.typ)
+
+            state.copy(pieces = state.pieces ++ Seq(((parameterTerm, bodyTerm), typ)))
+          }
+        }
+
+    }.map { state =>
+      val (patternsWithBodies, funcTypes) = state.pieces.unzip
+      val typ = Types.Intersection(funcTypes)
+
+      Terms.Piecewise(patternsWithBodies, typ)
     }
+  }
+
+  def callTerm(callee: Ast.ValueExpr, argument: Ast.ValueExpr): An[Terms.Call] = callee match {
+    // for a literal lambda or piecewise callee, resolve the argument first and use its type as the expected parameter
+    // type, e.g. in x @ #(...) the cases know the type of x
+    case lambda: Ast.Lambda => argumentFirstCallTerm(callee, argument)(lambdaTerm(lambda, _))
+    case piecewise: Ast.Piecewise => argumentFirstCallTerm(callee, argument)(piecewiseTerm(piecewise, _))
+    // ... otherwise resolve callee first as it should have type already and that will help resolve the argument (e.g. when literal lambda or piecewise is passed as an argument to a higher order function which is being called)
+    case _ => calleeFirstCallTerm(callee, argument)
+  }
+
+  def argumentFirstCallTerm(callee: Ast.ValueExpr, argument: Ast.ValueExpr)(
+    calleeTerm: Option[Types.Type] => An[Terms.ValueExpr]
+  ): An[Terms.Call] =
+    valueExprTerm(argument).flatMap { argumentTerm =>
+      calleeTerm(Some(argumentTerm.typ)).flatMap { calleeTerm =>
+        callResultType(calleeTerm, callee.pos, argumentTerm, argument.pos).map { resultType =>
+          Terms.Call(calleeTerm, argumentTerm, resultType)
+        }
+      }
+    }
+
+  def calleeFirstCallTerm(callee: Ast.ValueExpr, argument: Ast.ValueExpr): An[Terms.Call] =
+    valueExprTerm(callee).flatMap { calleeTerm =>
+      // the callee's parameter type helps to infer types of literal lambdas and piecewise functions in the argument
+      val expectedArgumentType = calleeTerm.typ match {
+        case f: Types.Func => Some(f.parameter)
+        case _ => None
+      }
+
+      valueExprTermExpecting(argument, expectedArgumentType).flatMap { argumentTerm =>
+        callResultType(calleeTerm, callee.pos, argumentTerm, argument.pos).map { resultType =>
+          Terms.Call(calleeTerm, argumentTerm, resultType)
+        }
+      }
+    }
+
+  def callResultType(calleeTerm: Terms.ValueExpr, calleePos: Pos, argumentTerm: Terms.ValueExpr, argumentPos: Pos): An[Types.Type] = {
+    lazy val cannotCall =
+      An.error(SourceMessage(calleePos, safe"Cannot call value of type `${Types.toSource(calleeTerm.typ)}`"))
+
+    calleeTerm.typ match {
+      case f: Types.Func => funcCallResultType(f, argumentTerm, argumentPos)
+      case Types.Intersection(ts) => ts.flatMap {
+        // TODO: is it ok that we just discard the intersection type members that are polymorphic functions. Check if parser already rejects them, if not we should probably give an error here instead of just ignoring them.
+        case f @ Types.Func(Nil, _, _) => Some(f)
+        case _ => None
+      } match {
+        case Nil => cannotCall
+        case funcs => intersectionCallResultType(funcs, argumentTerm, argumentPos)
+      }
+      // TODO make object callable if it has apply method?
+      case _ => cannotCall
+    }
+  }
+
+  def funcCallResultType(calleeFunc: Types.Func, argumentTerm: Terms.ValueExpr, argumentPos: Pos): An[Types.Type] = {
+    val Types.Func(_, inferredParameterType, inferredResultType) = calleeFunc.typeParams match {
+      case Nil => calleeFunc
+      case _ => inferFuncTypeArgs(calleeFunc, argumentTerm.typ)
+    }
+
+    TypeInterpreter.expectAssignable(argumentTerm.typ, inferredParameterType, argumentPos).map { case () =>
+      inferredResultType
+    }
+  }
+
+  def intersectionCallResultType(calleeFuncs: Seq[Types.Func], argumentTerm: Terms.ValueExpr, argumentPos: Pos): An[Types.Type] = {
+    val parameterUnion = Types.Union(calleeFuncs.map(_.parameter))
+
+    // TODO: narrow down the resultType based on which branches the argument is compatible with.
+    TypeInterpreter.expectAssignable(argumentTerm.typ, parameterUnion, argumentPos).map { case () =>
+      Types.Union(calleeFuncs.map(_.result))
+    }
+  }
 
   def inferFuncTypeArgs(polyFunc: Types.Func, argumentType: Types.Type): Types.Func = {
     val Types.Func(typeParams, parameterType, resultType) = polyFunc
@@ -65,62 +153,43 @@ case class ValueExprAnalyzerImpl(env: Env) {
     Types.Func(Nil, substituteParams(parameterType), substituteParams(resultType))
   }
 
-  def funcCall(calleeFunc: Types.Func, argument: Ast.ValueExpr): An[(Terms.ValueExpr, Types.Type)] = {
-    funcCallArgumentTerm(calleeFunc.parameter, argument).flatMap { argumentTerm =>
-      val Types.Func(_, inferredParameterType, inferredResultType) = calleeFunc.typeParams match {
-        case Nil => calleeFunc
-        case _ => inferFuncTypeArgs(calleeFunc, argumentTerm.typ)
-      }
-
-      TypeInterpreter.expectAssignable(argumentTerm.typ, inferredParameterType, argument.pos).map { case () =>
-        (argumentTerm, inferredResultType)
-      }
+  def valueExprTermExpecting(valueExpr: Ast.ValueExpr, expectedType: Option[Types.Type]): An[Terms.ValueExpr] =
+    (valueExpr, expectedType) match {
+      case (_, Some(Types.Alias(_, _, wrappedType))) => valueExprTermExpecting(valueExpr, Some(wrappedType))
+      case (l: Ast.Lambda, Some(Types.Func(Nil, p, _))) => lambdaTerm(l, Some(p))
+      case (pw: Ast.Piecewise, Some(Types.Func(Nil, p, _))) => piecewiseTerm(pw, Some(p))
+      case (Ast.Tuple(es, _), Some(Types.Tuple(expectedTypes))) if es.length == expectedTypes.length =>
+        tupleTerm(es, expectedTypes.map(Some(_)))
+      case (Ast.Record(fields, _), Some(Types.Record(expectedFieldTypes))) => recordTerm(fields, expectedFieldTypes)
+      case _ => valueExprTerm(valueExpr)
     }
-  }
 
-  def callTerm(callee: Ast.ValueExpr, argument: Ast.ValueExpr): An[Terms.Call] = callee match {
-    // TODO if calleeTerm is a literal piecewise or lambda, resolve argument first and use that to help infer types in the piecewise
-    case callee: Ast.Lambda => callTermX(callee, argument)
-    case callee: Ast.Piecewise => callTermX(callee, argument)
-    // ... otherwise resolve callee first as it should have type already and that will help resolve the argument (e.g. when literal lambda or piecewise is passed as an argument to a higher order function which is being called)
-    case _ => callTermX(callee, argument)
-  }
+  def tupleTerm(elements: Seq[Ast.ValueExpr], expectedTypes: Seq[Option[Types.Type]]): An[Terms.Tuple] =
+    An.seq(elements.zip(expectedTypes).map { case (e, expectedType) => valueExprTermExpecting(e, expectedType) }).map { terms =>
+      Terms.Tuple(terms, Types.Tuple(terms.map(_.typ)))
+    }
 
-  def callTermX(callee: Ast.ValueExpr, argument: Ast.ValueExpr): An[Terms.Call] = {
-    valueExprTerm(callee).flatMap { calleeTerm =>
-      lazy val cannotCall =
-        An.error(SourceMessage(callee.pos, safe"Cannot call value of type `${Types.toSource(calleeTerm.typ)}`"))
+  def recordTerm(fields: Seq[Ast.FieldDef], expectedFieldTypes: Namespace[Types.Type]): An[Terms.Record] =
+    An.step(fields)(Namespace.empty[Terms.Field]){ case (ns, Ast.FieldDef(name, typeExprOpt, body, pos)) =>
+      lazy val duplicateName = SourceMessage(pos, safe"Duplicate field name `$name`")
 
-      calleeTerm.typ match {
-        case f: Types.Func =>
-          funcCall(f, argument).map { case (argumentTerm, resultType) =>
-            Terms.Call(calleeTerm, argumentTerm, resultType)
-          }
-        case Types.Intersection(ts) => {
-          valueExprTerm(argument).flatMap { argumentTerm =>
-            ts.flatMap {
-              // TODO: is it ok that we just discard the intersection type members that are polymorphic functions. Check if parser already rejects them, if not we should probably give an error here instead of just ignoring them.
-              case f @ Types.Func(Nil, _, _) => Some(f)
-              case _ => None
-            } match {
-              case Nil => cannotCall
-              case funcs =>
-                val parameterUnion = Types.Union(funcs.map(_.parameter))
+      typeExprOpt.fold(An.result(Option.empty[(Types.Type, Pos)])) { typeExpr =>
+        TypeExprAnalyzer.typeExprType(env, typeExpr).map(typ => Some((typ, typeExpr.pos)))
+      }.flatMap { annotation =>
+        // the field's own type annotation takes precedence over the expected type
+        val expectedType = annotation.map(_._1).orElse(expectedFieldTypes.get(name))
 
-                // TODO: narrow down the resultType based on which branches the argument is compatible with.
-                TypeInterpreter.expectAssignable(argumentTerm.typ, parameterUnion, argument.pos).map { case () =>
-                  val resultType = Types.Union(funcs.map(_.result))
-                  Terms.Call(calleeTerm, argumentTerm, resultType)
-                }
-            }
+        valueExprTermExpecting(body, expectedType).flatMap { bodyTerm =>
+          annotation.fold(An.result(())) { case (typ, typePos) =>
+            TypeInterpreter.expectAssignable(bodyTerm.typ, typ, typePos)
+          }.flatMap { case () =>
+            An.fromSomeOrError(ns.add((name, Terms.Field(bodyTerm))), duplicateName)
           }
         }
-        // TODO make object callable if it has apply method?
-        case _ =>
-          cannotCall
       }
+    }.map { fields =>
+      Terms.Record(fields, Types.Record(fields.mapValues(_.body.typ)))
     }
-  }
 
   def valueExprTerm(valueExpr: Ast.ValueExpr): An[Terms.ValueExpr] = valueExpr match {
     case Ast.UnitLiteral(_) => An.result(Terms.UnitLiteral())
@@ -139,57 +208,20 @@ case class ValueExprAnalyzerImpl(env: Env) {
       analyzedParts.zip(namedNullaryType("String", pos)).map { case (parts, typ) =>
         Terms.StringLiteral(parts, typ)
       }
-    case Ast.Tuple(es, _) => An.seq(es.map(valueExprTerm)).map { terms =>
-      Terms.Tuple(terms, Types.Tuple(terms.map(_.typ)))
-    }
+    case Ast.Tuple(es, _) => tupleTerm(es, es.map(_ => None))
     case b: Ast.Block => BlockAnalyzer.regularBlockTerm(env, b)
     case Ast.NamedValue(name, pos) => namedValue(name, pos)
     case Ast.ValueAs(e, t, _) =>
-      // TODO: this does not actually change the type, just checks for assignability, is that ok?
-      valueExprTerm(e).zip(TypeExprAnalyzer.typeExprType(env, t)).flatMap { case (term, typ) =>
-        TypeInterpreter.expectAssignable(term.typ, typ, t.pos).map((_: Unit) => term)
-      }
-    case Ast.Record(fields, _) => {
-      An.step(fields)(Namespace.empty[Terms.Field]){ case (ns, Ast.FieldDef(name, typeExprOpt, body, pos)) =>
-        lazy val duplicateName = SourceMessage(pos, safe"Duplicate field name `$name`")
-
-        valueExprTerm(body).flatMap { bodyTerm =>
-          typeExprOpt.fold(An.result(())) { typExpr =>
-            TypeExprAnalyzer.typeExprType(env, typExpr).flatMap { typ =>
-              TypeInterpreter.expectAssignable(bodyTerm.typ, typ, typExpr.pos)
-            }
-          }.flatMap { case () =>
-            An.fromSomeOrError(ns.add((name, Terms.Field(bodyTerm))), duplicateName)
+      TypeExprAnalyzer.typeExprType(env, t).flatMap { typ =>
+        valueExprTermExpecting(e, Some(typ)).flatMap { term =>
+          TypeInterpreter.expectAssignable(term.typ, typ, t.pos).map { case () =>
+            Terms.ValueAs(term, typ)
           }
         }
-      }.map { fields =>
-        Terms.Record(fields, Types.Record(fields.mapValues(_.body.typ)))
       }
-    }
+    case Ast.Record(fields, _) => recordTerm(fields, Namespace.empty)
     case l: Ast.Lambda => lambdaTerm(l, None)
-    case Ast.Piecewise(pieces, _) => {
-      // TODO review and clean the code, extract?
-      // TODO exhaustiveness check
-      // TODO dead branch check
-      case class PieceState(pieces: Seq[((Terms.Pattern, Terms.ValueExpr), Types.Func)])
-      An.step(pieces)(PieceState(Nil)) { case (state, (pattern, body)) =>
-
-        PatternAnalyzer(env).walkAssignment(pattern, None).
-          flatMap { case (funcBodyEnv, parameterTerm) =>
-            ValueExprAnalyzerImpl(funcBodyEnv).valueExprTerm(body).map { bodyTerm =>
-              val typ = Types.Func(Nil, parameterTerm.typ, bodyTerm.typ)
-
-              state.copy(pieces = state.pieces ++ Seq(((parameterTerm, bodyTerm), typ)))
-            }
-          }
-
-      }.map { state =>
-        val (patternsWithBodies, funcTypes) = state.pieces.unzip
-        val typ = Types.Intersection(funcTypes)
-
-        Terms.Piecewise(patternsWithBodies, typ)
-      }
-    }
+    case p: Ast.Piecewise => piecewiseTerm(p, None)
     // FIXME Ast.NamedMember?
     case Ast.MemberSelection(obj, Ast.NamedValue(name, memberPos), _) =>
       valueExprTerm(obj).flatMap { objectTerm =>
