@@ -24,7 +24,8 @@ object JsAst {
   case class ArrayPattern(ps: Seq[Pattern]) extends Pattern
   case class ObjectLiteral(entries: Seq[(String, Expr)]) extends Expr
   case class Named(name: String) extends Expr
-  case object UnitPattern extends Pattern
+  // binds nothing: a hole in an array pattern, `()` as a parameter, just the expression in a Const
+  case object IgnoredPattern extends Pattern
   case class NamePattern(name: String) extends Pattern
 
   sealed trait ArrowFunc extends Expr
@@ -34,6 +35,7 @@ object JsAst {
   case class Iife(body: Seq[Content]) extends Expr
 
   case class Member(obj: Expr, memberName: String) extends Expr
+  case class Index(obj: Expr, index: Expr) extends Expr
   case class UnaryCall(target: Expr, argument: Expr) extends Expr
   case class BinaryOperation(a: Expr, operator: String, b: Expr) extends Expr
 

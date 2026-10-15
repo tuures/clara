@@ -1,0 +1,14 @@
+::opaque String
+
+::declare console: { log: String => () }
+
+// wildcards bind nothing, so several of them don't collide
+pair: (String, String) = ("first", "second")
+(_, _) = pair
+(_, second) = pair
+_ = console.log("evaluated")
+_ = console.log("evaluated again")
+ignore: String => String = _ => "ignored"
+console.log(second)
+console.log(ignore("x"))
+()

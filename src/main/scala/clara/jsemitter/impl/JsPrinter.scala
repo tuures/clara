@@ -32,8 +32,9 @@ object JsPrinterImpl {
     case ObjectLiteral(entries) => printObjectLiteral(entries)
     case Named(name) => name
     case UnaryArrowFunc(param, body) => printArrowFunc(param, body)
-    case Iife(body) => safe"(${printArrowFunc(UnitPattern, body)})()"
+    case Iife(body) => safe"(${printArrowFunc(IgnoredPattern, body)})()"
     case Member(obj, memberName) => safe"${printExpr(obj)}.$memberName"
+    case Index(obj, index) => safe"${printExpr(obj)}[${printExpr(index)}]"
     case UnaryCall(target, argument) => printCall(target, printExpr(argument))
     case BinaryOperation(a, operator, b) => printBinaryOperation(a, operator, b)
   }
@@ -79,7 +80,7 @@ object JsPrinterImpl {
 
   def printArrowFunc(param: Pattern, body: Seq[Content]): String = {
     val paramPrinted = param match {
-      case UnitPattern => "()"
+      case IgnoredPattern => "()"
       case _: ArrayPattern => safe"(${printPattern(param)})"
       case _ => printPattern(param)
     }
@@ -142,12 +143,12 @@ object JsPrinterImpl {
   }
 
   def printDefi(defi: Defi): String = defi match {
-    case Const(UnitPattern, expr) => printExpr(expr)
+    case Const(IgnoredPattern, expr) => printExpr(expr)
     case Const(target, expr) => safe"const ${printPattern(target)} = ${printExpr(expr)}"
   }
 
   def printPattern(pattern: Pattern): String = pattern match {
-    case UnitPattern => ""
+    case IgnoredPattern => ""
     case ArrayPattern(ps) => arraySyntax(ps.map(printPattern))
     case NamePattern(name) => name
   }

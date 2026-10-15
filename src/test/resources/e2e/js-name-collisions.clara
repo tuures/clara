@@ -1,0 +1,25 @@
+::opaque String
+::singleton True
+::singleton False
+::alias Boolean: True | False
+
+::declare console: { log: String => () }
+
+// Clara names that are JS reserved words or globals the emitted code uses
+class = "class"
+undefined = "undefined"
+globalThis = "globalThis"
+console.log(class)
+console.log(undefined)
+
+pair: (String, String) = (globalThis, "second")
+console.log(pair @ #(
+  (delete, _) => delete,
+))
+// the tuple check uses the global globalThis, not the Clara value above
+tagged: (Boolean, String) = (True, "tuple")
+console.log(tagged @ #(
+  (True, s) => s,
+  (False, _) => "false",
+))
+()

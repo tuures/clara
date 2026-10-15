@@ -98,12 +98,12 @@ class JsPrinterSpec extends BaseSpec {
 
   // Arrow functions
 
-  test("UnaryArrowFunc: UnitPattern single return uses implicit return") {
-    assert(printExpr(UnaryArrowFunc(UnitPattern, Seq(Return(NumberLiteral("1"))))) === "() =>\n  1")
+  test("UnaryArrowFunc: IgnoredPattern single return uses implicit return") {
+    assert(printExpr(UnaryArrowFunc(IgnoredPattern, Seq(Return(NumberLiteral("1"))))) === "() =>\n  1")
   }
 
-  test("UnaryArrowFunc: UnitPattern multi-statement body") {
-    assert(printExpr(UnaryArrowFunc(UnitPattern, Seq(Const(NamePattern("x"), NumberLiteral("1")), Return(Named("x"))))) ===
+  test("UnaryArrowFunc: IgnoredPattern multi-statement body") {
+    assert(printExpr(UnaryArrowFunc(IgnoredPattern, Seq(Const(NamePattern("x"), NumberLiteral("1")), Return(Named("x"))))) ===
       "() => {\n  const x = 1\n  return x\n}")
   }
 
@@ -214,14 +214,14 @@ class JsPrinterSpec extends BaseSpec {
       "const [a, b] = pair")
   }
 
-  test("Const with UnitPattern is not binding anything and just evaluates the expression") {
-    assert(printContent(Const(UnitPattern, Named("x"))) === "x")
+  test("Const with IgnoredPattern is not binding anything and just evaluates the expression") {
+    assert(printContent(Const(IgnoredPattern, Named("x"))) === "x")
   }
 
   // Patterns
 
-  test("UnitPattern") {
-    assert(printPattern(UnitPattern) === "")
+  test("IgnoredPattern") {
+    assert(printPattern(IgnoredPattern) === "")
   }
 
   test("NamePattern") {
@@ -232,8 +232,8 @@ class JsPrinterSpec extends BaseSpec {
     assert(printPattern(ArrayPattern(Seq(NamePattern("a"), NamePattern("b")))) === "[a, b]")
   }
 
-  test("ArrayPattern with UnitPattern element") {
-    assert(printPattern(ArrayPattern(Seq(UnitPattern, NamePattern("x")))) === "[, x]")
+  test("ArrayPattern with IgnoredPattern element") {
+    assert(printPattern(ArrayPattern(Seq(IgnoredPattern, NamePattern("x")))) === "[, x]")
   }
 
   // Module

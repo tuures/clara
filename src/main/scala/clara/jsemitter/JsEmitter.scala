@@ -29,13 +29,13 @@ object JsEmitter {
     case Terms.StringLiteral(parts, _) => emitStringLiteral(parts)
     case Terms.Tuple(es, _) => JsAst.ArrayLiteral(es.map(emitValueExpr))
     case Terms.Block(bcs, _) => emitBlock(bcs)
-    case Terms.NamedValue(name, _) => JsAst.Named(name)
+    case Terms.NamedValue(name, _) => JsAst.Named(NameMangler.valueName(name))
     case Terms.ValueAs(term, _) => emitValueExpr(term)
     case Terms.Record(fields, _) => JsAst.ObjectLiteral(fields.mapValues { case Terms.Field(body) =>
         emitValueExpr(body)
       }.entries)
     case Terms.Lambda(parameter, body, _) =>
-      JsAst.UnaryArrowFunc(emitParameters(parameter), Seq(JsAst.Return(emitValueExpr(body))))
+      JsAst.UnaryArrowFunc(emitBindingPattern(parameter), Seq(JsAst.Return(emitValueExpr(body))))
     case Terms.Piecewise(pieces, _) => emitPiecewise(pieces)
     case Terms.MemberSelection(obj, memberName, selectedMember, _) =>
       emitMemberSelection(obj, memberName, selectedMember)
@@ -81,59 +81,69 @@ object JsEmitter {
 
   def emitPiecewise(pieces: Seq[(Terms.Pattern, Terms.ValueExpr)]): JsAst.Expr = {
     val WrapperParamName = "$value"
-    def equals(v: JsAst.Expr) = JsAst.BinaryOperation(JsAst.Named(WrapperParamName), "===", v)
 
-    def emitPiecewiseStringEquals(parts: Seq[TermLiteral.StringPatternPart]) = {
-      val hasCaptures = parts.exists {
-        case _: TermLiteral.StringCapturePart => true
-        case _ => false
-      }
+    val cases = pieces.map { case (pattern, body) => (emitCaseMatch(pattern, JsAst.Named(WrapperParamName)), body) }
+    // the first case without conditions matches every value, cases after it are unreachable
+    val (conditionalCases, unconditionalAndAfter) = cases.span { case (caseMatch, _) => caseMatch.conditions.nonEmpty }
 
-      if (hasCaptures) {
-        ??? // TODO: emit regex-based pattern matching for string captures
-      } else {
-        equals(JsAst.StringLiteral(parts.map {
-          case TermLiteral.StringPlainPart(value) => JsAst.StringPlainPart(value)
-          case TermLiteral.StringEscapePart(escapes) => JsAst.StringEscapePart(escapes)
-          case TermLiteral.StringNamedConstantPart(Terms.NamedConstantPattern(namedValue)) =>
-            JsAst.StringExpressionPart(emitValueExpr(namedValue))
-          case capture: TermLiteral.StringCapturePart => illegal(capture)
-        }))
-      }
+    def caseBody(caseMatch: CaseMatch, body: Terms.ValueExpr): Seq[JsAst.Content] =
+      caseMatch.bindings.map { case (name, expr) => JsAst.Const(JsAst.NamePattern(NameMangler.valueName(name)), expr) } :+
+        JsAst.Return(emitValueExpr(body))
+
+    val ifBranches = conditionalCases.map { case (caseMatch, body) =>
+      JsAst.IfBranch(caseMatch.conditions.reduceLeft(JsAst.BinaryOperation(_, "&&", _)), caseBody(caseMatch, body))
     }
+    val elseBranch = unconditionalAndAfter.headOption.map { case (caseMatch, body) => caseBody(caseMatch, body) }.getOrElse(Nil)
 
-    val (beforeWildcard, wildcardAndAfter) = pieces.span { case (pattern, _) =>
-      !pattern.isInstanceOf[Terms.WildcardPattern]
+    val funcBody = if (ifBranches.isEmpty) elseBranch else Seq(JsAst.IfElse(ifBranches, elseBranch))
+
+    JsAst.UnaryArrowFunc(JsAst.NamePattern(WrapperParamName), funcBody)
+  }
+
+  case class CaseMatch(conditions: Seq[JsAst.Expr], bindings: Seq[(String, JsAst.Expr)])
+
+  def emitCaseMatch(pattern: Terms.Pattern, value: JsAst.Expr): CaseMatch = {
+    def equals(expected: JsAst.Expr) = CaseMatch(Seq(JsAst.BinaryOperation(value, "===", expected)), Nil)
+
+    pattern match {
+      case Terms.WildcardPattern(_) => CaseMatch(Nil, Nil)
+      case Terms.UnitPattern() => equals(JsAst.Undefined)
+      case Terms.IntegerPattern(literal, _) => equals(emitIntegerLiteral(literal))
+      case Terms.FloatPattern(TermLiteral.Float(whole, fraction), _) => equals(emitFloatLiteral(whole, fraction))
+      // a single capture matches every string, the analyzer rejects it where it would need a runtime type test
+      case Terms.StringPattern(Seq(TermLiteral.StringCapturePart(Terms.CapturePattern(name, _))), _) =>
+        CaseMatch(Nil, Seq(name -> value))
+      case Terms.StringPattern(parts, _) => equals(JsAst.StringLiteral(parts.map {
+        case TermLiteral.StringPlainPart(plain) => JsAst.StringPlainPart(plain)
+        case TermLiteral.StringEscapePart(escapes) => JsAst.StringEscapePart(escapes)
+        case TermLiteral.StringNamedConstantPart(Terms.NamedConstantPattern(namedValue)) =>
+          JsAst.StringExpressionPart(emitValueExpr(namedValue))
+        case _: TermLiteral.StringCapturePart => ??? // TODO: string captures need runtime matching
+      }))
+      case Terms.TuplePattern(ps, _) =>
+        val elements = ps.zipWithIndex.map { case (p, i) =>
+          emitCaseMatch(p, JsAst.Index(value, JsAst.NumberLiteral(i.toString)))
+        }
+        // TODO skip the array checks when the matched type is known to be a tuple of this length
+        val isTupleOfLength = Seq(
+          JsAst.UnaryCall(JsAst.Member(JsAst.Member(JsAst.Named("globalThis"), "Array"), "isArray"), value),
+          JsAst.BinaryOperation(JsAst.Member(value, "length"), "===", JsAst.NumberLiteral(ps.length.toString)),
+        )
+        CaseMatch(isTupleOfLength ++ elements.flatMap(_.conditions), elements.flatMap(_.bindings))
+      case Terms.NamedConstantPattern(namedValue) => equals(emitValueExpr(namedValue))
+      case Terms.CapturePattern(name, _) => CaseMatch(Nil, Seq(name -> value))
+      // the analyzer rejects type patterns in cases where they would need a runtime type test
+      case Terms.PatternAs(p, _) => emitCaseMatch(p, value)
     }
-
-    val ifBranches = beforeWildcard.map { case (pattern, body) =>
-      val predicate: JsAst.Expr = pattern match {
-        case Terms.WildcardPattern(_) => illegal(pattern)
-        case Terms.UnitPattern() => equals(JsAst.Undefined)
-        case Terms.IntegerPattern(value, _) => equals(emitIntegerLiteral(value))
-        case Terms.FloatPattern(TermLiteral.Float(whole, fraction), _) => equals(emitFloatLiteral(whole, fraction))
-        case Terms.StringPattern(parts, _) => emitPiecewiseStringEquals(parts)
-        case Terms.TuplePattern(_, _) => ???
-        case Terms.CapturePattern(_, _) => ???
-        case Terms.NamedConstantPattern(namedValue) => equals(emitValueExpr(namedValue))
-      }
-      JsAst.IfBranch(predicate, Seq(JsAst.Return(emitValueExpr(body))))
-    }
-
-    val elseBranch = wildcardAndAfter.headOption.map { case (_, body) =>
-      Seq(JsAst.Return(emitValueExpr(body)))
-    }.getOrElse(Nil)
-
-    JsAst.UnaryArrowFunc(JsAst.NamePattern(WrapperParamName), Seq(JsAst.IfElse(ifBranches, elseBranch)))
   }
 
   def emitBlockContent(blockContent: Terms.BlockContent): Option[JsAst.Content] = blockContent match {
     case e: Terms.ValueExpr => Some(emitValueExpr(e))
     case _: Terms.ValueDecl => None
-    case Terms.ValueDef(target, e) => Some(JsAst.Const(emitValueDefTarget(target), emitValueExpr(e)))
+    case Terms.ValueDef(target, e) => Some(JsAst.Const(emitBindingPattern(target), emitValueExpr(e)))
     case Terms.TypeDef(con) => con match {
       case TypeCons.SingletonTypeCon(name, _, _) => Some(JsAst.Const(
-        JsAst.NamePattern(name),
+        JsAst.NamePattern(NameMangler.valueName(name)),
         JsAst.StringLiteral(name) // TODO object? symbol?
       ))
       case _ => None
@@ -143,20 +153,9 @@ object JsEmitter {
       Some(emitMethodDefSection(targetCon, selfPattern, methodDefs))
   }
 
-  def emitValueDefTarget(target: Terms.Pattern): JsAst.Pattern = target match {
-    case Terms.WildcardPattern(_) => JsAst.NamePattern("_")
-    case Terms.UnitPattern() => JsAst.UnitPattern
-    case Terms.IntegerPattern(_, _) => ???
-    case Terms.FloatPattern(_, _) => ???
-    case Terms.StringPattern(_, _) => ???
-    case Terms.TuplePattern(ps, _) => JsAst.ArrayPattern(ps.map(emitValueDefTarget))
-    case Terms.CapturePattern(name, _) => JsAst.NamePattern(name)
-    case Terms.NamedConstantPattern(_) => ???
-  }
-
   def emitMethodDefSection(targetCon: TypeCons.TypeCon, selfPattern: Terms.Pattern, methodDefs: Namespace[Terms.MethodDef]) = {
     val entries = methodDefs.mapValues { case Terms.MethodDef(attributes, body) =>
-      JsAst.UnaryArrowFunc(emitParameters(selfPattern), Seq(JsAst.Return(emitValueExpr(body))))
+      JsAst.UnaryArrowFunc(emitBindingPattern(selfPattern), Seq(JsAst.Return(emitValueExpr(body))))
     }.entries
 
     JsAst.Const(
@@ -196,18 +195,35 @@ object JsEmitter {
   def emitCall(callee: Terms.ValueExpr, argument: Terms.ValueExpr) =
     JsAst.UnaryCall(emitValueExpr(callee), emitValueExpr(argument))
 
-  def emitParameters(pattern: Terms.Pattern): JsAst.Pattern = pattern match {
-    case Terms.WildcardPattern(_) => ???
-    case Terms.UnitPattern() => JsAst.UnitPattern
-    case Terms.IntegerPattern(_, _) => ???
-    case Terms.FloatPattern(_, _) => ???
-    case Terms.StringPattern(_, _) => ???
-    case Terms.TuplePattern(ps, _) => JsAst.ArrayPattern(ps.map(emitParameters))
-    case Terms.CapturePattern(name, _) => JsAst.NamePattern(name)
-    case Terms.NamedConstantPattern(_) => ???
+  def emitBindingPattern(pattern: Terms.Pattern): JsAst.Pattern = pattern match {
+    case Terms.WildcardPattern(_) => JsAst.IgnoredPattern
+    case Terms.UnitPattern() => JsAst.IgnoredPattern
+    // the analyzer rejects literal patterns outside the cases of a piecewise function
+    case _: Terms.IntegerPattern => illegal(pattern)
+    case _: Terms.FloatPattern => illegal(pattern)
+    case Terms.StringPattern(Seq(TermLiteral.StringCapturePart(Terms.CapturePattern(name, _))), _) =>
+      JsAst.NamePattern(NameMangler.valueName(name))
+    case _: Terms.StringPattern => illegal(pattern)
+    case Terms.TuplePattern(ps, _) => JsAst.ArrayPattern(ps.map(emitBindingPattern))
+    case Terms.CapturePattern(name, _) => JsAst.NamePattern(NameMangler.valueName(name))
+    case Terms.NamedConstantPattern(_) => JsAst.IgnoredPattern
+    case Terms.PatternAs(p, _) => emitBindingPattern(p)
   }
+
 }
 
 object NameMangler {
+  // Clara names can't contain `$`, so names starting with `$` are free for the compiler, and a `$` suffix keeps a Clara
+  // name from colliding with JS reserved words or the globals the emitted code uses (only `globalThis`)
+  val ReservedNames = Set(
+    "await", "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete", "do", "else",
+    "enum", "export", "extends", "false", "finally", "for", "function", "if", "implements", "import", "in",
+    "instanceof", "interface", "let", "new", "null", "package", "private", "protected", "public", "return", "static",
+    "super", "switch", "this", "throw", "true", "try", "typeof", "var", "void", "while", "with", "yield",
+    "arguments", "eval", "undefined", "globalThis",
+  )
+
+  def valueName(name: String) = if (ReservedNames.contains(name)) safe"$name$$" else name
+
   def methodsCompanionName(targetCon: TypeCons.TypeCon) = safe"${targetCon.name}$$Methods"
 }

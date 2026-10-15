@@ -53,6 +53,8 @@ object Terms {
 
   case class ValueAs(term: ValueExpr, typ: Type) extends ValueExpr
 
+  case class PatternAs(pattern: Pattern, typ: Type) extends Pattern
+
   case class Field(body: ValueExpr)
   case class Record(fields: Namespace[Field], typ: Types.Record) extends ValueExpr
   // TODO case class RecordPattern(fields: Namespace[Pattern], typ: Types.Record) extends Pattern

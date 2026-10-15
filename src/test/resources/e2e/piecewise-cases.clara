@@ -15,4 +15,13 @@ answer = b @ #(
   False => "unreachable",
 )
 console.log(answer)
+
+pair: (Boolean, String) = (True, "first")
+described = pair @ #(
+  (True, s) => s,
+  (False, _) => "second",
+)
+console.log(described)
+
+console.log("world" @ #(name => "hello $(name)"))
 ()

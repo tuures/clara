@@ -54,13 +54,13 @@ case class PatternAnalyzerImpl(env: Env, refutable: Boolean) {
     case Ast.CapturePattern(name, pos) => capture(name, fromType, pos)
     case Ast.GuardPattern(p, guard, pos) => ???
     case Ast.DefaultValuePattern(p, default, pos) => ???
-    // TODO: this actually changes the type of the nested pattern to targetType even if it's wider than fromType
-    // in ValueExpr the ValueAs does not change the type. This should be made consistent either way.
     case Ast.PatternAs(p, t, pos) =>
       TypeExprAnalyzer.typeExprType(env, t).flatMap { targetType =>
         // a case quotes the whole pattern, an assignment points at the type annotation the value doesn't fit
         matchType(fromType, targetType, if (refutable) pos else t.pos).flatMap { typ =>
-          walk(p, Some(typ))
+          walk(p, Some(typ)).map { case (nextEnv, patternTerm) =>
+            (nextEnv, Terms.PatternAs(patternTerm, typ))
+          }
         }
       }
     case Ast.RecordPattern(fields, pos) => ???
@@ -163,6 +163,20 @@ object PatternAnalyzer {
       case _ => Types.Bottom
     }
     case Terms.CapturePattern(_, typ) => typ
+    case Terms.PatternAs(p, _) => coveredType(p)
+  }
+
+  // Whether matching the pattern against a value of matchedType needs a runtime type test, i.e. it has a type
+  // pattern (p: T) whose type T narrower than the type of the value it's matched against
+  def needsTypeTest(pattern: Terms.Pattern, matchedType: Types.Type): Boolean = pattern match {
+    case Terms.TuplePattern(ps, _) =>
+      ps.zip(Types.tupleElementTypes(matchedType, ps.length)).exists { case (p, typ) => needsTypeTest(p, typ) }
+    case Terms.PatternAs(p, typ) => !Types.isAssignable(matchedType, typ) || needsTypeTest(p, Types.narrow(matchedType, typ))
+    // a single capture matches every string, so it's a test for strings
+    case Terms.StringPattern(Seq(_: TermLiteral.StringCapturePart), typ) => !Types.isAssignable(matchedType, typ)
+    // tuples are tested by the emitter, literals and named constants are compared by value
+    case _: Terms.WildcardPattern | _: Terms.UnitPattern | _: Terms.IntegerPattern | _: Terms.FloatPattern |
+      _: Terms.StringPattern | _: Terms.NamedConstantPattern | _: Terms.CapturePattern => false
   }
 
   def quotedPattern(pos: Pos): String = pos.sourceText.fold("Pattern")(text => safe"Pattern `$text`")

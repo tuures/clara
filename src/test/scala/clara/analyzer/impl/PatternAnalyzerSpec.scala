@@ -239,7 +239,7 @@ class PatternAnalyzerSpec extends BaseSpec {
 
     val result = PatternAnalyzer.walkAssignment(testEnv, pattern, None)
 
-    assertAnSuccess(result, (testEnv, Terms.WildcardPattern(AnalyzerTestPrelude.intType)))
+    assertAnSuccess(result, (testEnv, Terms.PatternAs(Terms.WildcardPattern(AnalyzerTestPrelude.intType), AnalyzerTestPrelude.intType)))
   }
 
   test("PatternAs should fail when source type is incompatible with target type") {

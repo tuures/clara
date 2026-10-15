@@ -255,7 +255,7 @@ class ValueExprAnalyzerSpec extends BaseSpec {
     assert(result.value.left.value.map(_.message).head.startsWith("Cases of the piecewise function don't match every value"))
   }
 
-  test("a type pattern case covers the type, e.g. n: Int and s: String cover Int | String") {
+  test("type pattern cases that would need a runtime type test are rejected for now") {
     val intTypeExpr = Ast.NamedType(Ast.NameWithPos("Int"), Nil)
     val stringTypeExpr = Ast.NamedType(Ast.NameWithPos("String"), Nil)
     val result = matchX(envWith("x", intOrString),
@@ -263,8 +263,30 @@ class ValueExprAnalyzerSpec extends BaseSpec {
       unitCase(Ast.PatternAs(Ast.CapturePattern("s"), stringTypeExpr)),
     )
 
+    assert(result.value.left.value.map(_.message) === Seq(
+      "Pattern needs to test the type of the value at runtime, which isn't supported yet",
+      "Pattern needs to test the type of the value at runtime, which isn't supported yet",
+    ))
+  }
+
+  test("a type pattern covers its type when it needs no runtime type test, e.g. (n: Int, True) and (n: Int, False)") {
+    val intTypeExpr = Ast.NamedType(Ast.NameWithPos("Int"), Nil)
+    val result = matchX(booleanEnvWith("x", Types.Tuple(Seq(intType, booleanType))),
+      unitCase(Ast.TuplePattern(Seq(Ast.PatternAs(Ast.CapturePattern("n"), intTypeExpr), Ast.NamedConstantPattern("True")))),
+      unitCase(Ast.TuplePattern(Seq(Ast.PatternAs(Ast.CapturePattern("n"), intTypeExpr), Ast.NamedConstantPattern("False")))),
+    )
+
     assert(result.value.isRight)
     assert(result.log.warnings.isEmpty)
+  }
+
+  test("a single capture string pattern on Int | String would need a runtime type test") {
+    val result = matchX(envWith("x", intOrString),
+      unitCase(Ast.StringPattern(Seq(AstLiteral.StringCapturePart(Ast.CapturePattern("s"))))),
+      unitCase(Ast.WildcardPattern()),
+    )
+
+    assert(result.value.left.value.map(_.message) === Seq("Pattern needs to test the type of the value at runtime, which isn't supported yet"))
   }
 
   test("#(1 => ()) without an expected type is not exhaustive for the Int it can be called with") {

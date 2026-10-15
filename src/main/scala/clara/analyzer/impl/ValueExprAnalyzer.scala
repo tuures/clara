@@ -80,10 +80,20 @@ case class ValueExprAnalyzerImpl(env: Env) {
 
     val matched = matchedType.getOrElse(Types.Union(patterns.map(_.typ)))
 
+    // TODO remove when type patterns get runtime type tests (see construct patterns in TODO.md)
+    val typeTestCases = patterns.zip(piecewise.pieces).collect {
+      case (pattern, (astPattern, _)) if PatternAnalyzer.needsTypeTest(pattern, matched) =>
+        An.error(SourceMessage(astPattern.pos,
+          safe"${PatternAnalyzer.quotedPattern(astPattern.pos)} needs to test the type of the value at runtime, which isn't supported yet"
+        ))
+    }
+
     // TODO: show which values/patterns are not covered, i.e. which type/pattern is left uncovered
-    An.errorIf(!Types.isAssignable(matched, Types.Union(covered)))(SourceMessage(piecewise.pos,
+    val exhaustive = An.errorIf(!Types.isAssignable(matched, Types.Union(covered)))(SourceMessage(piecewise.pos,
       safe"Cases of the piecewise function don't match every value of type `${Types.toSource(matched)}`, e.g. add a last case `_ => ...`"
-    )).tellWarnings(unreachableCases)
+    ))
+
+    An.seq(typeTestCases :+ exhaustive).map(_ => ()).tellWarnings(unreachableCases)
   }
 
   def callTerm(callee: Ast.ValueExpr, argument: Ast.ValueExpr): An[Terms.Call] = callee match {
