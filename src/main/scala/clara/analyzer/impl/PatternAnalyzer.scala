@@ -120,7 +120,7 @@ case class PatternAnalyzerImpl(env: Env, refutable: Boolean) {
     case None => An.result(patternType)
     case Some(fromType) if refutable =>
       if (Types.disjoint(fromType, patternType)) {
-        val pattern = quotedPattern(pos)
+        val pattern = PatternAnalyzer.quotedPattern(pos)
         An.error(SourceMessage(pos,
           safe"$pattern of type `${Types.toSource(patternType)}` can never match a value of type `${Types.toSource(fromType)}`"
         ))
@@ -134,9 +134,7 @@ case class PatternAnalyzerImpl(env: Env, refutable: Boolean) {
   // TODO revisit if literal types get added
   def expectRefutable(pos: Pos): An[Unit] =
     if (refutable) An.result(())
-    else An.error(SourceMessage(pos, safe"${quotedPattern(pos)} can fail to match, literal patterns can only be used in the cases of a piecewise function"))
-
-  def quotedPattern(pos: Pos): String = pos.sourceText.fold("Pattern")(text => safe"Pattern `$text`")
+    else An.error(SourceMessage(pos, safe"${PatternAnalyzer.quotedPattern(pos)} can fail to match, literal patterns can only be used in the cases of a piecewise function"))
 
 }
 
@@ -146,4 +144,26 @@ object PatternAnalyzer {
 
   def walkCase(env: Env, casePattern: Ast.Pattern, fromType: Option[Types.Type]): An[(Env, Terms.Pattern)] =
     PatternAnalyzerImpl(env, refutable = true).walk(casePattern, fromType)
+
+  // The type whose every value the pattern matches, e.g. 1 has type Int but doesn't cover it
+  def coveredType(pattern: Terms.Pattern): Types.Type = pattern match {
+    case Terms.WildcardPattern(typ) => typ
+    case Terms.UnitPattern() => Types.Uni
+    case _: Terms.IntegerPattern | _: Terms.FloatPattern => Types.Bottom
+    // a single capture matches every string
+    case Terms.StringPattern(Seq(_: TermLiteral.StringCapturePart), typ) => typ
+    case _: Terms.StringPattern => Types.Bottom
+    case Terms.TuplePattern(ps, _) => ps.map(coveredType) match {
+      case covered if covered.contains(Types.Bottom) => Types.Bottom
+      case covered => Types.Tuple(covered)
+    }
+    case Terms.NamedConstantPattern(term) => term.typ match {
+      // types with a single value
+      case typ @ (_: Types.Singleton | Types.Uni) => typ
+      case _ => Types.Bottom
+    }
+    case Terms.CapturePattern(_, typ) => typ
+  }
+
+  def quotedPattern(pos: Pos): String = pos.sourceText.fold("Pattern")(text => safe"Pattern `$text`")
 }

@@ -1,7 +1,7 @@
 package clara.analyzer.impl
 
 import clara.ast.{Ast, AstLiteral, NoPos}
-import clara.asg.{Terms, Types}
+import clara.asg.{Terms, TypeCons, Types}
 import clara.testutil.{AnalyzerTestPrelude, BaseSpec}
 
 class ValueExprAnalyzerSpec extends BaseSpec {
@@ -86,10 +86,11 @@ class ValueExprAnalyzerSpec extends BaseSpec {
     assert(result.value.value.typ === intOrString)
   }
 
-  test("x @ #(1 => (), \"a\" => ()) accepts refutable cases matching parts of x's type") {
+  test("x @ #(1 => (), \"a\" => (), _ => ()) accepts refutable cases matching parts of x's type") {
     val piecewise = Ast.Piecewise(Seq(
       (Ast.IntegerPattern(AstLiteral.IntegerDec("1")), Ast.UnitLiteral()),
       (Ast.StringPattern(Seq(AstLiteral.StringPlainPart("a"))), Ast.UnitLiteral()),
+      (Ast.WildcardPattern(), Ast.UnitLiteral()),
     ))
 
     val result = ValueExprAnalyzer.valueExprTerm(envWith("x", intOrString), Ast.Pipe(Ast.NamedValue("x"), piecewise))
@@ -177,6 +178,99 @@ class ValueExprAnalyzerSpec extends BaseSpec {
     val result = ValueExprAnalyzer.valueExprTerm(AnalyzerTestPrelude.env, valueAs)
 
     assert(result.value.value.typ === Types.Func(intType, intType))
+  }
+
+  // exhaustiveness and reachability of the cases of #()
+
+  private val trueType = Types.Singleton(TypeCons.SingletonTypeCon("True", NoPos))
+  private val falseType = Types.Singleton(TypeCons.SingletonTypeCon("False", NoPos))
+  private val booleanType = Types.Union(Seq(trueType, falseType))
+  private def booleanEnvWith(name: String, typ: Types.Type) = envWith(name, typ).
+    addOrShadowValue("True", trueType, NoPos).value.value.
+    addOrShadowValue("False", falseType, NoPos).value.value
+  private def unitCase(pattern: Ast.Pattern) = (pattern, Ast.UnitLiteral())
+  private def int(value: String) = Ast.IntegerPattern(AstLiteral.IntegerDec(value))
+  private def matchX(env: Env, cases: (Ast.Pattern, Ast.ValueExpr)*) =
+    ValueExprAnalyzer.valueExprTerm(env, Ast.Pipe(Ast.NamedValue("x"), Ast.Piecewise(cases)))
+
+  test("cases matching every singleton of a union are exhaustive") {
+    val result = matchX(booleanEnvWith("x", booleanType),
+      unitCase(Ast.NamedConstantPattern("True")), unitCase(Ast.NamedConstantPattern("False")))
+
+    assert(result.value.isRight)
+    assert(result.log.warnings.isEmpty)
+  }
+
+  test("cases missing a singleton of a union are not exhaustive") {
+    val result = matchX(booleanEnvWith("x", booleanType), unitCase(Ast.NamedConstantPattern("True")))
+
+    assert(result.value.left.value.map(_.message) === Seq(
+      "Cases of the piecewise function don't match every value of type `True | False`, e.g. add a last case `_ => ...`"
+    ))
+  }
+
+  test("literal cases never cover their whole type") {
+    val result = matchX(envWith("x", intType), unitCase(int("1")), unitCase(int("2")))
+
+    assert(result.value.left.value.map(_.message).head.startsWith("Cases of the piecewise function don't match every value of type `Int`"))
+  }
+
+  test("a capture after literal cases makes the cases exhaustive") {
+    val result = matchX(envWith("x", intType), unitCase(int("1")), unitCase(Ast.CapturePattern("n")))
+
+    assert(result.value.isRight)
+    assert(result.log.warnings.isEmpty)
+  }
+
+  test("a case after a capture is unreachable") {
+    val result = matchX(envWith("x", intType), unitCase(Ast.CapturePattern("n")), unitCase(int("1")))
+
+    assert(result.value.isRight)
+    assert(result.log.warnings.map(_.message) === Seq("Pattern is unreachable, earlier cases already match all its values"))
+  }
+
+  test("a literal case after the same literal is still reachable since literals cover nothing") {
+    val result = matchX(envWith("x", intType), unitCase(int("1")), unitCase(int("1")), unitCase(Ast.WildcardPattern()))
+
+    // FIXME without literal types the duplicate literal can't be detected as unreachable
+    assert(result.log.warnings.isEmpty)
+  }
+
+  test("tuple cases are exhaustive when together they cover every combination") {
+    val result = matchX(booleanEnvWith("x", Types.Tuple(Seq(booleanType, intType))),
+      unitCase(Ast.TuplePattern(Seq(Ast.NamedConstantPattern("True"), Ast.CapturePattern("n")))),
+      unitCase(Ast.TuplePattern(Seq(Ast.NamedConstantPattern("False"), Ast.CapturePattern("n")))),
+    )
+
+    assert(result.value.isRight)
+    assert(result.log.warnings.isEmpty)
+  }
+
+  test("a tuple case with a literal element covers nothing") {
+    val result = matchX(booleanEnvWith("x", Types.Tuple(Seq(booleanType, intType))),
+      unitCase(Ast.TuplePattern(Seq(Ast.NamedConstantPattern("True"), int("1")))),
+      unitCase(Ast.TuplePattern(Seq(Ast.NamedConstantPattern("False"), Ast.CapturePattern("n")))),
+    )
+
+    assert(result.value.left.value.map(_.message).head.startsWith("Cases of the piecewise function don't match every value"))
+  }
+
+  test("a type pattern case covers the type, e.g. n: Int and s: String cover Int | String") {
+    val intTypeExpr = Ast.NamedType(Ast.NameWithPos("Int"), Nil)
+    val stringTypeExpr = Ast.NamedType(Ast.NameWithPos("String"), Nil)
+    val result = matchX(envWith("x", intOrString),
+      unitCase(Ast.PatternAs(Ast.CapturePattern("n"), intTypeExpr)),
+      unitCase(Ast.PatternAs(Ast.CapturePattern("s"), stringTypeExpr)),
+    )
+
+    assert(result.value.isRight)
+    assert(result.log.warnings.isEmpty)
+  }
+
+  test("#(1 => ()) without an expected type is not exhaustive for the Int it can be called with") {
+    val result = ValueExprAnalyzer.valueExprTerm(AnalyzerTestPrelude.env, Ast.Piecewise(Seq(unitCase(int("1")))))
+
+    assert(result.value.left.value.map(_.message).head.startsWith("Cases of the piecewise function don't match every value of type `Int`"))
   }
 
   test("#() with one case is typed as a function, not an intersection") {

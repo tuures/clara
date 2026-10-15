@@ -1,0 +1,18 @@
+::opaque String
+::singleton True
+::singleton False
+::alias Boolean: True | False
+
+::declare console: { log: String => () }
+
+yesNo = #(True => "yes", False => "no")
+console.log(True @ yesNo)
+
+b: Boolean = False
+answer = b @ #(
+  True => "yes",
+  _ => "no",
+  False => "unreachable",
+)
+console.log(answer)
+()

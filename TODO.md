@@ -8,6 +8,7 @@
 - matched type flows into `#()`/lambda callees (`x @ #(...)`) and into `#()`/lambdas nested in tuple/record arguments and annotated record fields
 - "can never match" errors quote the pattern's source (`Pos.sourceText`)
 - literal patterns (`1`, `1.5`, `"a"`) are errors in assignments and function parameters since they can fail to match (no literal types, revisit if added); a string pattern of a single capture stays allowed
+- `#()` exhaustiveness (error) and reachability (warning) using the type each pattern covers (`PatternAnalyzer.coveredType`: literals cover nothing, captures/wildcards/type patterns their type, singletons themselves, tuples only if every element covers); without an expected type the matched type is what the cases can match together
 - expression `e: T` is a declaration like `x: T = e`: the value's type becomes `T` (`Terms.ValueAs`) and `T` is the expected type for `e` (e.g. `(n => n): Int => Int`)
 
 # Roadmap (namespacing / enum / typeclasses)
@@ -28,17 +29,18 @@ Each step is a vertical slice (parser -> analyzer -> emitter) validated by an e2
 
 ## Pattern matching (current focus, in order)
 
-1. `#()` exhaustiveness and reachability: each pattern needs the type it fully covers besides its narrowed type (literals cover nothing, captures/wildcards everything, singletons their type, tuples only if all elements cover); exhaustive: matched <: covered1 | ... | coveredN, case i reachable: !(narrowed_i <: covered1 | ... | covered(i-1))
+1. emitter: capture and tuple patterns in piecewise functions (`???` in JsEmitter.emitPiecewise, string captures need regex matching); cases after the first wildcard are dropped, fine as they're unreachable
 2. construct pattern (`Some a`) + pattern validity (Check 1 in plans/enum2.md: the runtime test must tell constructors apart); type patterns in cases (`n: T`) need no runtime test when the matched type is already assignable to `T`, otherwise `T` must be testable at runtime (not functions or type params)
 3. record patterns: record rules in `disjoint` (exhaustive `isDisjointFromRecords`); runtime test checks own properties (`Object.hasOwn`), plus object/array/`$type` checks only when the remaining matched type needs them
 4. or-patterns, guard patterns, `??` default patterns (`{foo: String ?? "x"}` accepts `{} | {foo: String}`)
-5. name missing cases in non-exhaustive errors: needs a union expansion whose results can be shown (`expandUnions` results must not be shown)
+5. name missing cases in non-exhaustive errors: needs a union expansion whose results can be shown (`expandUnions` results must not be shown); alternatively compute the remaining type step by step (`matched -- covered1 -- covered2 ...`, needs `--` difference types): what remains after the last case is what's missing (e.g. `Some<Blue>`), and reachability becomes "case overlaps the remaining type", cheaper than checking against the growing union of earlier cases when the remaining type simplifies (unions of singletons/constructors)
 
 ## Pattern matching follow-ups
 
 - runtime representation: rename constructor tag `$` to `$type` and boxed payload `value` to `$value` so no Clara field name can collide
 - phantom type params of tagged/boxed: error until variance annotations exist, then infer variance per type con (see TODO in Types.AssignableImpl)
 - polymorphic callee: the expected argument type contains the callee's type params, e.g. a lambda argument's parameter is typed `A` (see FIXME in Types.findSubstitutions)
+- duplicate literal cases (`#(1 => ..., 1 => ...)`) aren't reported as unreachable since literals cover nothing (would need literal types)
 - later: `e :< T` checks that `e` is assignable to `T` but keeps `e`'s own type (like TypeScript's `satisfies`)
 - TypeInterpreter warnings: unused import, non-exhaustive match in aliasWrappedMethodTargets
 - Option without boxing (JS interop): `None` as tagged host undefined/null, opaque types declare their runtime test via target annotations, `A -- B` difference types for the `Some` payload

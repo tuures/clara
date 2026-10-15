@@ -41,9 +41,6 @@ case class ValueExprAnalyzerImpl(env: Env) {
   }
 
   def piecewiseTerm(piecewise: Ast.Piecewise, expectedParameterType: Option[Types.Type]): An[Terms.Piecewise] = {
-    // TODO review and clean the code, extract?
-    // TODO exhaustiveness check
-    // TODO dead branch check
     case class PieceState(pieces: Seq[((Terms.Pattern, Terms.ValueExpr), Types.Func)])
     An.step(piecewise.pieces)(PieceState(Nil)) { case (state, (pattern, body)) =>
 
@@ -56,12 +53,37 @@ case class ValueExprAnalyzerImpl(env: Env) {
           }
         }
 
-    }.map { state =>
+    }.flatMap { state =>
       val (patternsWithBodies, funcTypes) = state.pieces.unzip
       val typ = Types.Intersection(funcTypes)
 
-      Terms.Piecewise(patternsWithBodies, typ)
+      casesCheck(piecewise, patternsWithBodies.map(_._1), expectedParameterType).map { case () =>
+        Terms.Piecewise(patternsWithBodies, typ)
+      }
     }
+  }
+
+  // Every value of the matched type has to be covered by some case (error otherwise), and each case has to be able to
+  // match some value earlier cases don't cover (warning otherwise). Without an expected type the matched type is what
+  // the cases can match together, e.g. #(1 => ...) alone would be an Int => ... failing for other integers.
+  def casesCheck(piecewise: Ast.Piecewise, patterns: Seq[Terms.Pattern], matchedType: Option[Types.Type]): An[Unit] = {
+    val covered = patterns.map(PatternAnalyzer.coveredType)
+
+    val unreachableCases = patterns.zip(piecewise.pieces).zipWithIndex.collect {
+      // TODO: could this be expressed somehow as a reduce so that we accumulate the covered types
+      // and check reachability in one pass, instead of using take(i) for each case, for better performance?
+      case ((pattern, (astPattern, _)), i) if Types.isAssignable(pattern.typ, Types.Union(covered.take(i))) =>
+        SourceMessage(astPattern.pos,
+          safe"${PatternAnalyzer.quotedPattern(astPattern.pos)} is unreachable, earlier cases already match all its values"
+        )
+    }
+
+    val matched = matchedType.getOrElse(Types.Union(patterns.map(_.typ)))
+
+    // TODO: show which values/patterns are not covered, i.e. which type/pattern is left uncovered
+    An.errorIf(!Types.isAssignable(matched, Types.Union(covered)))(SourceMessage(piecewise.pos,
+      safe"Cases of the piecewise function don't match every value of type `${Types.toSource(matched)}`, e.g. add a last case `_ => ...`"
+    )).tellWarnings(unreachableCases)
   }
 
   def callTerm(callee: Ast.ValueExpr, argument: Ast.ValueExpr): An[Terms.Call] = callee match {

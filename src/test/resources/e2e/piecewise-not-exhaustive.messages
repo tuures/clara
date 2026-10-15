@@ -1,0 +1,1 @@
+src/test/resources/e2e/piecewise-not-exhaustive.clara:7:14(–29): Cases of the piecewise function don't match every value of type `Boolean`, e.g. add a last case `_ => ...`

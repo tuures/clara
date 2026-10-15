@@ -1,0 +1,1 @@
+src/test/resources/e2e/piecewise-cases.clara:15:3(–7): Pattern `False` is unreachable, earlier cases already match all its values
