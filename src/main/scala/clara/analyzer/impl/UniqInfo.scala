@@ -1,16 +1,16 @@
 package clara.analyzer.impl
 
-import clara.asg.Uniq
+import clara.asg.UniqId
 
-case class UniqInfo[I](m: Map[Uniq, I]) {
-  def addOrModify(binding: (Uniq, I)): UniqInfo[I] = this.copy(m = m + binding)
-  def add(binding: (Uniq, I)): Option[UniqInfo[I]] = m.get(binding._1) match {
+case class UniqInfo[K <: UniqId, I](m: Map[K, I]) {
+  def addOrModify(binding: (K, I)): UniqInfo[K, I] = this.copy(m = m + binding)
+  def add(binding: (K, I)): Option[UniqInfo[K, I]] = m.get(binding._1) match {
     case Some(_) => None
     case None => Some(this.addOrModify(binding))
   }
-  def get(typ: Uniq): Option[I] = m.get(typ)
+  def get(id: K): Option[I] = m.get(id)
 }
 
 object UniqInfo {
-  def empty[I] = UniqInfo(Map.empty[Uniq, I])
+  def empty[K <: UniqId, I] = UniqInfo(Map.empty[K, I])
 }

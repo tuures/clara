@@ -5,14 +5,6 @@ import clara.ast.Ast.TypeDefKind
 import clara.util.Safe._
 
 // FIXME move
-class Uniq() {
-  override def toString: String = this.getClass.getSimpleName() + this.hashCode()
-}
-object Uniq {
-  def apply() = new Uniq()
-}
-
-// FIXME move
 object TypeCons {
   import Types._
   import Impl._
@@ -20,14 +12,14 @@ object TypeCons {
   sealed trait TypeCon {
     def name: String
     def definedAt: Pos
-    def uniq: Uniq
+    def uniq: TypeConId
   }
 
   // TODO: allow narrowing Param with boundaries/kind, now it's always "extends Top"
   case class ParamCon(
     name: String,
     definedAt: Pos,
-    uniq: Uniq = Uniq(),
+    uniq: TypeConId = TypeConId(),
   ) extends TypeCon
 
   case class WrapperTypeCon(
@@ -36,20 +28,20 @@ object TypeCons {
     typeParams: Seq[ParamCon],
     wrappedType: Types.Type,
     definedAt: Pos,
-    uniq: Uniq = Uniq(),
+    uniq: TypeConId = TypeConId(),
   ) extends TypeCon
 
   case class OpaqueTypeCon(
     name: String,
     typeParams: Seq[ParamCon],
     definedAt: Pos,
-    uniq: Uniq = Uniq(),
+    uniq: TypeConId = TypeConId(),
   ) extends TypeCon
 
   case class SingletonTypeCon(
     name: String,
     definedAt: Pos,
-    uniq: Uniq = Uniq(),
+    uniq: TypeConId = TypeConId(),
   ) extends TypeCon
 
   def pseudoInstantiate(con: TypeCon): Type = con match {
@@ -307,8 +299,8 @@ object Types {
   //   case _  => Top // &
   // }
 
-  def findSubstitutions(params: Set[Uniq], parameterType: Type, argumentType: Type): Map[Uniq, Type] = {
-    def candidates(t1: Type, t2: Type): Seq[(Uniq, Type)] = (t1, t2) match {
+  def findSubstitutions(params: Set[TypeConId], parameterType: Type, argumentType: Type): Map[TypeConId, Type] = {
+    def candidates(t1: Type, t2: Type): Seq[(TypeConId, Type)] = (t1, t2) match {
       case (p: Param, t2) if params(p.con.uniq) => Seq(p.con.uniq -> t2)
       case (Func(Nil, p1, r1), Func(Nil, p2, r2)) => candidates(p1, p2) ++ candidates(r1, r2)
       case (r1: Record, r2: Record) =>
@@ -329,7 +321,7 @@ object Types {
     }
   }
 
-  def substituteParams(substitutions: Map[Uniq, Type], typ: Type) = {
+  def substituteParams(substitutions: Map[TypeConId, Type], typ: Type) = {
     def substitute(typ: Type): Type = typ match {
       case t @ (Top | Bottom | Uni) => t
       case Func(typeParams, parameter, result) =>
@@ -534,7 +526,7 @@ object Types {
       isAssignableInvariantArgs(phantomArgs(typeArgs1), phantomArgs(typeArgs2)) && isAssignable(wrappedType1, wrappedType2)
     }
 
-    def mentionsParam(uniq: Uniq, typ: Type): Boolean = {
+    def mentionsParam(uniq: TypeConId, typ: Type): Boolean = {
       def mentions(t: Type) = mentionsParam(uniq, t)
       typ match {
         case p: Param => p.con.uniq === uniq

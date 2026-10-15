@@ -12,6 +12,7 @@
 - emitter: piecewise cases with capture and tuple patterns (each case compiles to conditions and bindings, `JsEmitter.emitCaseMatch`); type patterns are kept as `Terms.PatternAs`
 - emitter: Clara names colliding with JS reserved words or `undefined`/`globalThis`/`arguments`/`eval` get a `$` suffix (`class$`, `NameMangler.valueName`); compiler names start with `$` (Clara names can't contain `$`); emitted code reaches JS globals through `globalThis`
 - emitter: wildcards and named constants in assignments/parameters bind nothing (`JsAst.IgnoredPattern`: array hole, `()` parameter, bare expression for `_ = e`), so several wildcards no longer collide and `_ => ...` no longer crashes; one `emitBindingPattern` for assignments and parameters
+- groundwork (Roadmap 1): `Uniq` split into `TypeConId`/`DefId` (asg/Uniq.scala), `UniqInfo` keyed by id kind; Env entries `EnvValue`/`EnvTypeCon` share one `DefId` per declaration, usage tracked by `DefId`: a singleton used only as a type or only as a value is used, an unused one is reported once, a wrapper type used only as its constructor is used
 - expression `e: T` is a declaration like `x: T = e`: the value's type becomes `T` (`Terms.ValueAs`) and `T` is the expected type for `e` (e.g. `(n => n): Int => Int`)
 
 # Roadmap (namespacing / enum / typeclasses)
@@ -19,7 +20,7 @@
 Each step is a vertical slice (parser -> analyzer -> emitter) validated by an e2e fixture; keep existing tests green.
 
 0. acceptance fixtures first: write the target `.clara` files (userland Option, Color, smart constructor) with expected `.messages`/`.output`; they fail until done
-1. groundwork, no behavior change: Uniq subtypes, Union dedupe, Env -> TypeEntry/ValueEntry/NamespaceRef with DefId usage tracking
+1. ~~groundwork~~ done (see Done); `ValueEntry`/`NamespaceRef` and `NsId` come with namespaces in 3, `InstanceId` with typeclasses in 8
 2. block phases: types and namespaces first, then ::extend, then values (forward references, recursive types)
 3. ::extend: companion statics, ::methods (replaces standalone method sections), `Bar` = `Bar.apply`, `::new`
 4. member lookup: tagged/boxed fallback to wrapped (emit `.value` for boxed), alias -> expansion, union per alternative

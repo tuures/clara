@@ -1,6 +1,6 @@
 package clara.analyzer.impl
 
-import clara.asg.{Terms, Types, TypeCons}
+import clara.asg.{DefId, Terms, Types, TypeCons}
 import clara.ast.{Ast, SourceMessage}
 
 import clara.util.Safe._
@@ -46,9 +46,10 @@ object TypeDefAnalyzer {
       (typeCon match {
         case con: TypeCons.SingletonTypeCon =>
           val typ = Types.Singleton(con)
+          val defId = DefId()
 
-          env.addOrShadowTypeCon(name, con, namePos).
-            flatMap(_.addOrShadowValue(name, typ, namePos))
+          env.addOrShadowTypeCon(name, con, namePos, defId).
+            flatMap(_.addOrShadowValue(name, typ, namePos, defId))
 
         case con =>
           // FIXME add constructor function to value env

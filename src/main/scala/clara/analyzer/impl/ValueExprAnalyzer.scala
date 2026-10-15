@@ -11,15 +11,13 @@ case class ValueExprAnalyzerImpl(env: Env) {
     TypeExprAnalyzer.namedNullaryType(env, name, pos)
 
   def namedValue(name: String, pos: Pos): An[Terms.NamedValue] = {
-    env.getValue(name).map { case EnvValue(typ, _, uniq) =>
-      // TODO: if singleton type, record the type also as used
-      An.result(Terms.NamedValue(name, typ)).tellValueDefUsage(uniq, pos)
+    env.getValue(name).map { case EnvValue(typ, _, defId) =>
+      An.result(Terms.NamedValue(name, typ)).tellUsage(defId, pos)
     }.orElse {
-      env.getTypeCon(name).map { con =>
+      env.getTypeCon(name).map { case EnvTypeCon(con, defId) =>
         con match {
-          // TODO: record TypeCon usage
           case con: TypeCons.WrapperTypeCon =>
-            An.result(Terms.NamedValue(name, TypeCons.wrapperConstructorFunc(con)))
+            An.result(Terms.NamedValue(name, TypeCons.wrapperConstructorFunc(con))).tellUsage(defId, pos)
           case _ => An.error(SourceMessage(pos, safe"Unknown value `$name`. Type `$name` cannot be used as a value."))
         }
       }

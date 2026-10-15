@@ -13,7 +13,7 @@ class ValueExprAnalyzerSpec extends BaseSpec {
     val result = ValueExprAnalyzer.namedValue(env, "value", NoPos)
 
     assert(result.value.value.typ === Types.Uni)
-    assert(result.log.usageTrace.valueDefs === Map(envValue.uniq -> Set(NoPos)))
+    assert(result.log.usageTrace.defs === Map(envValue.defId -> Set(NoPos)))
   }
 
   // FIXME

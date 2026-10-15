@@ -3,7 +3,7 @@ package clara.analyzer.impl
 import clara.util.GeneralMessage
 import clara.util.Message
 import clara.util.Safe.SafeStringContext
-import clara.asg.Uniq
+import clara.asg.DefId
 import clara.ast.{NoPos, SourceInfo, SourcePos}
 
 import clara.testutil.BaseSpec
@@ -18,34 +18,33 @@ class AnSpec extends BaseSpec {
   def anLogWarn(ms: Message*): AnLog = AnLog(warnings = ms.toVector)
 
   test("AnLog.append combines warnings and usage traces") {
-    val valueUniq = Uniq()
-    val typeUniq = Uniq()
+    val defIdA = DefId()
+    val defIdB = DefId()
     val sourceInfo = SourceInfo.fromString("test", "ab")
     val posA = SourcePos(sourceInfo, 0, Some(1))
     val posB = SourcePos(sourceInfo, 1, Some(2))
-    val left = AnLog(Vector(messageA), UsageTrace(Map(valueUniq -> Set(posA)), Map(typeUniq -> Set(posA))))
-    val right = AnLog(Vector(messageB), UsageTrace(Map(valueUniq -> Set(posB)), Map(typeUniq -> Set(posB))))
+    val left = AnLog(Vector(messageA), UsageTrace(Map(defIdA -> Set(posA), defIdB -> Set(posA))))
+    val right = AnLog(Vector(messageB), UsageTrace(Map(defIdA -> Set(posB))))
 
     assert(left.append(right) === AnLog(
       Vector(messageA, messageB),
-      UsageTrace(Map(valueUniq -> Set(posA, posB)), Map(typeUniq -> Set(posA, posB))),
+      UsageTrace(Map(defIdA -> Set(posA, posB), defIdB -> Set(posA))),
     ))
   }
 
   test("tellWarnings keeps the usage trace") {
-    val uniq = Uniq()
-    val usageTrace = UsageTrace(Map(uniq -> Set(NoPos)), Map.empty)
+    val defId = DefId()
+    val usageTrace = UsageTrace(Map(defId -> Set(NoPos)))
     val an = An.Success(1, AnLog(Vector(messageA), usageTrace)).tellWarnings(Vector(messageB))
 
     assert(an.log === AnLog(Vector(messageA, messageB), usageTrace))
   }
 
-  test("tellUsage keeps the warnings") {
-    val uniq = Uniq()
-    val usageTrace = UsageTrace(Map(uniq -> Set(NoPos)), Map.empty)
-    val an = An.Success(1, AnLog(Vector(messageA), usageTrace)).tellUsage(usageTrace)
+  test("tellUsage keeps the warnings and adds the use") {
+    val defId = DefId()
+    val an = An.Success(1, anLogWarn(messageA)).tellUsage(defId, NoPos)
 
-    assert(an.log === AnLog(Vector(messageA), usageTrace))
+    assert(an.log === AnLog(Vector(messageA), UsageTrace(Map(defId -> Set(NoPos)))))
   }
 
   test("withLog exposes the current log without changing it") {

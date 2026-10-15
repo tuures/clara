@@ -26,7 +26,7 @@ class BlockAnalyzerSpec extends BaseSpec {
 
     val endState = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs)
 
-    val typ = endState.value.value.currentEnv.getTypeCon("Unit").get
+    val typ = endState.value.value.currentEnv.getTypeCon("Unit").get.con
 
     inside(typ) {
       case TypeCons.WrapperTypeCon(typeDefKind, name, typeParams, wrappedType, _, _) =>
@@ -101,7 +101,7 @@ class BlockAnalyzerSpec extends BaseSpec {
 
     assert(result.value.isRight)
     assert(result.log.warnings.isEmpty)
-    assert(result.value.value.currentEnv.local.values.get("value").get.uniq !== parentValue.uniq)
+    assert(result.value.value.currentEnv.local.values.get("value").get.defId !== parentValue.defId)
   }
 
   test("typeDef should allow shadowing a type from the parent scope") {
@@ -116,7 +116,7 @@ class BlockAnalyzerSpec extends BaseSpec {
 
     assert(result.value.isRight)
     assert(result.log.warnings.isEmpty)
-    assert(result.value.value.currentEnv.local.typeCons.get("Type").get.uniq !== parentType.uniq)
+    assert(result.value.value.currentEnv.local.typeCons.get("Type").get.defId !== parentType.defId)
   }
 
   test("lambda parameter should allow shadowing an outer value") {
@@ -175,6 +175,41 @@ class BlockAnalyzerSpec extends BaseSpec {
     val result = BlockAnalyzer.regularBlockTerm(Env.empty, block)
 
     assert(result.log.warnings.map(_.message) === Seq("Unused type `Unused`"))
+  }
+
+  test("a singleton used only as a type or only as a value is used") {
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Singleton, "AsType"),
+      TypeDef(TypeDefKind.Singleton, "AsValue"),
+      ValueDecl("typed", NamedType("AsType")),
+      Tuple(Seq(NamedValue("typed"), NamedValue("AsValue"))),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block)
+
+    assert(result.log.warnings.map(_.message) === Nil)
+  }
+
+  test("an unused singleton is reported once") {
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Singleton, "Unused"),
+      UnitLiteral(),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block)
+
+    assert(result.log.warnings.map(_.message) === Seq("Unused type `Unused`"))
+  }
+
+  test("a wrapper type used only as its constructor is used") {
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Tagged, "Id", UnitType()),
+      NamedValue("Id"),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block)
+
+    assert(result.log.warnings.map(_.message) === Nil)
   }
 
   test("use in a nested block counts as use of the parent block local") {

@@ -14,16 +14,20 @@ object BlockAnalyzerImpl {
   ) {
     def unusedDefinitionWarnings(usageTrace: UsageTrace): Seq[SourceMessage] = {
       // TODO: Ignore exported definitions even when unused.
-      val unusedValues = currentEnv.local.values.entries.collect {
-        case (name, value) if !usageTrace.valueDefs.contains(value.uniq) =>
-          SourceMessage(value.definedAt, safe"Unused value `$name`")
+      val unusedTypes = currentEnv.local.typeCons.entries.collect {
+        case (name, EnvTypeCon(con, defId)) if !usageTrace.defs.contains(defId) =>
+          defId -> SourceMessage(con.definedAt, safe"Unused type `$name`")
       }
-      val unusedTypeCons = currentEnv.local.typeCons.entries.collect {
-        case (name, typeCon) if !usageTrace.typeCons.contains(typeCon.uniq) =>
-          SourceMessage(typeCon.definedAt, safe"Unused type `$name`")
+      val unusedValues = currentEnv.local.values.entries.collect {
+        case (name, EnvValue(_, definedAt, defId)) if !usageTrace.defs.contains(defId) =>
+          defId -> SourceMessage(definedAt, safe"Unused value `$name`")
       }
 
-      (unusedValues ++ unusedTypeCons).sortBy(_.pos)
+      // one warning per declaration, a declaration with both a type and a value (a singleton) is reported as a type
+      (unusedTypes ++ unusedValues).
+        distinctBy { case (defId, _) => defId }.
+        map { case (_, message) => message }.
+        sortBy(_.pos)
     }
 
     def buildTerm(blockPos: Pos, isProgramBlock: Boolean): An[Terms.Block] = currentReturnType match {

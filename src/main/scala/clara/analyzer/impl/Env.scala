@@ -3,17 +3,18 @@ package clara.analyzer.impl
 import clara.util.Safe._
 
 import clara.ast.{Pos, SourceMessage}
-import clara.asg.{Namespace, TypeCons, Uniq}
+import clara.asg.{DefId, Namespace, TypeConId, TypeCons}
 import clara.asg.Types.Type
 import clara.asg.TypeCons.TypeCon
 import clara.asg.Attributes.MethodAttributes
 
 
+case class EnvValue(typ: Type, definedAt: Pos, defId: DefId)
+case class EnvTypeCon(con: TypeCon, defId: DefId)
 // TODO: is attributes actually used/needed here?
-case class EnvValue(typ: Type, definedAt: Pos, uniq: Uniq)
 case class EnvMethod(attributes: MethodAttributes, typ: Type)
 
-case class BlockScope(values: Namespace[EnvValue], typeCons: Namespace[TypeCon])
+case class BlockScope(values: Namespace[EnvValue], typeCons: Namespace[EnvTypeCon])
 
 object BlockScope {
   def empty: BlockScope = BlockScope(Namespace.empty, Namespace.empty)
@@ -22,16 +23,16 @@ object BlockScope {
 case class Env(
   parent: BlockScope,
   local: BlockScope,
-  private val methods: UniqInfo[Namespace[EnvMethod]],
+  private val methods: UniqInfo[TypeConId, Namespace[EnvMethod]],
 ) {
-  def addOrShadowValue(name: String, typ: Type, pos: Pos): An[Env] = {
-    local.values.add((name, EnvValue(typ, pos, Uniq()))) match {
+  def addOrShadowValue(name: String, typ: Type, pos: Pos, defId: DefId = DefId()): An[Env] = {
+    local.values.add((name, EnvValue(typ, pos, defId))) match {
       case Some(updatedNs) => An.result(this.copy(local = local.copy(values = updatedNs)))
       case None => An.error(SourceMessage(pos, safe"Cannot shadow existing value with same name `${name}`"))
     }
   }
-  def addOrShadowTypeCon(name: String, con: TypeCon, pos: Pos): An[Env] = {
-    local.typeCons.add((name, con)) match {
+  def addOrShadowTypeCon(name: String, con: TypeCon, pos: Pos, defId: DefId = DefId()): An[Env] = {
+    local.typeCons.add((name, EnvTypeCon(con, defId))) match {
       case Some(updatedNs) => An.result(this.copy(local = local.copy(typeCons = updatedNs)))
       case None => An.error(SourceMessage(pos, safe"Cannot shadow existing type with same name `${name}`"))
     }
@@ -45,7 +46,7 @@ case class Env(
     An.fromSomeOrError(methodsUpdated, error).map(m => this.copy(methods = m))
   }
   def getValue(name: String): Option[EnvValue] = local.values.get(name).orElse(parent.values.get(name))
-  def getTypeCon(name: String): Option[TypeCon] = local.typeCons.get(name).orElse(parent.typeCons.get(name))
+  def getTypeCon(name: String): Option[EnvTypeCon] = local.typeCons.get(name).orElse(parent.typeCons.get(name))
   def startNestedScope: Env = this.copy(
     parent = BlockScope(
       values = parent.values.mergeShadowingEverything(local.values),

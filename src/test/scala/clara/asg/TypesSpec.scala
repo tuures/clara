@@ -406,7 +406,7 @@ class TypesSpec extends BaseSpec {
   }
 
   test("substituteParams recursively substitutes structural and nominal types") {
-    val substitutions = Map[Uniq, Type](
+    val substitutions = Map[TypeConId, Type](
       aParamCon.uniq -> Uni,
       bParamCon.uniq -> Top,
     )

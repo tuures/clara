@@ -11,6 +11,6 @@ class TypeExprAnalyzerSpec extends BaseSpec {
     )
 
     assert(result.value.value === AnalyzerTestPrelude.intCon)
-    assert(result.log.usageTrace.typeCons === Map(AnalyzerTestPrelude.intCon.uniq -> Set(NoPos)))
+    assert(result.log.usageTrace.defs === Map(AnalyzerTestPrelude.intDefId -> Set(NoPos)))
   }
 }

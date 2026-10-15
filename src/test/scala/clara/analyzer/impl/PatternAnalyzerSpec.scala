@@ -1,7 +1,7 @@
 package clara.analyzer.impl
 
 import clara.ast.{Ast, AstLiteral, NoPos, SourceInfo, SourcePos}
-import clara.asg.{Namespace, TermLiteral, Terms, TypeCons, Types, Uniq}
+import clara.asg.{DefId, Namespace, TermLiteral, Terms, TypeCons, Types}
 import clara.testutil.{AnalyzerTestPrelude, BaseSpec}
 
 class PatternAnalyzerSpec extends BaseSpec {
@@ -131,7 +131,7 @@ class PatternAnalyzerSpec extends BaseSpec {
 
   test("StringPattern should handle escape sequences, captures and named constants") {
     val envWithConstant = testEnv.copy(local = testEnv.local.copy(values = Namespace(
-      ("ConstStr", EnvValue(AnalyzerTestPrelude.stringType, NoPos, Uniq()))
+      ("ConstStr", EnvValue(AnalyzerTestPrelude.stringType, NoPos, DefId()))
     )))
     val pattern = Ast.StringPattern(Seq(
       AstLiteral.StringPlainPart("hello "),
@@ -180,7 +180,7 @@ class PatternAnalyzerSpec extends BaseSpec {
 
   test("NamedConstantPattern should resolve named value from environment") {
     val envWithValue = testEnv.copy(local = testEnv.local.copy(values = Namespace(
-      ("Const1", EnvValue(AnalyzerTestPrelude.intType, NoPos, Uniq()))
+      ("Const1", EnvValue(AnalyzerTestPrelude.intType, NoPos, DefId()))
     )))
     val pattern = Ast.NamedConstantPattern("Const1")
 
@@ -222,7 +222,7 @@ class PatternAnalyzerSpec extends BaseSpec {
 
   test("CapturePattern should fail if the captured name is already defined in the environment") {
     val envWithCaptured = testEnv.copy(local = testEnv.local.copy(values = Namespace(
-      ("captured", EnvValue(AnalyzerTestPrelude.intType, NoPos, Uniq()))
+      ("captured", EnvValue(AnalyzerTestPrelude.intType, NoPos, DefId()))
     )))
     val pattern = Ast.CapturePattern("captured")
 
@@ -259,8 +259,8 @@ class PatternAnalyzerSpec extends BaseSpec {
   private val trueType = Types.Singleton(TypeCons.SingletonTypeCon("True", NoPos))
   private val falseType = Types.Singleton(TypeCons.SingletonTypeCon("False", NoPos))
   private val booleanEnv = testEnv.copy(local = testEnv.local.copy(values = Namespace(
-    ("True", EnvValue(trueType, NoPos, Uniq())),
-    ("False", EnvValue(falseType, NoPos, Uniq())),
+    ("True", EnvValue(trueType, NoPos, DefId())),
+    ("False", EnvValue(falseType, NoPos, DefId())),
   )))
 
   test("refutable IntegerPattern should narrow a union source type to Int") {

@@ -1,25 +1,19 @@
 package clara.analyzer.impl
 
 import clara.util.Message
-import clara.asg.Uniq
+import clara.asg.DefId
 import clara.ast.Pos
 
 
 // TODO: tracking usage of: 1) record fields (Uniq, String), 2) methods (Uniq, String)
 // TODO: use UniqInfo
-case class UsageTrace(valueDefs: Map[Uniq, Set[Pos]] = Map.empty, typeCons: Map[Uniq, Set[Pos]] = Map.empty) {
+// uses of declarations, a use of either side of a declaration with both a type and a value (e.g. a singleton) counts
+case class UsageTrace(defs: Map[DefId, Set[Pos]] = Map.empty) {
   def append(other: UsageTrace): UsageTrace = UsageTrace(
-    mergePositions(valueDefs, other.valueDefs),
-    mergePositions(typeCons, other.typeCons)
-  )
-
-  private def mergePositions(
-    left: Map[Uniq, Set[Pos]],
-    right: Map[Uniq, Set[Pos]]
-  ): Map[Uniq, Set[Pos]] =
-    right.foldLeft(left) { case (acc, (uniq, positions)) =>
-      acc.updated(uniq, acc.getOrElse(uniq, Set.empty) ++ positions)
+    other.defs.foldLeft(defs) { case (acc, (defId, positions)) =>
+      acc.updated(defId, acc.getOrElse(defId, Set.empty) ++ positions)
     }
+  )
 }
 
 case class AnLog(warnings: Vector[Message] = Vector.empty, usageTrace: UsageTrace = UsageTrace()) {
@@ -47,9 +41,7 @@ case class An[+A](v: Either[An.Errors, A], l: AnLog) {
 
   def tellWarnings(ms: Seq[Message]): An[A] = An(v, l.append(AnLog(warnings = ms.toVector)))
   def tellWarning(m: Message): An[A] = tellWarnings(Vector(m))
-  def tellUsage(usageTrace: UsageTrace): An[A] = An(v, l.append(AnLog(usageTrace = usageTrace)))
-  def tellValueDefUsage(uniq: Uniq, pos: Pos): An[A] = tellUsage(UsageTrace(valueDefs = Map(uniq -> Set(pos))))
-  def tellTypeConUsage(uniq: Uniq, pos: Pos): An[A] = tellUsage(UsageTrace(typeCons = Map(uniq -> Set(pos))))
+  def tellUsage(defId: DefId, pos: Pos): An[A] = An(v, l.append(AnLog(usageTrace = UsageTrace(Map(defId -> Set(pos))))))
 
   /**
    * Combines two analyses together.

@@ -9,7 +9,7 @@ import clara.asg.TypeCons
 case class TypeExprAnalyzerImpl(env: Env) {
   def namedTypeCon(n: Ast.NameWithPos): An[TypeCons.TypeCon] =
     env.getTypeCon(n.name) match {
-      case Some(con) => An.result(con).tellTypeConUsage(con.uniq, n.pos)
+      case Some(EnvTypeCon(con, defId)) => An.result(con).tellUsage(defId, n.pos)
       case None => An.error(SourceMessage(n.pos, safe"Unknown type `${n.name}`"))
     }
 

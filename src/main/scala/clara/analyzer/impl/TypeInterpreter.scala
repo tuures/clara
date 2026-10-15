@@ -1,6 +1,6 @@
 package clara.analyzer.impl
 
-import clara.asg.{Uniq, Types}
+import clara.asg.{TypeConId, Types}
 import clara.asg.Types.{Func, Nominal, Alias, Tagged, Union, Boxed, Opaque, Singleton, Param, Type}
 import clara.asg.TypeCons.{TypeCon, WrapperTypeCon, OpaqueTypeCon, SingletonTypeCon, ParamCon}
 import clara.ast.{SourceMessage, Pos}
@@ -70,7 +70,7 @@ object TypeInterpreter {
       SourceMessage(pos, message)
     }
 
-    def matchTypeArgs(paramCons: Seq[ParamCon], args: Seq[Type], con: TypeCon, pos: Pos): An[Map[Uniq, Type]] = {
+    def matchTypeArgs(paramCons: Seq[ParamCon], args: Seq[Type], con: TypeCon, pos: Pos): An[Map[TypeConId, Type]] = {
       if (paramCons.length === args.length) {
         An.result(paramCons.map(_.uniq).zip(args).toMap)
       } else {
