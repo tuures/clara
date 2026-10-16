@@ -95,7 +95,7 @@ class ValueExprAnalyzerSpec extends BaseSpec {
 
     val result = ValueExprAnalyzer.valueExprTerm(envWith("x", intOrString), Ast.Pipe(Ast.NamedValue("x"), piecewise))
 
-    assert(Types.isAssignable(result.value.value.typ, Types.Uni))
+    assert(result.value.value.typ === Types.Uni)
   }
 
   test("x @ #(\"a\" => ()) fails when a case can never match x") {

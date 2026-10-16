@@ -1,0 +1,11 @@
+::declare console: { log: String => () }
+
+// types can be used before their declaration in the same block
+answer: Boolean = Yes
+console.log(answer @ #(Yes => "yes", No => "no"))
+
+::alias Boolean: Yes | No
+::singleton Yes
+::singleton No
+::opaque String
+()

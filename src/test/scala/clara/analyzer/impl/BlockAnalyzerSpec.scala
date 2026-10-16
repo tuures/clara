@@ -44,6 +44,21 @@ class BlockAnalyzerSpec extends BaseSpec {
     ))
   }
 
+  test("typeDef: a typeDef after the last expression should still give a warning of missing expression") {
+    // type defs are analyzed before the values, but their position still determines the block's value
+    val block = Block(Seq(
+      UnitLiteral(),
+      TypeDef(TypeDefKind.Singleton, "Last"),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block)
+
+    assert(result.log.warnings.map(_.message) === Seq(
+      "Unused type `Last`",
+      "Block should end with an expression. Implicitly returning unit.",
+    ))
+  }
+
   test("valueDef and valueDecl should affect the value env and returned term contents") {
     val block = Block(Seq(
       ValueDecl("declared", UnitType()),
@@ -90,6 +105,89 @@ class BlockAnalyzerSpec extends BaseSpec {
     val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs)
 
     assert(result.value.left.value.map(_.message) === Seq("Cannot shadow existing type with same name `Type`"))
+  }
+
+  // forward references: type defs are analyzed before the values of the block, in dependency order
+
+  test("a value can refer to a type defined below it") {
+    val block = Block(Seq(
+      ValueDecl("x", NamedType("Below")),
+      TypeDef(TypeDefKind.Alias, "Below", UnitType()),
+      NamedValue("x"),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block)
+
+    inside(result.value.value) { case Terms.Block(Seq(Terms.TypeDef(belowCon: TypeCons.WrapperTypeCon), _*), typ) =>
+      assert(typ === Types.Alias(belowCon, Nil, Types.Uni))
+    }
+    assert(result.log.warnings.isEmpty)
+  }
+
+  test("a type def can refer to a type defined below it") {
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Alias, "Pair", TupleType(Seq(NamedType("Below"), NamedType("Below")))),
+      TypeDef(TypeDefKind.Singleton, "Below"),
+    ))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs)
+
+    inside(result.value.value.currentContents) {
+      case Seq(Terms.TypeDef(belowCon: TypeCons.SingletonTypeCon), Terms.TypeDef(pairCon: TypeCons.WrapperTypeCon)) =>
+        val below = Types.Singleton(belowCon)
+        assert(pairCon.wrappedType === Types.Tuple(Seq(below, below)))
+    }
+  }
+
+  test("type defs come first in the block term, in dependency order") {
+    val block = Block(Seq(
+      ValueDecl("x", NamedType("Dependent")),
+      TypeDef(TypeDefKind.Alias, "Dependent", NamedType("Dependency")),
+      NamedValue("x"),
+      TypeDef(TypeDefKind.Singleton, "Dependency"),
+    ))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs)
+
+    assert(result.value.value.currentContents.map(_.getClass.getSimpleName) === Seq("TypeDef", "TypeDef", "ValueDecl", "NamedValue"))
+    assert(result.value.value.currentContents.collect { case Terms.TypeDef(con) => con.name } === Seq("Dependency", "Dependent"))
+  }
+
+  test("recursive type defs are an error") {
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Alias, "A", TupleType(Seq(NamedType("B"), UnitType()))),
+      TypeDef(TypeDefKind.Alias, "B", NamedType("A")),
+    ))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs)
+
+    assert(result.value.left.value.map(_.message) === Seq("Recursive types aren't supported yet: `A` -> `B` -> `A`"))
+  }
+
+  test("a type def referring to itself is an error") {
+    val block = Block(Seq(TypeDef(TypeDefKind.Tagged, "Self", NamedType("Self"))))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs)
+
+    assert(result.value.left.value.map(_.message) === Seq("Recursive types aren't supported yet: `Self` -> `Self`"))
+  }
+
+  test("type params named like a type def of the block are not references to it") {
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Tagged, "Box", Seq(Ast.TypeParam("A")), NamedType("A")),
+      TypeDef(TypeDefKind.Alias, "A", Ast.FuncType(Seq(Ast.TypeParam("Box")), NamedType("Box"), NamedType("Box"))),
+    ))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs)
+
+    // no false cycle (Box -> A -> Box), and each name resolved to the type param, not to the block's type def
+    inside(result.value.value.currentContents) {
+      case Seq(Terms.TypeDef(boxCon: TypeCons.WrapperTypeCon), Terms.TypeDef(aCon: TypeCons.WrapperTypeCon)) =>
+        assert(boxCon.wrappedType === Types.Param(boxCon.typeParams.head))
+        inside(aCon.wrappedType) { case Types.Func(Seq(boxParam), parameter, result) =>
+          assert((parameter, result) === ((Types.Param(boxParam), Types.Param(boxParam))))
+        }
+    }
   }
 
   test("valueDecl should allow shadowing a value from the parent scope") {

@@ -13,6 +13,7 @@
 - emitter: Clara names colliding with JS reserved words or `undefined`/`globalThis`/`arguments`/`eval` get a `$` suffix (`class$`, `NameMangler.valueName`); compiler names start with `$` (Clara names can't contain `$`); emitted code reaches JS globals through `globalThis`
 - emitter: wildcards and named constants in assignments/parameters bind nothing (`JsAst.IgnoredPattern`: array hole, `()` parameter, bare expression for `_ = e`), so several wildcards no longer collide and `_ => ...` no longer crashes; one `emitBindingPattern` for assignments and parameters
 - groundwork (Roadmap 1): `Uniq` split into `TypeConId`/`DefId` (asg/Uniq.scala), `UniqInfo` keyed by id kind; Env entries `EnvValue`/`EnvTypeCon` share one `DefId` per declaration, usage tracked by `DefId`: a singleton used only as a type or only as a value is used, an unused one is reported once, a wrapper type used only as its constructor is used
+- block phases (Roadmap 2a): the type defs of a block are analyzed before its values, in dependency order (`BlockAnalyzerImpl.typeDefsInDependencyOrder`), so values and type defs can refer to types declared below them; a cycle is "Recursive types aren't supported yet: `A` -> `B` -> `A`"; type defs come first in the block term, in dependency order, so singleton consts are emitted before any value uses them
 - expression `e: T` is a declaration like `x: T = e`: the value's type becomes `T` (`Terms.ValueAs`) and `T` is the expected type for `e` (e.g. `(n => n): Int => Int`)
 
 # Roadmap (namespacing / enum / typeclasses)
@@ -20,8 +21,13 @@
 Each step is a vertical slice (parser -> analyzer -> emitter) validated by an e2e fixture; keep existing tests green.
 
 0. acceptance fixtures first: write the target `.clara` files (userland Option, Color, smart constructor) with expected `.messages`/`.output`; they fail until done
-1. ~~groundwork~~ done (see Done); `ValueEntry`/`NamespaceRef` and `NsId` come with namespaces in 3, `InstanceId` with typeclasses in 8
-2. block phases: types and namespaces first, then ::extend, then values (forward references, recursive types)
+   - consider a manually desugared Option fixture first (`::alias` + `::extend` with `::singleton`/`::tagged` members), the `::enum` sugar on top of it later (step 6)
+1. ~~groundwork~~ done (see Done); `ValueEntry`/`NamespaceRef` and `NsId` come with namespaces in 3 (then `EnvTypeCon` becomes `EnvType`: a con and/or a namespace, looked up with `getType`), `InstanceId` with typeclasses in 8
+2. block phases: types and namespaces first, then ::extend, then values
+   - ~~2a. forward references between type declarations~~ done (see Done)
+   - 2b. parse ::extend, ::namespace (and other constructs of the Option fixture) so the full forward reference use cases (an alias referring to its companion's members) can be validated
+   - maybe with `EnvType` (Roadmap 3): register a block's type names as pending entries before analyzing its type defs, so a lookup hitting a pending entry is an internal error instead of falling through to a parent scope's type of the same name (a safety net if `BlockAnalyzerImpl.referencedTypeNames` ever misses a dependency; decide whether it's worth the extra state)
+   - 2c. recursive types (e.g. `::tagged Expr: Lit | (Expr, Expr)`): `WrapperTypeCon.wrappedType` is stored eagerly, so a con containing itself needs a lazily/once assigned wrapped type (or resolving by `TypeConId` through a table, which would make `Types` depend on `Env`); `isAssignable`/`normalizeHead`/`expandUnions`/`disjoint` unwrap and would loop, they need termination (e.g. remembering the pairs being compared); recursive aliases probably must go through a nominal wrapper. Not needed for Option/enums
 3. ::extend: companion statics, ::methods (replaces standalone method sections), `Bar` = `Bar.apply`, `::new`
 4. member lookup: tagged/boxed fallback to wrapped (emit `.value` for boxed), alias -> expansion, union per alternative
 5. patterns: dot-constant, construct pattern (`Some a`) + pattern validity (Check 1 in plans/enum2.md: the runtime test must tell constructors apart, a tag test like `$value.$type === 'Some'`); standalone ::namespace
@@ -65,7 +71,6 @@ Each step is a vertical slice (parser -> analyzer -> emitter) validated by an e2
   - implement import syntax in parser
 - fix parsing negative numbers, revisit operator precedence (+/*)
 - array literals
-- support forward references on blocks (same level)
 - ValueExprAnalyzerSpec
 - Record field and methods access for union types
 - patterns: dot-constant patterns (`X.Y`, `x.y`) need parser support; `Y Z` in pattern position is always a construct pattern
