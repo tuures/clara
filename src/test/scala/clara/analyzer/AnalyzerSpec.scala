@@ -13,8 +13,8 @@ class AnalyzerSpec extends BaseSpec {
     val warning = GeneralMessage("a warning")
     val error = GeneralMessage("an error")
 
-    val analysis = An.Failure(Vector(error), anLogWarn(warning))
-    val result = AnalyzedProgram(analysis)
+    val analysis = An.Invalid(Vector(error), anLogWarn(warning))
+    val result = AnalyzedProgram(analysis.run)
 
     assert(result.program === None)
     assert(result.messages === Seq(warning, error))
@@ -25,8 +25,8 @@ class AnalyzerSpec extends BaseSpec {
 
     val term = Terms.Block(Seq.empty, Types.Uni)
 
-    val analysis = An.Success(term, anLogWarn(warning))
-    val result = AnalyzedProgram(analysis)
+    val analysis = An.Valid(term, anLogWarn(warning))
+    val result = AnalyzedProgram(analysis.run)
 
     assert(result.program === Some(term))
     assert(result.messages === Seq(warning))

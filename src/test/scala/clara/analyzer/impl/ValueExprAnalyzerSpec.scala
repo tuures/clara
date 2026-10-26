@@ -7,10 +7,10 @@ import clara.testutil.{AnalyzerTestPrelude, BaseSpec}
 class ValueExprAnalyzerSpec extends BaseSpec {
 
   test("named value records the resolved definition usage") {
-    val env = Env.empty.addOrShadowValue("value", Types.Uni, NoPos).value.value
+    val env = Env.empty.addValue("value", Types.Uni, NoPos).run.value.value
     val envValue = env.getValue("value").get
 
-    val result = ValueExprAnalyzer.namedValue(env, "value", NoPos)
+    val result = ValueExprAnalyzer.namedValue(env, "value", NoPos).run
 
     assert(result.value.value.typ === Types.Uni)
     assert(result.log.usageTrace.defs === Map(envValue.defId -> Set(NoPos)))
@@ -33,8 +33,8 @@ class ValueExprAnalyzerSpec extends BaseSpec {
   //     Types.Record("value" -> Types.Top),
   //   ))
   //   val env = Env.empty.
-  //     addOrShadowValue("f", polymorphicFunction, NoPos).value.value.
-  //     addOrShadowValue("argument", argument, NoPos).value.value
+  //     addOrShadowValue("f", polymorphicFunction, NoPos).run.value.value.
+  //     addOrShadowValue("argument", argument, NoPos).run.value.value
 
   //   val result = ValueExprAnalyzer.valueExprTerm(
   //     env,
@@ -52,13 +52,13 @@ class ValueExprAnalyzerSpec extends BaseSpec {
     )
     val argument = Types.Tuple(Seq(Types.Func(Types.Bottom, Types.Uni), Types.Uni))
     val env = Env.empty.
-      addOrShadowValue("f", polymorphicFunction, NoPos).value.value.
-      addOrShadowValue("argument", argument, NoPos).value.value
+      addValue("f", polymorphicFunction, NoPos).run.value.value.
+      addValue("argument", argument, NoPos).run.value.value
 
     val result = ValueExprAnalyzer.valueExprTerm(
       env,
       Ast.Call(Ast.NamedValue("f"), Ast.NamedValue("argument")),
-    )
+    ).run
 
     assert(result.value.isLeft)
     assert(result.value.left.value.length === 1)
@@ -76,12 +76,12 @@ class ValueExprAnalyzerSpec extends BaseSpec {
   private val stringType = AnalyzerTestPrelude.stringType
   private val intOrString = Types.Union(Seq(intType, stringType))
   private def envWith(name: String, typ: Types.Type) =
-    AnalyzerTestPrelude.env.addOrShadowValue(name, typ, NoPos).value.value
+    AnalyzerTestPrelude.env.addValue(name, typ, NoPos).run.value.value
 
   test("x @ #(n => n) infers the capture's type from x") {
     val piecewise = Ast.Piecewise(Seq((Ast.CapturePattern("n"), Ast.NamedValue("n"))))
 
-    val result = ValueExprAnalyzer.valueExprTerm(envWith("x", intOrString), Ast.Pipe(Ast.NamedValue("x"), piecewise))
+    val result = ValueExprAnalyzer.valueExprTerm(envWith("x", intOrString), Ast.Pipe(Ast.NamedValue("x"), piecewise)).run
 
     assert(result.value.value.typ === intOrString)
   }
@@ -93,7 +93,7 @@ class ValueExprAnalyzerSpec extends BaseSpec {
       (Ast.WildcardPattern(), Ast.UnitLiteral()),
     ))
 
-    val result = ValueExprAnalyzer.valueExprTerm(envWith("x", intOrString), Ast.Pipe(Ast.NamedValue("x"), piecewise))
+    val result = ValueExprAnalyzer.valueExprTerm(envWith("x", intOrString), Ast.Pipe(Ast.NamedValue("x"), piecewise)).run
 
     assert(result.value.value.typ === Types.Uni)
   }
@@ -101,7 +101,7 @@ class ValueExprAnalyzerSpec extends BaseSpec {
   test("x @ #(\"a\" => ()) fails when a case can never match x") {
     val piecewise = Ast.Piecewise(Seq((Ast.StringPattern(Seq(AstLiteral.StringPlainPart("a"))), Ast.UnitLiteral())))
 
-    val result = ValueExprAnalyzer.valueExprTerm(envWith("x", intType), Ast.Pipe(Ast.NamedValue("x"), piecewise))
+    val result = ValueExprAnalyzer.valueExprTerm(envWith("x", intType), Ast.Pipe(Ast.NamedValue("x"), piecewise)).run
 
     assert(result.value.left.value.map(_.message) === Seq("Pattern of type `String` can never match a value of type `Int`"))
   }
@@ -109,7 +109,7 @@ class ValueExprAnalyzerSpec extends BaseSpec {
   test("x @ (n => n) infers the lambda parameter's type from x") {
     val lambda = Ast.Lambda(Nil, Ast.CapturePattern("n"), Ast.NamedValue("n"))
 
-    val result = ValueExprAnalyzer.valueExprTerm(envWith("x", intType), Ast.Pipe(Ast.NamedValue("x"), lambda))
+    val result = ValueExprAnalyzer.valueExprTerm(envWith("x", intType), Ast.Pipe(Ast.NamedValue("x"), lambda)).run
 
     assert(result.value.value.typ === intType)
   }
@@ -118,7 +118,7 @@ class ValueExprAnalyzerSpec extends BaseSpec {
     val piecewise = Ast.Piecewise(Seq((Ast.CapturePattern("n"), Ast.UnitLiteral())))
     val env = envWith("f", Types.Func(Types.Func(intType, Types.Uni), Types.Uni))
 
-    val result = ValueExprAnalyzer.valueExprTerm(env, Ast.Call(Ast.NamedValue("f"), piecewise))
+    val result = ValueExprAnalyzer.valueExprTerm(env, Ast.Call(Ast.NamedValue("f"), piecewise)).run
 
     assert(result.value.value.typ === Types.Uni)
   }
@@ -127,7 +127,7 @@ class ValueExprAnalyzerSpec extends BaseSpec {
     val argument = Ast.Tuple(Seq(Ast.Lambda(Nil, Ast.CapturePattern("n"), Ast.NamedValue("n")), Ast.IntegerLiteral(AstLiteral.IntegerDec("0"))))
     val env = envWith("f", Types.Func(Types.Tuple(Seq(Types.Func(intType, intType), intType)), Types.Uni))
 
-    val result = ValueExprAnalyzer.valueExprTerm(env, Ast.Call(Ast.NamedValue("f"), argument))
+    val result = ValueExprAnalyzer.valueExprTerm(env, Ast.Call(Ast.NamedValue("f"), argument)).run
 
     assert(result.value.value.typ === Types.Uni)
   }
@@ -136,58 +136,58 @@ class ValueExprAnalyzerSpec extends BaseSpec {
     val argument = Ast.Record(Seq(Ast.FieldDef("g", None, Ast.Piecewise(Seq((Ast.CapturePattern("n"), Ast.UnitLiteral()))))))
     val env = envWith("f", Types.Func(Types.Record("g" -> Types.Func(intType, Types.Uni)), Types.Uni))
 
-    val result = ValueExprAnalyzer.valueExprTerm(env, Ast.Call(Ast.NamedValue("f"), argument))
+    val result = ValueExprAnalyzer.valueExprTerm(env, Ast.Call(Ast.NamedValue("f"), argument)).run
 
     assert(result.value.value.typ === Types.Uni)
   }
 
   test("{g: Int => Int = n => n} infers the lambda's parameter type from the field's type annotation") {
-    val intTypeExpr = Ast.NamedType(Ast.NameWithPos("Int"), Nil)
+    val intTypeExpr = Ast.NamedType(Nil, Ast.NameWithPos("Int"), Nil)
     val record = Ast.Record(Seq(Ast.FieldDef(
       "g",
       Some(Ast.FuncType(Nil, intTypeExpr, intTypeExpr)),
       Ast.Lambda(Nil, Ast.CapturePattern("n"), Ast.NamedValue("n")),
     )))
 
-    val result = ValueExprAnalyzer.valueExprTerm(AnalyzerTestPrelude.env, record)
+    val result = ValueExprAnalyzer.valueExprTerm(AnalyzerTestPrelude.env, record).run
 
     assert(result.value.value.typ === Types.Record("g" -> Types.Func(intType, intType)))
   }
 
   test("x: Int | String declares the wider type") {
-    val intOrStringExpr = Ast.UnionType(Seq(Ast.NamedType(Ast.NameWithPos("Int"), Nil), Ast.NamedType(Ast.NameWithPos("String"), Nil)))
+    val intOrStringExpr = Ast.UnionType(Seq(Ast.NamedType(Nil, Ast.NameWithPos("Int"), Nil), Ast.NamedType(Nil, Ast.NameWithPos("String"), Nil)))
 
-    val result = ValueExprAnalyzer.valueExprTerm(envWith("x", intType), Ast.ValueAs(Ast.NamedValue("x"), intOrStringExpr))
+    val result = ValueExprAnalyzer.valueExprTerm(envWith("x", intType), Ast.ValueAs(Ast.NamedValue("x"), intOrStringExpr)).run
 
-    assert(result.value.value === Terms.ValueAs(Terms.NamedValue("x", intType), intOrString))
+    assert(result.value.value === Terms.ValueAs(Terms.NamedValue("x", Nil, intType), intOrString))
   }
 
   test("x: String fails when x's type is not assignable to the declared type") {
     val result = ValueExprAnalyzer.valueExprTerm(
       envWith("x", intType),
-      Ast.ValueAs(Ast.NamedValue("x"), Ast.NamedType(Ast.NameWithPos("String"), Nil)),
-    )
+      Ast.ValueAs(Ast.NamedValue("x"), Ast.NamedType(Nil, Ast.NameWithPos("String"), Nil)),
+    ).run
 
     assert(result.value.left.value.map(_.message) === Seq("Type `Int` is not assignable to type `String`"))
   }
 
   test("(n => n): Int => Int infers the lambda's parameter type from the declared type") {
-    val intTypeExpr = Ast.NamedType(Ast.NameWithPos("Int"), Nil)
+    val intTypeExpr = Ast.NamedType(Nil, Ast.NameWithPos("Int"), Nil)
     val valueAs = Ast.ValueAs(Ast.Lambda(Nil, Ast.CapturePattern("n"), Ast.NamedValue("n")), Ast.FuncType(Nil, intTypeExpr, intTypeExpr))
 
-    val result = ValueExprAnalyzer.valueExprTerm(AnalyzerTestPrelude.env, valueAs)
+    val result = ValueExprAnalyzer.valueExprTerm(AnalyzerTestPrelude.env, valueAs).run
 
     assert(result.value.value.typ === Types.Func(intType, intType))
   }
 
   // exhaustiveness and reachability of the cases of #()
 
-  private val trueType = Types.Singleton(TypeCons.SingletonTypeCon("True", NoPos))
-  private val falseType = Types.Singleton(TypeCons.SingletonTypeCon("False", NoPos))
+  private val trueType = Types.Singleton(TypeCons.SingletonTypeCon("True", Nil, NoPos))
+  private val falseType = Types.Singleton(TypeCons.SingletonTypeCon("False", Nil, NoPos))
   private val booleanType = Types.Union(Seq(trueType, falseType))
   private def booleanEnvWith(name: String, typ: Types.Type) = envWith(name, typ).
-    addOrShadowValue("True", trueType, NoPos).value.value.
-    addOrShadowValue("False", falseType, NoPos).value.value
+    addValue("True", trueType, NoPos).run.value.value.
+    addValue("False", falseType, NoPos).run.value.value
   private def unitCase(pattern: Ast.Pattern) = (pattern, Ast.UnitLiteral())
   private def int(value: String) = Ast.IntegerPattern(AstLiteral.IntegerDec(value))
   private def matchX(env: Env, cases: (Ast.Pattern, Ast.ValueExpr)*) =
@@ -195,14 +195,14 @@ class ValueExprAnalyzerSpec extends BaseSpec {
 
   test("cases matching every singleton of a union are exhaustive") {
     val result = matchX(booleanEnvWith("x", booleanType),
-      unitCase(Ast.NamedConstantPattern("True")), unitCase(Ast.NamedConstantPattern("False")))
+      unitCase(Ast.NamedConstantPattern(Nil, Ast.NameWithPos("True"))), unitCase(Ast.NamedConstantPattern(Nil, Ast.NameWithPos("False")))).run
 
     assert(result.value.isRight)
     assert(result.log.warnings.isEmpty)
   }
 
   test("cases missing a singleton of a union are not exhaustive") {
-    val result = matchX(booleanEnvWith("x", booleanType), unitCase(Ast.NamedConstantPattern("True")))
+    val result = matchX(booleanEnvWith("x", booleanType), unitCase(Ast.NamedConstantPattern(Nil, Ast.NameWithPos("True")))).run
 
     assert(result.value.left.value.map(_.message) === Seq(
       "Cases of the piecewise function don't match every value of type `True | False`, e.g. add a last case `_ => ...`"
@@ -210,27 +210,27 @@ class ValueExprAnalyzerSpec extends BaseSpec {
   }
 
   test("literal cases never cover their whole type") {
-    val result = matchX(envWith("x", intType), unitCase(int("1")), unitCase(int("2")))
+    val result = matchX(envWith("x", intType), unitCase(int("1")), unitCase(int("2"))).run
 
     assert(result.value.left.value.map(_.message).head.startsWith("Cases of the piecewise function don't match every value of type `Int`"))
   }
 
   test("a capture after literal cases makes the cases exhaustive") {
-    val result = matchX(envWith("x", intType), unitCase(int("1")), unitCase(Ast.CapturePattern("n")))
+    val result = matchX(envWith("x", intType), unitCase(int("1")), unitCase(Ast.CapturePattern("n"))).run
 
     assert(result.value.isRight)
     assert(result.log.warnings.isEmpty)
   }
 
   test("a case after a capture is unreachable") {
-    val result = matchX(envWith("x", intType), unitCase(Ast.CapturePattern("n")), unitCase(int("1")))
+    val result = matchX(envWith("x", intType), unitCase(Ast.CapturePattern("n")), unitCase(int("1"))).run
 
     assert(result.value.isRight)
     assert(result.log.warnings.map(_.message) === Seq("Pattern is unreachable, earlier cases already match all its values"))
   }
 
   test("a literal case after the same literal is still reachable since literals cover nothing") {
-    val result = matchX(envWith("x", intType), unitCase(int("1")), unitCase(int("1")), unitCase(Ast.WildcardPattern()))
+    val result = matchX(envWith("x", intType), unitCase(int("1")), unitCase(int("1")), unitCase(Ast.WildcardPattern())).run
 
     // FIXME without literal types the duplicate literal can't be detected as unreachable
     assert(result.log.warnings.isEmpty)
@@ -238,9 +238,9 @@ class ValueExprAnalyzerSpec extends BaseSpec {
 
   test("tuple cases are exhaustive when together they cover every combination") {
     val result = matchX(booleanEnvWith("x", Types.Tuple(Seq(booleanType, intType))),
-      unitCase(Ast.TuplePattern(Seq(Ast.NamedConstantPattern("True"), Ast.CapturePattern("n")))),
-      unitCase(Ast.TuplePattern(Seq(Ast.NamedConstantPattern("False"), Ast.CapturePattern("n")))),
-    )
+      unitCase(Ast.TuplePattern(Seq(Ast.NamedConstantPattern(Nil, Ast.NameWithPos("True")), Ast.CapturePattern("n")))),
+      unitCase(Ast.TuplePattern(Seq(Ast.NamedConstantPattern(Nil, Ast.NameWithPos("False")), Ast.CapturePattern("n")))),
+    ).run
 
     assert(result.value.isRight)
     assert(result.log.warnings.isEmpty)
@@ -248,20 +248,20 @@ class ValueExprAnalyzerSpec extends BaseSpec {
 
   test("a tuple case with a literal element covers nothing") {
     val result = matchX(booleanEnvWith("x", Types.Tuple(Seq(booleanType, intType))),
-      unitCase(Ast.TuplePattern(Seq(Ast.NamedConstantPattern("True"), int("1")))),
-      unitCase(Ast.TuplePattern(Seq(Ast.NamedConstantPattern("False"), Ast.CapturePattern("n")))),
-    )
+      unitCase(Ast.TuplePattern(Seq(Ast.NamedConstantPattern(Nil, Ast.NameWithPos("True")), int("1")))),
+      unitCase(Ast.TuplePattern(Seq(Ast.NamedConstantPattern(Nil, Ast.NameWithPos("False")), Ast.CapturePattern("n")))),
+    ).run
 
     assert(result.value.left.value.map(_.message).head.startsWith("Cases of the piecewise function don't match every value"))
   }
 
   test("type pattern cases that would need a runtime type test are rejected for now") {
-    val intTypeExpr = Ast.NamedType(Ast.NameWithPos("Int"), Nil)
-    val stringTypeExpr = Ast.NamedType(Ast.NameWithPos("String"), Nil)
+    val intTypeExpr = Ast.NamedType(Nil, Ast.NameWithPos("Int"), Nil)
+    val stringTypeExpr = Ast.NamedType(Nil, Ast.NameWithPos("String"), Nil)
     val result = matchX(envWith("x", intOrString),
       unitCase(Ast.PatternAs(Ast.CapturePattern("n"), intTypeExpr)),
       unitCase(Ast.PatternAs(Ast.CapturePattern("s"), stringTypeExpr)),
-    )
+    ).run
 
     assert(result.value.left.value.map(_.message) === Seq(
       "Pattern needs to test the type of the value at runtime, which isn't supported yet",
@@ -270,11 +270,11 @@ class ValueExprAnalyzerSpec extends BaseSpec {
   }
 
   test("a type pattern covers its type when it needs no runtime type test, e.g. (n: Int, True) and (n: Int, False)") {
-    val intTypeExpr = Ast.NamedType(Ast.NameWithPos("Int"), Nil)
+    val intTypeExpr = Ast.NamedType(Nil, Ast.NameWithPos("Int"), Nil)
     val result = matchX(booleanEnvWith("x", Types.Tuple(Seq(intType, booleanType))),
-      unitCase(Ast.TuplePattern(Seq(Ast.PatternAs(Ast.CapturePattern("n"), intTypeExpr), Ast.NamedConstantPattern("True")))),
-      unitCase(Ast.TuplePattern(Seq(Ast.PatternAs(Ast.CapturePattern("n"), intTypeExpr), Ast.NamedConstantPattern("False")))),
-    )
+      unitCase(Ast.TuplePattern(Seq(Ast.PatternAs(Ast.CapturePattern("n"), intTypeExpr), Ast.NamedConstantPattern(Nil, Ast.NameWithPos("True"))))),
+      unitCase(Ast.TuplePattern(Seq(Ast.PatternAs(Ast.CapturePattern("n"), intTypeExpr), Ast.NamedConstantPattern(Nil, Ast.NameWithPos("False"))))),
+    ).run
 
     assert(result.value.isRight)
     assert(result.log.warnings.isEmpty)
@@ -284,13 +284,13 @@ class ValueExprAnalyzerSpec extends BaseSpec {
     val result = matchX(envWith("x", intOrString),
       unitCase(Ast.StringPattern(Seq(AstLiteral.StringCapturePart(Ast.CapturePattern("s"))))),
       unitCase(Ast.WildcardPattern()),
-    )
+    ).run
 
     assert(result.value.left.value.map(_.message) === Seq("Pattern needs to test the type of the value at runtime, which isn't supported yet"))
   }
 
   test("#(1 => ()) without an expected type is not exhaustive for the Int it can be called with") {
-    val result = ValueExprAnalyzer.valueExprTerm(AnalyzerTestPrelude.env, Ast.Piecewise(Seq(unitCase(int("1")))))
+    val result = ValueExprAnalyzer.valueExprTerm(AnalyzerTestPrelude.env, Ast.Piecewise(Seq(unitCase(int("1"))))).run
 
     assert(result.value.left.value.map(_.message).head.startsWith("Cases of the piecewise function don't match every value of type `Int`"))
   }
@@ -298,7 +298,7 @@ class ValueExprAnalyzerSpec extends BaseSpec {
   test("#() with one case is typed as a function, not an intersection") {
     val piecewise = Ast.Piecewise(Seq((Ast.UnitPattern(), Ast.UnitLiteral())))
 
-    val result = ValueExprAnalyzer.valueExprTerm(AnalyzerTestPrelude.env, piecewise)
+    val result = ValueExprAnalyzer.valueExprTerm(AnalyzerTestPrelude.env, piecewise).run
 
     assert(result.value.value.typ === Types.Func(Types.Uni, Types.Uni))
   }

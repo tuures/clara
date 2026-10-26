@@ -12,6 +12,7 @@ object Ast {
   sealed trait Method extends Node
   sealed trait ValueExpr extends BlockContent
   sealed trait InBlockDecl extends BlockContent
+  sealed trait TypeLevelDecl extends InBlockDecl
 
   case class TopType(pos: Pos = NoPos) extends TypeExpr
   case class BottomType(pos: Pos = NoPos) extends TypeExpr
@@ -39,9 +40,9 @@ object Ast {
   case class NameWithPos(name: String, pos: Pos = NoPos) extends Node
   // TODO add typeArg for NamedValue or allow typeArg to be used on any expression with separate node?
   case class NamedValue(name: String, pos: Pos = NoPos) extends ValueExpr
-  case class NamedType(name: NameWithPos, typeArgs: Seq[TypeExpr], pos: Pos = NoPos) extends TypeExpr
+  case class NamedType(nsPath: Seq[NameWithPos], name: NameWithPos, typeArgs: Seq[TypeExpr], pos: Pos = NoPos) extends TypeExpr
   // TODO add escape syntax for lower case literal patterns
-  case class NamedConstantPattern(name: String, pos: Pos = NoPos) extends Pattern
+  case class NamedConstantPattern(nsPath: Seq[NameWithPos], name: NameWithPos, pos: Pos = NoPos) extends Pattern
   case class CapturePattern(name: String, pos: Pos = NoPos) extends Pattern
 
   case class GuardPattern(p: Option[Pattern], guard: ValueExpr, pos: Pos = NoPos) extends Pattern
@@ -98,7 +99,10 @@ object Ast {
   case class DeclTargetType(name: NameWithPos, typeParams: Seq[TypeParam], pos: Pos = NoPos)
 
   // TODO: add attributes?
-  case class TypeDef(typeDefKind: TypeDefKind, target: DeclTargetType, t: Option[TypeExpr], pos: Pos = NoPos) extends InBlockDecl
+  case class TypeDef(typeDefKind: TypeDefKind, target: DeclTargetType, t: Option[TypeExpr], pos: Pos = NoPos) extends TypeLevelDecl
+
+  // isExtend: `::extend Name`, the namespace is the companion of the type `Name` defined in the same scope
+  case class NamespaceDef(isExtend: Boolean, name: NameWithPos, body: Seq[InBlockDecl], pos: Pos = NoPos) extends TypeLevelDecl
 
   // TODO: use ConstructPattern instead of targetType, selfPattern ?
 
@@ -107,6 +111,6 @@ object Ast {
   case class MethodSection(isDecl: Boolean, target: DeclTargetType, selfPattern: Option[Pattern], methods: Seq[Method], pos: Pos = NoPos) extends InBlockDecl
 
   // TODO: add attributes?
-  case class ValueDecl(name: String, t: TypeExpr, pos: Pos = NoPos) extends InBlockDecl
+  case class ValueDecl(name: NameWithPos, t: TypeExpr, pos: Pos = NoPos) extends InBlockDecl
   case class ValueDef(target: Pattern, e: ValueExpr, pos: Pos = NoPos) extends InBlockDecl
 }

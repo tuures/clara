@@ -15,3 +15,9 @@ final class DefId extends UniqId
 object DefId {
   def apply() = new DefId()
 }
+
+// identity of a namespace
+final class NsId extends UniqId
+object NsId {
+  def apply() = new NsId()
+}

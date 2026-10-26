@@ -8,7 +8,7 @@ class TypeExprAnalyzerSpec extends BaseSpec {
     val result = TypeExprAnalyzer.namedTypeCon(
       AnalyzerTestPrelude.env,
       Ast.NameWithPos("Int", NoPos),
-    )
+    ).run
 
     assert(result.value.value === AnalyzerTestPrelude.intCon)
     assert(result.log.usageTrace.defs === Map(AnalyzerTestPrelude.intDefId -> Set(NoPos)))

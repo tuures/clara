@@ -4,6 +4,7 @@ import clara.testutil.BaseSpec
 
 import clara.asg.{Attributes, Namespace, TermLiteral, Terms, TypeCons, Types}
 import clara.ast.NoPos
+import clara.ast.Ast.TypeDefKind
 import clara.jsemitter.impl.{JsAst, JsPrinter}
 
 class JsEmitterSpec extends BaseSpec {
@@ -55,7 +56,7 @@ class JsEmitterSpec extends BaseSpec {
   test("emitValueExpr: StringLiteral with expression") {
     val expr = Terms.StringLiteral(Seq(
       TermLiteral.StringPlainPart("hello "),
-      TermLiteral.StringValueExprPart(Terms.NamedValue("x", dummyType)),
+      TermLiteral.StringValueExprPart(Terms.NamedValue("x", Nil, dummyType)),
     ), dummyType)
     assert(emitExpr(expr) === JsAst.StringLiteral(Seq(
       JsAst.StringPlainPart("hello "),
@@ -76,7 +77,7 @@ class JsEmitterSpec extends BaseSpec {
 
   test("emitValueExpr: Block with single expression returns it") {
     val block = Terms.Block(Seq(
-      Terms.NamedValue("a", dummyType),
+      Terms.NamedValue("a", Nil, dummyType),
     ), dummyType)
     val result = JsEmitter.emitValueExpr(block)
     assert(result === JsAst.Named("a"))
@@ -84,8 +85,8 @@ class JsEmitterSpec extends BaseSpec {
 
   test("emitValueExpr: Block with multiple expressions only returns last") {
     val block = Terms.Block(Seq(
-      Terms.NamedValue("a", dummyType),
-      Terms.NamedValue("b", dummyType),
+      Terms.NamedValue("a", Nil, dummyType),
+      Terms.NamedValue("b", Nil, dummyType),
     ), dummyType)
     val result = JsEmitter.emitValueExpr(block)
     assert(result === JsAst.Iife(Seq(
@@ -96,8 +97,8 @@ class JsEmitterSpec extends BaseSpec {
 
   test("emitValueExpr: Block with defs and expressions") {
     val block = Terms.Block(Seq(
-      Terms.ValueDef(Terms.CapturePattern("x", dummyType), Terms.IntegerLiteral(TermLiteral.IntegerDec("1"), dummyType)),
-      Terms.NamedValue("x", dummyType),
+      Terms.ValueDef(Terms.CapturePattern("x", dummyType), Nil, Terms.IntegerLiteral(TermLiteral.IntegerDec("1"), dummyType)),
+      Terms.NamedValue("x", Nil, dummyType),
     ), dummyType)
     val result = JsEmitter.emitValueExpr(block)
     assert(result === JsAst.Iife(Seq(
@@ -107,13 +108,18 @@ class JsEmitterSpec extends BaseSpec {
   }
 
   test("emitValueExpr: NamedValue") {
-    val expr = Terms.NamedValue("foo", dummyType)
+    val expr = Terms.NamedValue("foo", Nil, dummyType)
     assert(emitExpr(expr) === JsAst.Named("foo"))
   }
 
+  test("emitValueExpr: NamedValue of a namespace member is qualified with its namespaces") {
+    assert(emitExpr(Terms.NamedValue("dark", Seq("Color", "Shades"), dummyType)) === JsAst.Named("Color$Shades$dark"))
+    assert(emitExpr(Terms.NamedValue("class", Seq("Color"), dummyType)) === JsAst.Named("Color$class"))
+  }
+
   test("emitValueExpr: NamedValue colliding with a JS reserved name gets a $ suffix") {
-    assert(emitExpr(Terms.NamedValue("class", dummyType)) === JsAst.Named("class$"))
-    assert(emitExpr(Terms.NamedValue("globalThis", dummyType)) === JsAst.Named("globalThis$"))
+    assert(emitExpr(Terms.NamedValue("class", Nil, dummyType)) === JsAst.Named("class$"))
+    assert(emitExpr(Terms.NamedValue("globalThis", Nil, dummyType)) === JsAst.Named("globalThis$"))
   }
 
   test("emitValueExpr: ValueAs emits just the annotated value") {
@@ -132,7 +138,7 @@ class JsEmitterSpec extends BaseSpec {
   test("emitValueExpr: Lambda") {
     val expr = Terms.Lambda(
       Terms.CapturePattern("x", dummyType),
-      Terms.NamedValue("x", dummyType),
+      Terms.NamedValue("x", Nil, dummyType),
       dummyType
     )
     assert(emitExpr(expr) === JsAst.UnaryArrowFunc(
@@ -142,8 +148,8 @@ class JsEmitterSpec extends BaseSpec {
   }
 
   test("emitValueExpr: Piecewise with NamedConstantPattern") {
-    val trueVal = Terms.NamedValue("True", dummyType)
-    val falseVal = Terms.NamedValue("False", dummyType)
+    val trueVal = Terms.NamedValue("True", Nil, dummyType)
+    val falseVal = Terms.NamedValue("False", Nil, dummyType)
     val expr = Terms.Piecewise(Seq(
       (Terms.NamedConstantPattern(trueVal), Terms.IntegerLiteral(TermLiteral.IntegerDec("1"), dummyType)),
       (Terms.NamedConstantPattern(falseVal), Terms.IntegerLiteral(TermLiteral.IntegerDec("0"), dummyType)),
@@ -158,7 +164,7 @@ class JsEmitterSpec extends BaseSpec {
 
   test("emitValueExpr: Piecewise with a capture binds the matched value and needs no condition") {
     val expr = Terms.Piecewise(Seq(
-      (Terms.CapturePattern("n", dummyType), Terms.NamedValue("n", dummyType)),
+      (Terms.CapturePattern("n", dummyType), Terms.NamedValue("n", Nil, dummyType)),
     ), dummyType)
     assert(emitExpr(expr) === JsAst.UnaryArrowFunc(JsAst.NamePattern("$value"), Seq(
       JsAst.Const(JsAst.NamePattern("n"), JsAst.Named("$value")),
@@ -171,7 +177,7 @@ class JsEmitterSpec extends BaseSpec {
     val expr = Terms.Piecewise(Seq(
       (
         Terms.TuplePattern(Seq(Terms.UnitPattern(), Terms.CapturePattern("x", dummyType)), dummyType),
-        Terms.NamedValue("x", dummyType),
+        Terms.NamedValue("x", Nil, dummyType),
       ),
       (Terms.WildcardPattern(dummyType), Terms.IntegerLiteral(TermLiteral.IntegerDec("0"), dummyType)),
     ), dummyType)
@@ -192,7 +198,7 @@ class JsEmitterSpec extends BaseSpec {
 
   test("emitValueExpr: MemberSelection on field") {
     val expr = Terms.MemberSelection(
-      Terms.NamedValue("obj", dummyType),
+      Terms.NamedValue("obj", Nil, dummyType),
       "x",
       Terms.SelectedField,
       dummyType
@@ -201,10 +207,10 @@ class JsEmitterSpec extends BaseSpec {
   }
 
   test("emitValueExpr: MemberSelection on method with BinaryOperator emitKind") {
-    val con = TypeCons.OpaqueTypeCon("Int", Nil, NoPos)
+    val con = TypeCons.OpaqueTypeCon("Int", Nil, Nil, NoPos)
     val attrs = Attributes.MethodAttributes(emitKind = Some(Attributes.BinaryOperator), emitName = Some("+"))
     val expr = Terms.MemberSelection(
-      Terms.NamedValue("a", dummyType),
+      Terms.NamedValue("a", Nil, dummyType),
       "plus",
       Terms.SelectedMethod(con, attrs),
       dummyType
@@ -216,10 +222,10 @@ class JsEmitterSpec extends BaseSpec {
   }
 
   test("emitValueExpr: MemberSelection on method with InstanceProperty emitKind") {
-    val con = TypeCons.OpaqueTypeCon("String", Nil, NoPos)
+    val con = TypeCons.OpaqueTypeCon("String", Nil, Nil, NoPos)
     val attrs = Attributes.MethodAttributes(emitKind = Some(Attributes.InstanceProperty), emitName = Some("length"))
     val expr = Terms.MemberSelection(
-      Terms.NamedValue("s", dummyType),
+      Terms.NamedValue("s", Nil, dummyType),
       "length",
       Terms.SelectedMethod(con, attrs),
       dummyType
@@ -228,10 +234,10 @@ class JsEmitterSpec extends BaseSpec {
   }
 
   test("emitValueExpr: MemberSelection on method with no emitKind") {
-    val con = TypeCons.OpaqueTypeCon("Foo", Nil, NoPos)
+    val con = TypeCons.OpaqueTypeCon("Foo", Nil, Nil, NoPos)
     val attrs = Attributes.MethodAttributes()
     val expr = Terms.MemberSelection(
-      Terms.NamedValue("obj", dummyType),
+      Terms.NamedValue("obj", Nil, dummyType),
       "bar",
       Terms.SelectedMethod(con, attrs),
       dummyType
@@ -244,7 +250,7 @@ class JsEmitterSpec extends BaseSpec {
 
   test("emitValueExpr: Call") {
     val expr = Terms.Call(
-      Terms.NamedValue("f", dummyType),
+      Terms.NamedValue("f", Nil, dummyType),
       Terms.IntegerLiteral(TermLiteral.IntegerDec("1"), dummyType),
       dummyType
     )
@@ -252,15 +258,15 @@ class JsEmitterSpec extends BaseSpec {
   }
 
   test("emitValueExpr: Call with binary operator optimization") {
-    val con = TypeCons.OpaqueTypeCon("Int", Nil, NoPos)
+    val con = TypeCons.OpaqueTypeCon("Int", Nil, Nil, NoPos)
     val attrs = Attributes.MethodAttributes(emitKind = Some(Attributes.BinaryOperator), emitName = Some("+"))
     val callee = Terms.MemberSelection(
-      Terms.NamedValue("a", dummyType),
+      Terms.NamedValue("a", Nil, dummyType),
       "plus",
       Terms.SelectedMethod(con, attrs),
       dummyType
     )
-    val expr = Terms.Call(callee, Terms.NamedValue("b", dummyType), dummyType)
+    val expr = Terms.Call(callee, Terms.NamedValue("b", Nil, dummyType), dummyType)
     assert(emitExpr(expr) === JsAst.BinaryOperation(JsAst.Named("a"), "+", JsAst.Named("b")))
   }
 
@@ -275,7 +281,7 @@ class JsEmitterSpec extends BaseSpec {
   test("emitModule: value def") {
     val program = Terms.Block(Seq(
       Terms.ValueDef(
-        Terms.CapturePattern("x", dummyType),
+        Terms.CapturePattern("x", dummyType), Nil,
         Terms.IntegerLiteral(TermLiteral.IntegerDec("42"), dummyType)
       )
     ), dummyType)
@@ -292,7 +298,7 @@ class JsEmitterSpec extends BaseSpec {
           Terms.CapturePattern("a", dummyType),
           Terms.CapturePattern("b", dummyType),
           Terms.UnitPattern(),
-        ), dummyType),
+        ), dummyType), Nil,
         Terms.Tuple(Seq(
           Terms.IntegerLiteral(TermLiteral.IntegerDec("1"), dummyType),
           Terms.IntegerLiteral(TermLiteral.IntegerDec("2"), dummyType),
@@ -307,12 +313,31 @@ class JsEmitterSpec extends BaseSpec {
   }
 
   test("emitModule: singleton type def") {
-    val con = TypeCons.SingletonTypeCon("True", NoPos)
+    val con = TypeCons.SingletonTypeCon("True", Nil, NoPos)
     val program = Terms.Block(Seq(Terms.TypeDef(con)), dummyType)
     val module = JsEmitter.emitModule(program)
     assert(module === JsAst.Module(Seq(
-      JsAst.Const(JsAst.NamePattern("True"), JsAst.StringLiteral("True"))
+      JsAst.Const(JsAst.NamePattern("True"), JsAst.ObjectLiteral(Seq("$type" -> JsAst.StringLiteral("True"))))
     )))
+  }
+
+  test("emitModule: tagged and boxed type defs emit their constructors as the apply of their companion") {
+    val program = Terms.Block(Seq(
+      Terms.TypeDef(TypeCons.WrapperTypeCon(TypeDefKind.Tagged, "Id", Nil, Nil, NoPos)),
+      Terms.TypeDef(TypeCons.WrapperTypeCon(TypeDefKind.Boxed, "Some", Nil, Seq("Option"), NoPos)),
+      Terms.TypeDef(TypeCons.WrapperTypeCon(TypeDefKind.Alias, "Unit", Nil, Nil, NoPos)),
+    ), dummyType)
+    assert(modulePrinted(program) ===
+      "const Id$apply = $value =>\n  $value\n\nconst Option$Some$apply = $value =>\n  ({\n    $type: 'Option.Some',\n    $value: $value\n  })")
+  }
+
+  test("emitModule: namespace members are top-level consts qualified with their namespaces") {
+    // type defs know their namespace from their con, value defs from definedInNs
+    val program = Terms.Block(Seq(
+      Terms.TypeDef(TypeCons.SingletonTypeCon("Red", Seq("Color"), NoPos)),
+      Terms.ValueDef(Terms.CapturePattern("dark", dummyType), Seq("Color", "Shades"), Terms.NamedValue("Red", Seq("Color"), dummyType)),
+    ), dummyType)
+    assert(modulePrinted(program) === "const Color$Red = {\n  $type: 'Color.Red'\n}\n\nconst Color$Shades$dark = Color$Red")
   }
 
   test("emitModule: value decl produces nothing") {
@@ -322,10 +347,10 @@ class JsEmitterSpec extends BaseSpec {
   }
 
   test("emitModule: method def section") {
-    val con = TypeCons.OpaqueTypeCon("Foo", Nil, NoPos)
+    val con = TypeCons.OpaqueTypeCon("Foo", Nil, Nil, NoPos)
     val program = Terms.Block(Seq(
       Terms.MethodDefSection(con, Terms.CapturePattern("self", dummyType), Namespace(
-        "bar" -> Terms.MethodDef(Attributes.MethodAttributes(), Terms.NamedValue("self", dummyType)),
+        "bar" -> Terms.MethodDef(Attributes.MethodAttributes(), Terms.NamedValue("self", Nil, dummyType)),
       )),
     ), dummyType)
     val module = JsEmitter.emitModule(program)
@@ -339,16 +364,16 @@ class JsEmitterSpec extends BaseSpec {
   // emitBindingPattern
 
   test("emitBindingPattern: WildcardPattern binds nothing") {
-    assert(JsEmitter.emitBindingPattern(Terms.WildcardPattern(dummyType)) === JsAst.IgnoredPattern)
+    assert(JsEmitter.emitBindingPattern(Terms.WildcardPattern(dummyType), Nil) === JsAst.IgnoredPattern)
   }
 
   test("emitBindingPattern: UnitPattern") {
-    assert(JsEmitter.emitBindingPattern(Terms.UnitPattern()) === JsAst.IgnoredPattern)
+    assert(JsEmitter.emitBindingPattern(Terms.UnitPattern(), Nil) === JsAst.IgnoredPattern)
   }
 
   test("emitBindingPattern: StringPattern with a single capture binds the string") {
     val pat = Terms.StringPattern(Seq(TermLiteral.StringCapturePart(Terms.CapturePattern("s", dummyType))), dummyType)
-    assert(JsEmitter.emitBindingPattern(pat) === JsAst.NamePattern("s"))
+    assert(JsEmitter.emitBindingPattern(pat, Nil) === JsAst.NamePattern("s"))
   }
 
   test("emitBindingPattern: TuplePattern") {
@@ -357,7 +382,7 @@ class JsEmitterSpec extends BaseSpec {
       Terms.WildcardPattern(dummyType),
       Terms.CapturePattern("b", dummyType),
     ), dummyType)
-    assert(JsEmitter.emitBindingPattern(pat) === JsAst.ArrayPattern(Seq(
+    assert(JsEmitter.emitBindingPattern(pat, Nil) === JsAst.ArrayPattern(Seq(
       JsAst.NamePattern("a"),
       JsAst.IgnoredPattern,
       JsAst.NamePattern("b"),
@@ -365,30 +390,30 @@ class JsEmitterSpec extends BaseSpec {
   }
 
   test("emitBindingPattern: CapturePattern") {
-    assert(JsEmitter.emitBindingPattern(Terms.CapturePattern("x", dummyType)) === JsAst.NamePattern("x"))
+    assert(JsEmitter.emitBindingPattern(Terms.CapturePattern("x", dummyType), Nil) === JsAst.NamePattern("x"))
   }
 
   test("emitBindingPattern: NamedConstantPattern binds nothing") {
-    val pat = Terms.NamedConstantPattern(Terms.NamedValue("True", dummyType))
-    assert(JsEmitter.emitBindingPattern(pat) === JsAst.IgnoredPattern)
+    val pat = Terms.NamedConstantPattern(Terms.NamedValue("True", Nil, dummyType))
+    assert(JsEmitter.emitBindingPattern(pat, Nil) === JsAst.IgnoredPattern)
   }
 
   test("emitBindingPattern: PatternAs emits its pattern") {
     val pat = Terms.PatternAs(Terms.CapturePattern("x", dummyType), dummyType)
-    assert(JsEmitter.emitBindingPattern(pat) === JsAst.NamePattern("x"))
+    assert(JsEmitter.emitBindingPattern(pat, Nil) === JsAst.NamePattern("x"))
   }
 
   // NameMangler
 
   test("NameMangler: methodsCompanionName") {
-    val con = TypeCons.OpaqueTypeCon("Foo", Nil, NoPos)
+    val con = TypeCons.OpaqueTypeCon("Foo", Nil, Nil, NoPos)
     assert(NameMangler.methodsCompanionName(con) === "Foo$Methods")
   }
 
   test("NameMangler: valueName suffixes only reserved names") {
-    assert(NameMangler.valueName("foo") === "foo")
-    assert(NameMangler.valueName("Array") === "Array")
-    assert(NameMangler.valueName("undefined") === "undefined$")
+    assert(NameMangler.valueName("foo", Nil) === "foo")
+    assert(NameMangler.valueName("Array", Nil) === "Array")
+    assert(NameMangler.valueName("undefined", Nil) === "undefined$")
   }
 
   // Cross-cutting: emitter + printer
@@ -397,8 +422,8 @@ class JsEmitterSpec extends BaseSpec {
     val program = Terms.Block(Seq(Terms.Lambda(
       Terms.CapturePattern("x", dummyType),
       Terms.Block(Seq(
-        Terms.ValueDef(Terms.CapturePattern("y", dummyType), Terms.NamedValue("x", dummyType)),
-        Terms.NamedValue("y", dummyType),
+        Terms.ValueDef(Terms.CapturePattern("y", dummyType), Nil, Terms.NamedValue("x", Nil, dummyType)),
+        Terms.NamedValue("y", Nil, dummyType),
       ), dummyType),
       dummyType
     )), dummyType)
@@ -407,18 +432,18 @@ class JsEmitterSpec extends BaseSpec {
 
   test("Emitter: program with def and expression") {
     val program = Terms.Block(Seq(
-      Terms.ValueDef(Terms.CapturePattern("x", dummyType), Terms.IntegerLiteral(TermLiteral.IntegerDec("1"), dummyType)),
-      Terms.NamedValue("x", dummyType),
+      Terms.ValueDef(Terms.CapturePattern("x", dummyType), Nil, Terms.IntegerLiteral(TermLiteral.IntegerDec("1"), dummyType)),
+      Terms.NamedValue("x", Nil, dummyType),
     ), dummyType)
     assert(modulePrinted(program) === "const x = 1\n\nx")
   }
 
   test("Emitter: wildcards bind nothing, so several of them don't collide") {
-    val pair = Terms.NamedValue("pair", dummyType)
+    val pair = Terms.NamedValue("pair", Nil, dummyType)
     val program = Terms.Block(Seq(
-      Terms.ValueDef(Terms.TuplePattern(Seq(Terms.WildcardPattern(dummyType), Terms.WildcardPattern(dummyType)), dummyType), pair),
-      Terms.ValueDef(Terms.WildcardPattern(dummyType), pair),
-      Terms.ValueDef(Terms.WildcardPattern(dummyType), pair),
+      Terms.ValueDef(Terms.TuplePattern(Seq(Terms.WildcardPattern(dummyType), Terms.WildcardPattern(dummyType)), dummyType), Nil, pair),
+      Terms.ValueDef(Terms.WildcardPattern(dummyType), Nil, pair),
+      Terms.ValueDef(Terms.WildcardPattern(dummyType), Nil, pair),
       Terms.Lambda(Terms.WildcardPattern(dummyType), pair, dummyType),
     ), dummyType)
     assert(modulePrinted(program) === "const [, ] = pair\n\npair\n\npair\n\n() =>\n  pair")
@@ -426,9 +451,9 @@ class JsEmitterSpec extends BaseSpec {
 
   test("Emitter: Clara names colliding with JS reserved names are suffixed where defined, captured and used") {
     val program = Terms.Block(Seq(
-      Terms.ValueDef(Terms.CapturePattern("delete", dummyType), Terms.IntegerLiteral(TermLiteral.IntegerDec("1"), dummyType)),
+      Terms.ValueDef(Terms.CapturePattern("delete", dummyType), Nil, Terms.IntegerLiteral(TermLiteral.IntegerDec("1"), dummyType)),
       Terms.Piecewise(Seq(
-        (Terms.CapturePattern("eval", dummyType), Terms.NamedValue("delete", dummyType)),
+        (Terms.CapturePattern("eval", dummyType), Terms.NamedValue("delete", Nil, dummyType)),
       ), dummyType),
     ), dummyType)
     assert(modulePrinted(program) === "const delete$ = 1\n\n$value => {\n  const eval$ = $value\n  return delete$\n}")

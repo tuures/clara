@@ -13,7 +13,7 @@ case class MemberSelectionAnalyzerImpl(env: Env, name: String, memberPos: Pos) {
   }
 
   def memberOfType(objectType: Types.Type): An[Option[(Terms.SelectedMember, Types.Type)]] = objectType match {
-    case Types.Record(fields) => An.result(fields.get(name).map(typ => (Terms.SelectedField, typ)))
+    case Types.Record(fields) => An.valid(fields.get(name).map(typ => (Terms.SelectedField, typ)))
     case Types.Union(ts) =>
       // TODO: fields of records would be quite straightforward
       // TODO: methods of union types requires pattern match in runtime to resolve the location of the method
@@ -22,7 +22,7 @@ case class MemberSelectionAnalyzerImpl(env: Env, name: String, memberPos: Pos) {
       // TODO: ts.find(t => memberOfType(t))
       ???
     case t: Types.Nominal => methodOfType(t)
-    case _ => An.result(None)
+    case _ => An.valid(None)
   }
 
   def methodOfType(objectType: Types.Nominal): An[Option[(Terms.SelectedMethod, Types.Type)]] = objectType match {
@@ -35,7 +35,7 @@ case class MemberSelectionAnalyzerImpl(env: Env, name: String, memberPos: Pos) {
 
     // case Types.Alias(_, wrappedType) => memberOfType(wrappedType)
     // case u @ Types.Unique(_, wrappedType, _) => methodOfType(u).flatMap {
-    //   case m @ Some(_) => An.result(m)
+    //   case m @ Some(_) => An.valid(m)
     //   case None => memberOfType(wrappedType)
     // }
 
@@ -47,7 +47,7 @@ case class MemberSelectionAnalyzerImpl(env: Env, name: String, memberPos: Pos) {
   //       TypeAnalyzer.instantiate(typ, typeArgs, memberPos).map { typeInst =>
   //         Some((Terms.SelectedMethod(attributes), typeInst))
   //       }
-  //     case None => An.result(None)
+  //     case None => An.valid(None)
   //   }
   }
 }

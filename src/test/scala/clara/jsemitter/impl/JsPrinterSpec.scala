@@ -98,6 +98,10 @@ class JsPrinterSpec extends BaseSpec {
 
   // Arrow functions
 
+  test("UnaryArrowFunc: an object literal body is parenthesized") {
+    assert(printExpr(UnaryArrowFunc(NamePattern("x"), Seq(Return(ObjectLiteral(Seq("a" -> Named("x"))))))) === "x =>\n  ({\n    a: x\n  })")
+  }
+
   test("UnaryArrowFunc: IgnoredPattern single return uses implicit return") {
     assert(printExpr(UnaryArrowFunc(IgnoredPattern, Seq(Return(NumberLiteral("1"))))) === "() =>\n  1")
   }

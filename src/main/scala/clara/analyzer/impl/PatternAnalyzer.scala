@@ -6,12 +6,14 @@ import clara.ast.{Ast, AstLiteral, Pos, SourceMessage}
 import clara.util.Safe._
 
 // refutable: whether the pattern only has to be able to match some values (a case of #()) instead of every value
-// (an assignment or a function parameter), see matchType. Applies to the whole pattern including nested patterns.
-case class PatternAnalyzerImpl(env: Env, refutable: Boolean) {
+// (a value def or a function parameter), see matchType. Applies to the whole pattern including nested patterns.
+// declared: whether the names the pattern binds were declared by the names pass of the scope (a value def), so that
+// the pattern defines them, instead of adding new names (a parameter, a case).
+case class PatternAnalyzerImpl(env: Env, refutable: Boolean, declared: Boolean) {
   def walk(targetPattern: Ast.Pattern, fromType: Option[Types.Type]): An[(Env, Terms.Pattern)] = targetPattern match {
     case Ast.WildcardPattern(pos) =>
       val typ = fromType.getOrElse(Types.Top)
-      An.result((env, Terms.WildcardPattern(typ)))
+      An.valid((env, Terms.WildcardPattern(typ)))
     case Ast.UnitPattern(pos) =>
       matchType(fromType, Types.Uni, pos).map { _ =>
         (env, Terms.UnitPattern())
@@ -35,9 +37,9 @@ case class PatternAnalyzerImpl(env: Env, refutable: Boolean) {
     }
     case Ast.TuplePattern(ps, pos) =>
       (fromType match {
-        case None => An.result(ps.map(_ => None))
-        case Some(fromType) => matchType(Some(fromType), Types.Tuple(ps.map(_ => Types.Top)), pos).map { _ =>
-          Types.tupleElementTypes(fromType, ps.length).map(Some(_))
+        case None => An.valid(ps.map(_ => None))
+        case Some(fromType) => matchType(Some(fromType), Types.Tuple(ps.map(_ => Types.Top)), pos).flatMap { _ =>
+          TypeInterpreter.tupleElementTypes(fromType, ps.length).map(_.map(Some(_)))
         }
       }).flatMap { fromTypes =>
         val initialState = (env, Vector.empty[Terms.Pattern])
@@ -50,7 +52,7 @@ case class PatternAnalyzerImpl(env: Env, refutable: Boolean) {
           (env, Terms.TuplePattern(patternTerms, Types.Tuple(patternTerms.map(_.typ))))
         }
       }
-    case Ast.NamedConstantPattern(name, pos) => namedConstant(name, fromType, pos)
+    case Ast.NamedConstantPattern(nsPath, name, pos) => namedConstant(nsPath, name, fromType, pos)
     case Ast.CapturePattern(name, pos) => capture(name, fromType, pos)
     case Ast.GuardPattern(p, guard, pos) => ???
     case Ast.DefaultValuePattern(p, default, pos) => ???
@@ -78,11 +80,11 @@ case class PatternAnalyzerImpl(env: Env, refutable: Boolean) {
     An.step(parts)(initialState) { case ((currentEnv, currentParts), part) =>
       part match {
         case AstLiteral.StringPlainPart(value) =>
-          An.result((currentEnv, currentParts :+ TermLiteral.StringPlainPart(value)))
+          An.valid((currentEnv, currentParts :+ TermLiteral.StringPlainPart(value)))
         case AstLiteral.StringEscapePart(escapes) =>
-          An.result((currentEnv, currentParts :+ TermLiteral.StringEscapePart(escapes)))
-        case AstLiteral.StringNamedConstantPart(Ast.NamedConstantPattern(name, pos)) =>
-          copy(env = currentEnv).namedConstant(name, Some(typ), pos).map { case (nextEnv, pattern) =>
+          An.valid((currentEnv, currentParts :+ TermLiteral.StringEscapePart(escapes)))
+        case AstLiteral.StringNamedConstantPart(Ast.NamedConstantPattern(nsPath, name, pos)) =>
+          copy(env = currentEnv).namedConstant(nsPath, name, Some(typ), pos).map { case (nextEnv, pattern) =>
             (nextEnv, currentParts :+ TermLiteral.StringNamedConstantPart(pattern))
           }
         case AstLiteral.StringCapturePart(Ast.CapturePattern(name, pos)) =>
@@ -97,8 +99,13 @@ case class PatternAnalyzerImpl(env: Env, refutable: Boolean) {
     }
   }
 
-  def namedConstant(name: String, fromType: Option[Types.Type], pos: Pos): An[(Env, Terms.NamedConstantPattern)] =
-    ValueExprAnalyzer.namedValue(env, name, pos).flatMap { term =>
+  def namedConstant(
+    nsPath: Seq[Ast.NameWithPos],
+    name: Ast.NameWithPos,
+    fromType: Option[Types.Type],
+    pos: Pos,
+  ): An[(Env, Terms.NamedConstantPattern)] =
+    NameResolver.value(env, nsPath, name.name, name.pos).flatMap { term =>
       matchType(fromType, term.typ, pos).map { _ =>
         (env, Terms.NamedConstantPattern(term))
       }
@@ -107,7 +114,7 @@ case class PatternAnalyzerImpl(env: Env, refutable: Boolean) {
   def capture(name: String, fromType: Option[Types.Type], pos: Pos): An[(Env, Terms.CapturePattern)] =
     // FIXME default to Top type and just give warning?
     An.fromSomeOrError(fromType, SourceMessage(pos, "Could not infer type")).flatMap { fromType =>
-      env.addOrShadowValue(name, fromType, pos).map { nextEnv =>
+      (if (declared) env.defineValue(name, fromType, pos) else env.addValue(name, fromType, pos)).map { nextEnv =>
         (nextEnv, Terms.CapturePattern(name, fromType))
       }
     }
@@ -117,15 +124,15 @@ case class PatternAnalyzerImpl(env: Env, refutable: Boolean) {
   // A refutable pattern only has to be able to match some value of fromType and the type narrows to the values it
   // matches, e.g. 1 on Int | String narrows to Int.
   def matchType(fromType: Option[Types.Type], patternType: Types.Type, pos: Pos): An[Types.Type] = fromType match {
-    case None => An.result(patternType)
-    case Some(fromType) if refutable =>
-      if (Types.disjoint(fromType, patternType)) {
+    case None => An.valid(patternType)
+    case Some(fromType) if refutable => TypeInterpreter.disjoint(fromType, patternType).flatMap {
+      case true =>
         val pattern = PatternAnalyzer.quotedPattern(pos)
         An.error(SourceMessage(pos,
           safe"$pattern of type `${Types.toSource(patternType)}` can never match a value of type `${Types.toSource(fromType)}`"
         ))
-      }
-      else An.result(Types.narrow(fromType, patternType))
+      case false => TypeInterpreter.narrow(fromType, patternType)
+    }
     case Some(fromType) => TypeInterpreter.expectAssignable(fromType, patternType, pos).map(_ => patternType)
   }
 
@@ -133,17 +140,20 @@ case class PatternAnalyzerImpl(env: Env, refutable: Boolean) {
   // and is only allowed where failing is possible: the cases of #(), not assignments or function parameters.
   // TODO revisit if literal types get added
   def expectRefutable(pos: Pos): An[Unit] =
-    if (refutable) An.result(())
+    if (refutable) An.valid(())
     else An.error(SourceMessage(pos, safe"${PatternAnalyzer.quotedPattern(pos)} can fail to match, literal patterns can only be used in the cases of a piecewise function"))
 
 }
 
 object PatternAnalyzer {
-  def walkAssignment(env: Env, targetPattern: Ast.Pattern, fromType: Option[Types.Type]): An[(Env, Terms.Pattern)] =
-    PatternAnalyzerImpl(env, refutable = false).walk(targetPattern, fromType)
+  def walkValueDef(env: Env, targetPattern: Ast.Pattern, fromType: Option[Types.Type]): An[(Env, Terms.Pattern)] =
+    PatternAnalyzerImpl(env, refutable = false, declared = true).walk(targetPattern, fromType)
+
+  def walkParameter(env: Env, parameterPattern: Ast.Pattern, fromType: Option[Types.Type]): An[(Env, Terms.Pattern)] =
+    PatternAnalyzerImpl(env, refutable = false, declared = false).walk(parameterPattern, fromType)
 
   def walkCase(env: Env, casePattern: Ast.Pattern, fromType: Option[Types.Type]): An[(Env, Terms.Pattern)] =
-    PatternAnalyzerImpl(env, refutable = true).walk(casePattern, fromType)
+    PatternAnalyzerImpl(env, refutable = true, declared = false).walk(casePattern, fromType)
 
   // The type whose every value the pattern matches, e.g. 1 has type Int but doesn't cover it
   def coveredType(pattern: Terms.Pattern): Types.Type = pattern match {
@@ -166,17 +176,23 @@ object PatternAnalyzer {
     case Terms.PatternAs(p, _) => coveredType(p)
   }
 
-  // Whether matching the pattern against a value of matchedType needs a runtime type test, i.e. it has a type
-  // pattern (p: T) whose type T narrower than the type of the value it's matched against
-  def needsTypeTest(pattern: Terms.Pattern, matchedType: Types.Type): Boolean = pattern match {
-    case Terms.TuplePattern(ps, _) =>
-      ps.zip(Types.tupleElementTypes(matchedType, ps.length)).exists { case (p, typ) => needsTypeTest(p, typ) }
-    case Terms.PatternAs(p, typ) => !Types.isAssignable(matchedType, typ) || needsTypeTest(p, Types.narrow(matchedType, typ))
-    // a single capture matches every string, so it's a test for strings
-    case Terms.StringPattern(Seq(_: TermLiteral.StringCapturePart), typ) => !Types.isAssignable(matchedType, typ)
-    // tuples are tested by the emitter, literals and named constants are compared by value
-    case _: Terms.WildcardPattern | _: Terms.UnitPattern | _: Terms.IntegerPattern | _: Terms.FloatPattern |
-      _: Terms.StringPattern | _: Terms.NamedConstantPattern | _: Terms.CapturePattern => false
+  def boundNames(pattern: Ast.Pattern): Seq[Ast.NameWithPos] = pattern match {
+    case _: Ast.WildcardPattern | _: Ast.UnitPattern | _: Ast.IntegerPattern | _: Ast.FloatPattern => Nil
+    case Ast.StringPattern(parts, _) => parts.collect {
+      case AstLiteral.StringCapturePart(Ast.CapturePattern(name, pos)) => Ast.NameWithPos(name, pos)
+    }
+    case Ast.TuplePattern(ps, _) => ps.flatMap(boundNames)
+    case _: Ast.NamedConstantPattern => Nil
+    case Ast.CapturePattern(name, pos) => Seq(Ast.NameWithPos(name, pos))
+    case Ast.GuardPattern(p, _, _) => p.toSeq.flatMap(boundNames)
+    case Ast.DefaultValuePattern(p, _, _) => boundNames(p)
+    case Ast.PatternAs(p, _, _) => boundNames(p)
+    case Ast.RecordPattern(fields, _) => fields.flatMap { field =>
+      field.subPattern.fold(Seq(Ast.NameWithPos(field.name, field.pos)))(boundNames)
+    }
+    // TODO: every alternative binds the same names?
+    case Ast.OrPattern(ps, _) => ??? // ps.headOption.toSeq.flatMap(boundNames)
+    case Ast.ConstructPattern(_, argumentPattern, _) => boundNames(argumentPattern)
   }
 
   def quotedPattern(pos: Pos): String = pos.sourceText.fold("Pattern")(text => safe"Pattern `$text`")

@@ -5,8 +5,10 @@ import clara.ast.Ast
 object AstTestHelpers {
   import Ast._
 
-    def NamedType(name: String) = new NamedType(NameWithPos(name), Nil)
-    def NamedType(name: String, typeArgs: Seq[TypeExpr]) = new NamedType(NameWithPos(name), typeArgs)
+    def NamedType(name: String) = new NamedType(Nil, NameWithPos(name), Nil)
+    def NamedType(name: String, typeArgs: Seq[TypeExpr]) = new NamedType(Nil, NameWithPos(name), typeArgs)
+
+    def NamedConstantPattern(name: String) = new NamedConstantPattern(Nil, NameWithPos(name))
 
     def DeclTargetType(name: String) = new DeclTargetType(NameWithPos(name), Nil)
     def DeclTargetType(name: String, typeParams: Seq[TypeParam]) = new DeclTargetType(NameWithPos(name), typeParams)
@@ -19,6 +21,8 @@ object AstTestHelpers {
       new TypeDef(typeDefKind, DeclTargetType(name, Nil), Some(t))
     def TypeDef(typeDefKind: TypeDefKind, name: String, typeParams: Seq[TypeParam], t: TypeExpr) =
       new TypeDef(typeDefKind, DeclTargetType(name, typeParams), Some(t))
+
+    def ValueDecl(name: String, t: TypeExpr) = new ValueDecl(NameWithPos(name), t)
 
     def MethodDecl(name: String, t: NamedType) = new MethodDecl(Nil, NameWithPos(name), t)
     def MethodDecl(attributes: Seq[Attribute], name: String, t: NamedType) =

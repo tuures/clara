@@ -13,7 +13,7 @@ case class TypeParamAnalyzer(parentEnv: Env) {
     ) { case ((currentEnv, currentParams), Ast.TypeParam(name, pos)) =>
       val paramCon = TypeCons.ParamCon(name, pos)
 
-      currentEnv.addOrShadowTypeCon(name, paramCon, pos).map { nextEnv =>
+      currentEnv.addTypeCon(name, paramCon, pos).map { nextEnv =>
         (nextEnv, currentParams :+ paramCon)
       }
     }

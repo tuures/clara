@@ -44,7 +44,7 @@ object Terms {
 
   case class Block(bcs: Seq[BlockContent], typ: Type) extends ValueExpr
 
-  case class NamedValue(name: String, typ: Type) extends ValueExpr
+  case class NamedValue(name: String, definedInNs: Seq[String], typ: Type) extends ValueExpr
 
   case class NamedConstantPattern(term: NamedValue) extends Pattern {
     def typ: Type = term.typ
@@ -84,5 +84,6 @@ object Terms {
   case class MethodDef(attributes: MethodAttributes, body: ValueExpr) extends Member
 
   case class ValueDecl(name: String) extends InBlockDecl
-  case class ValueDef(target: Pattern, e: ValueExpr) extends InBlockDecl
+  // definedInNs: the namespaces the bound values are members of, a namespace's values are defined at its position
+  case class ValueDef(target: Pattern, definedInNs: Seq[String], e: ValueExpr) extends InBlockDecl
 }

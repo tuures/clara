@@ -13,8 +13,10 @@ class ParserImplsSpec extends BaseSpec {
     MethodDecl => _,
     MethodDef => _,
     NamedType => _,
+    NamedConstantPattern => _,
     Lambda => _,
     FuncType => _,
+    ValueDecl => _,
     // above ones will be used via AstTestHelpers
     _
   }
@@ -112,7 +114,7 @@ class ParserImplsSpec extends BaseSpec {
   ))
   parseAst(p.processedStringPatternParts(_))(""""str($Const)"""")(Seq(
     AstLiteral.StringPlainPart("str("),
-    AstLiteral.StringNamedConstantPart(Ast.NamedConstantPattern("Const")),
+    AstLiteral.StringNamedConstantPart(NamedConstantPattern("Const")),
     AstLiteral.StringPlainPart(")")
   ))
   parseAst(p.processedStringValueParts(_))("\" line1 \n line2\"")(Seq(
@@ -128,7 +130,7 @@ class ParserImplsSpec extends BaseSpec {
   ))
   parseAst(p.processedStringPatternParts(_))(""""str$Const"""")(Seq(
     AstLiteral.StringPlainPart("str"),
-    AstLiteral.StringNamedConstantPart(Ast.NamedConstantPattern("Const"))
+    AstLiteral.StringNamedConstantPart(NamedConstantPattern("Const"))
   ))
   parseAst(p.processedStringValueParts(_))(""""str$(val)"""")(Seq(
     AstLiteral.StringPlainPart("str"),
@@ -140,7 +142,7 @@ class ParserImplsSpec extends BaseSpec {
   ))
   parseAst(p.processedStringPatternParts(_))(""""str$(Const)"""")(Seq(
     AstLiteral.StringPlainPart("str"),
-    AstLiteral.StringNamedConstantPart(Ast.NamedConstantPattern("Const"))
+    AstLiteral.StringNamedConstantPart(NamedConstantPattern("Const"))
   ))
   parseAst(p.processedStringValueParts(_))(""""$(val)str"""")(Seq(
     AstLiteral.StringValueExprPart(NamedValue("val")),
@@ -151,7 +153,7 @@ class ParserImplsSpec extends BaseSpec {
     AstLiteral.StringPlainPart("str")
   ))
   parseAst(p.processedStringPatternParts(_))(""""$(Const)str"""")(Seq(
-    AstLiteral.StringNamedConstantPart(Ast.NamedConstantPattern("Const")),
+    AstLiteral.StringNamedConstantPart(NamedConstantPattern("Const")),
     AstLiteral.StringPlainPart("str")
   ))
   parseAst(p.processedStringValueParts(_))(""""$val\nstr"""")(Seq(
@@ -165,7 +167,7 @@ class ParserImplsSpec extends BaseSpec {
     AstLiteral.StringPlainPart("str")
   ))
   parseAst(p.processedStringPatternParts(_))(""""$Const\nstr"""")(Seq(
-    AstLiteral.StringNamedConstantPart(Ast.NamedConstantPattern("Const")),
+    AstLiteral.StringNamedConstantPart(NamedConstantPattern("Const")),
     AstLiteral.StringEscapePart(Seq("n")),
     AstLiteral.StringPlainPart("str")
   ))
@@ -263,7 +265,15 @@ class ParserImplsSpec extends BaseSpec {
     )
   )
 
+  parseAst(p.namedType(_))("Color.Red")(Ast.NamedType(Seq(NameWithPos("Color")), NameWithPos("Red"), Nil))
+  parseAst(p.namedType(_))("Outer.Inner.Foo<Bar>")(
+    Ast.NamedType(Seq(NameWithPos("Outer"), NameWithPos("Inner")), NameWithPos("Foo"), Seq(NamedType("Bar")))
+  )
+  reject(p.namedType(_))("Color.")
+  reject(p.namedType(_))("Color. Red")
+
   parseAst(p.namedConstantPattern(_))("Foo")(NamedConstantPattern("Foo"))
+  parseAst(p.namedConstantPattern(_))("Color.Red")(Ast.NamedConstantPattern(Seq(NameWithPos("Color")), NameWithPos("Red")))
   // FIXME parseAst(p.namedConstantPattern(_))("_Foo")(NamedConstantPattern("_Foo"))
   reject(p.namedConstantPattern(_))("foo")
 
@@ -538,6 +548,26 @@ class ParserImplsSpec extends BaseSpec {
   parseAst(p.typeDef(_))("::singleton Foo<Nonsense>: Nonsense")(
     TypeDef(TypeDefKind.Singleton, "Foo", Seq(TypeParam("Nonsense")), NamedType("Nonsense"))
   )
+
+  parseAst(p.namespaceDef(_))("::namespace Color {}")(NamespaceDef(false, NameWithPos("Color"), Nil))
+  parseAst(p.namespaceDef(_))("::namespace Color {\n  ::singleton Red\n  favorite = Red\n  ::namespace Shades { ::declare dark: String }\n}")(
+    NamespaceDef(false, NameWithPos("Color"), Seq(
+      TypeDef(TypeDefKind.Singleton, "Red"),
+      ValueDef(CapturePattern("favorite"), NamedValue("Red")),
+      NamespaceDef(false, NameWithPos("Shades"), Seq(ValueDecl("dark", NamedType("String")))),
+    ))
+  )
+  parseAst(p.namespaceDef(_))("::extend Option {\n  ::singleton None\n}")(
+    NamespaceDef(true, NameWithPos("Option"), Seq(TypeDef(TypeDefKind.Singleton, "None")))
+  )
+  parseAst(p.block(_))("(\n  ::namespace Color { red = 1 }\n  Color.red\n)")(
+    Block(Seq(
+      NamespaceDef(false, NameWithPos("Color"), Seq(ValueDef(CapturePattern("red"), IntegerLiteral(AstLiteral.IntegerDec("1"))))),
+      MemberSelection(NamedValue("Color"), NamedValue("red")),
+    ))
+  )
+  reject(p.namespaceDef(_))("::namespace Color")
+  reject(p.namespaceDef(_))("::namespace Color { 1 }")
 
   parseAst(p.methodSection(_))("::declare ::methods Bar: {\n  foo: Bar\n}")(
     MethodSection(true, DeclTargetType("Bar", Nil), None, Seq(

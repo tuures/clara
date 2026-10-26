@@ -13,11 +13,11 @@ case class MethodSectionAnalyzerImpl(targetCon: TypeCons.TypeCon) {
     An.step(attributes)(Attributes.MethodAttributes()) { case (attributes, Ast.Attribute(key, value, pos)) =>
       (key, value) match {
         case ("emitKind", Some("binaryOperator")) =>
-          An.result(attributes.copy(emitKind = Some(Attributes.BinaryOperator)))
+          An.valid(attributes.copy(emitKind = Some(Attributes.BinaryOperator)))
         case ("emitKind", Some("instanceProperty")) =>
-          An.result(attributes.copy(emitKind = Some(Attributes.InstanceProperty)))
+          An.valid(attributes.copy(emitKind = Some(Attributes.InstanceProperty)))
         case ("emitName", Some(emitName)) =>
-          An.result(attributes.copy(emitName = Some(emitName)))
+          An.valid(attributes.copy(emitName = Some(emitName)))
         case _ => An.error(SourceMessage(pos, "Invalid attribute for a method declaration"))
       }
     }
@@ -62,7 +62,7 @@ case class MethodSectionAnalyzerImpl(targetCon: TypeCons.TypeCon) {
       val memberAttributesAn = walkMethodDefAttributes(attributes)
 
       val bodyTermAn = ValueExprAnalyzer.valueExprTerm(env, body).flatMap { bodyTerm =>
-        typeOpt.fold(An.result(())){ targetTypeExpr =>
+        typeOpt.fold(An.valid(())){ targetTypeExpr =>
           TypeExprAnalyzer.typeExprType(env, targetTypeExpr).flatMap { targetType =>
             TypeInterpreter.expectAssignable(bodyTerm.typ, targetType, body.pos)
           }
@@ -102,7 +102,7 @@ case class MethodSectionAnalyzerImpl(targetCon: TypeCons.TypeCon) {
 
   def methodDefSection(withTypeParamsEnv: Env, targetType: Types.Type, selfPattern: Ast.Pattern, methodAsts: Seq[Ast.Method]) = {
     // TODO should pattern be for the unwrapped value? (rename selfPattern, and unwrap targetType)
-    PatternAnalyzer.walkAssignment(withTypeParamsEnv, selfPattern, Some(targetType)).flatMap { case (selfEnv, selfPatternTerm) =>
+    PatternAnalyzer.walkParameter(withTypeParamsEnv, selfPattern, Some(targetType)).flatMap { case (selfEnv, selfPatternTerm) =>
         An.step(methodAsts)(WalkDefState.begin(selfEnv)){ case (currentState, methodAst) =>
           (methodAst match {
             case _: Ast.MethodDecl => An.error(SourceMessage(methodAst.pos, "Method definition expected"))

@@ -85,24 +85,27 @@ object JsPrinterImpl {
       case _ => printPattern(param)
     }
 
-    def printArrayExprBody(e: Expr): String = safe"$paramPrinted =>\n" + indented(printExpr(e))
-    def printArrayBlockBody(contents: Seq[Content]): String = safe"$paramPrinted => ${printBlock(contents)}"
+    def printArrowExprBody(e: Expr): String = e match {
+      case _: ObjectLiteral => safe"$paramPrinted =>\n" + indented(safe"(${printExpr(e)})")
+      case _ => safe"$paramPrinted =>\n" + indented(printExpr(e))
+    }
+    def printArrowBlockBody(contents: Seq[Content]): String = safe"$paramPrinted => ${printBlock(contents)}"
 
     // TODO: recursion needed here to flatten deeply-nested single-statement blocks?
     body match {
       case Seq(single) => single match {
         case Return(e) => e match {
-          case Iife(innerBody) => printArrayBlockBody(innerBody)
-          case _ => printArrayExprBody(e)
+          case Iife(innerBody) => printArrowBlockBody(innerBody)
+          case _ => printArrowExprBody(e)
         }
         case e: JsAst.Expr => e match {
-          case Iife(innerBody) => printArrayBlockBody(innerBody)
-          case _ => printArrayExprBody(e)
+          case Iife(innerBody) => printArrowBlockBody(innerBody)
+          case _ => printArrowExprBody(e)
         }
-        case _ => printArrayBlockBody(body)
+        case _ => printArrowBlockBody(body)
       }
       case _ => {
-        printArrayBlockBody(body)
+        printArrowBlockBody(body)
       }
     }
   }

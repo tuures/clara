@@ -3,6 +3,7 @@ package clara.jsemitter
 // Asg => JsAst
 
 import clara.asg.{Attributes, TermLiteral, Terms, TypeCons, Namespace}
+import clara.ast.Ast.TypeDefKind
 
 import impl._
 
@@ -29,13 +30,13 @@ object JsEmitter {
     case Terms.StringLiteral(parts, _) => emitStringLiteral(parts)
     case Terms.Tuple(es, _) => JsAst.ArrayLiteral(es.map(emitValueExpr))
     case Terms.Block(bcs, _) => emitBlock(bcs)
-    case Terms.NamedValue(name, _) => JsAst.Named(NameMangler.valueName(name))
+    case Terms.NamedValue(name, definedInNs, _) => JsAst.Named(NameMangler.valueName(name, definedInNs))
     case Terms.ValueAs(term, _) => emitValueExpr(term)
     case Terms.Record(fields, _) => JsAst.ObjectLiteral(fields.mapValues { case Terms.Field(body) =>
         emitValueExpr(body)
       }.entries)
     case Terms.Lambda(parameter, body, _) =>
-      JsAst.UnaryArrowFunc(emitBindingPattern(parameter), Seq(JsAst.Return(emitValueExpr(body))))
+      JsAst.UnaryArrowFunc(emitBindingPattern(parameter, Nil), Seq(JsAst.Return(emitValueExpr(body))))
     case Terms.Piecewise(pieces, _) => emitPiecewise(pieces)
     case Terms.MemberSelection(obj, memberName, selectedMember, _) =>
       emitMemberSelection(obj, memberName, selectedMember)
@@ -87,7 +88,7 @@ object JsEmitter {
     val (conditionalCases, unconditionalAndAfter) = cases.span { case (caseMatch, _) => caseMatch.conditions.nonEmpty }
 
     def caseBody(caseMatch: CaseMatch, body: Terms.ValueExpr): Seq[JsAst.Content] =
-      caseMatch.bindings.map { case (name, expr) => JsAst.Const(JsAst.NamePattern(NameMangler.valueName(name)), expr) } :+
+      caseMatch.bindings.map { case (name, expr) => JsAst.Const(JsAst.NamePattern(NameMangler.valueName(name, Nil)), expr) } :+
         JsAst.Return(emitValueExpr(body))
 
     val ifBranches = conditionalCases.map { case (caseMatch, body) =>
@@ -137,25 +138,43 @@ object JsEmitter {
     }
   }
 
-  def emitBlockContent(blockContent: Terms.BlockContent): Option[JsAst.Content] = blockContent match {
-    case e: Terms.ValueExpr => Some(emitValueExpr(e))
-    case _: Terms.ValueDecl => None
-    case Terms.ValueDef(target, e) => Some(JsAst.Const(emitBindingPattern(target), emitValueExpr(e)))
+  def emitBlockContent(blockContent: Terms.BlockContent): Seq[JsAst.Content] = blockContent match {
+    case e: Terms.ValueExpr => Seq(emitValueExpr(e))
+    case _: Terms.ValueDecl => Nil
+    case Terms.ValueDef(target, definedInNs, e) => Seq(JsAst.Const(emitBindingPattern(target, definedInNs), emitValueExpr(e)))
     case Terms.TypeDef(con) => con match {
-      case TypeCons.SingletonTypeCon(name, _, _) => Some(JsAst.Const(
-        JsAst.NamePattern(NameMangler.valueName(name)),
-        JsAst.StringLiteral(name) // TODO object? symbol?
+      // a unique object, so values compare by identity, the tag is only for debugging and serialization
+      case TypeCons.SingletonTypeCon(name, definedInNs, _, _) => Seq(JsAst.Const(
+        JsAst.NamePattern(NameMangler.valueName(name, definedInNs)),
+        JsAst.ObjectLiteral(Seq(NameMangler.TypeTagField -> typeTag(name, definedInNs)))
       ))
-      case _ => None
+      case TypeCons.WrapperTypeCon(TypeDefKind.Tagged, name, _, definedInNs, _, _) =>
+        Seq(JsAst.Const(JsAst.NamePattern(constructorName(name, definedInNs)), constructor(identity)))
+      case TypeCons.WrapperTypeCon(TypeDefKind.Boxed, name, _, definedInNs, _, _) =>
+        Seq(JsAst.Const(JsAst.NamePattern(constructorName(name, definedInNs)), constructor(value => JsAst.ObjectLiteral(Seq(
+          NameMangler.TypeTagField -> typeTag(name, definedInNs),
+          NameMangler.BoxedValueField -> value,
+        )))))
+      case _ => Nil
     }
-    case _: Terms.MethodDeclSection => None
+    case _: Terms.MethodDeclSection => Nil
     case Terms.MethodDefSection(targetCon, selfPattern, methodDefs) =>
-      Some(emitMethodDefSection(targetCon, selfPattern, methodDefs))
+      Seq(emitMethodDefSection(targetCon, selfPattern, methodDefs))
+  }
+
+  def constructorName(name: String, definedInNs: Seq[String]): String =
+    NameMangler.valueName(TypeCons.ConstructorName, definedInNs :+ name)
+
+  def typeTag(name: String, definedInNs: Seq[String]): JsAst.Expr = JsAst.StringLiteral((definedInNs :+ name).safeString("."))
+
+  def constructor(construct: JsAst.Expr => JsAst.Expr): JsAst.Expr = {
+    val ParamName = "$value"
+    JsAst.UnaryArrowFunc(JsAst.NamePattern(ParamName), Seq(JsAst.Return(construct(JsAst.Named(ParamName)))))
   }
 
   def emitMethodDefSection(targetCon: TypeCons.TypeCon, selfPattern: Terms.Pattern, methodDefs: Namespace[Terms.MethodDef]) = {
     val entries = methodDefs.mapValues { case Terms.MethodDef(attributes, body) =>
-      JsAst.UnaryArrowFunc(emitBindingPattern(selfPattern), Seq(JsAst.Return(emitValueExpr(body))))
+      JsAst.UnaryArrowFunc(emitBindingPattern(selfPattern, Nil), Seq(JsAst.Return(emitValueExpr(body))))
     }.entries
 
     JsAst.Const(
@@ -195,35 +214,42 @@ object JsEmitter {
   def emitCall(callee: Terms.ValueExpr, argument: Terms.ValueExpr) =
     JsAst.UnaryCall(emitValueExpr(callee), emitValueExpr(argument))
 
-  def emitBindingPattern(pattern: Terms.Pattern): JsAst.Pattern = pattern match {
+  def emitBindingPattern(pattern: Terms.Pattern, definedInNs: Seq[String]): JsAst.Pattern = pattern match {
     case Terms.WildcardPattern(_) => JsAst.IgnoredPattern
     case Terms.UnitPattern() => JsAst.IgnoredPattern
     // the analyzer rejects literal patterns outside the cases of a piecewise function
     case _: Terms.IntegerPattern => illegal(pattern)
     case _: Terms.FloatPattern => illegal(pattern)
     case Terms.StringPattern(Seq(TermLiteral.StringCapturePart(Terms.CapturePattern(name, _))), _) =>
-      JsAst.NamePattern(NameMangler.valueName(name))
+      JsAst.NamePattern(NameMangler.valueName(name, definedInNs))
     case _: Terms.StringPattern => illegal(pattern)
-    case Terms.TuplePattern(ps, _) => JsAst.ArrayPattern(ps.map(emitBindingPattern))
-    case Terms.CapturePattern(name, _) => JsAst.NamePattern(NameMangler.valueName(name))
+    case Terms.TuplePattern(ps, _) => JsAst.ArrayPattern(ps.map(emitBindingPattern(_, definedInNs)))
+    case Terms.CapturePattern(name, _) => JsAst.NamePattern(NameMangler.valueName(name, definedInNs))
     case Terms.NamedConstantPattern(_) => JsAst.IgnoredPattern
-    case Terms.PatternAs(p, _) => emitBindingPattern(p)
+    case Terms.PatternAs(p, _) => emitBindingPattern(p, definedInNs)
   }
 
 }
 
 object NameMangler {
-  // Clara names can't contain `$`, so names starting with `$` are free for the compiler, and a `$` suffix keeps a Clara
-  // name from colliding with JS reserved words or the globals the emitted code uses (only `globalThis`)
-  val ReservedNames = Set(
+  private val JsKeywords = Set(
     "await", "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete", "do", "else",
     "enum", "export", "extends", "false", "finally", "for", "function", "if", "implements", "import", "in",
     "instanceof", "interface", "let", "new", "null", "package", "private", "protected", "public", "return", "static",
     "super", "switch", "this", "throw", "true", "try", "typeof", "var", "void", "while", "with", "yield",
-    "arguments", "eval", "undefined", "globalThis",
+    "arguments", "eval", "undefined",
   )
 
-  def valueName(name: String) = if (ReservedNames.contains(name)) safe"$name$$" else name
+  // globalThis must not be shadowed so that the emitted code can safely reference it
+  val EscapeNames = JsKeywords ++ Set("globalThis")
+
+  val TypeTagField = "$type"
+  val BoxedValueField = "$value"
+
+  def valueName(name: String, definedInNs: Seq[String]) =
+    if (definedInNs.nonEmpty) (definedInNs :+ name).safeString("$")
+    else if (EscapeNames.contains(name)) safe"$name$$"
+    else name
 
   def methodsCompanionName(targetCon: TypeCons.TypeCon) = safe"${targetCon.name}$$Methods"
 }

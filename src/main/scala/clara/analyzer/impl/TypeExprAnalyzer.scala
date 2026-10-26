@@ -7,26 +7,19 @@ import clara.util.Safe._
 import clara.asg.TypeCons
 
 case class TypeExprAnalyzerImpl(env: Env) {
-  def namedTypeCon(n: Ast.NameWithPos): An[TypeCons.TypeCon] =
-    env.getTypeCon(n.name) match {
-      case Some(EnvTypeCon(con, defId)) => An.result(con).tellUsage(defId, n.pos)
-      case None => An.error(SourceMessage(n.pos, safe"Unknown type `${n.name}`"))
-    }
-
-  def namedType(n: Ast.NameWithPos, typeArgs: Seq[Ast.TypeExpr], pos: Pos): An[Types.Type] =
-    namedTypeCon(n).zip(An.seq(typeArgs.map(typeExprType))).flatMap { case (typeCon, args) =>
-      TypeInterpreter.instantiate(typeCon, args, pos)
+  def namedType(nsPath: Seq[Ast.NameWithPos], name: Ast.NameWithPos, typeArgs: Seq[Ast.TypeExpr], pos: Pos): An[Types.Type] =
+    NameResolver.typeCon(env, nsPath, name.name, name.pos).zip(An.seq(typeArgs.map(typeExprType))).flatMap {
+      case (typeCon, args) => TypeInterpreter.instantiate(typeCon, args, pos)
     }
 
   def typeExprType(typeExpr: Ast.TypeExpr): An[Types.Type] = typeExpr match {
-    case Ast.TopType(_) => An.result(Types.Top)
-    case Ast.BottomType(_) => An.result(Types.Bottom)
-    case Ast.UnitType(_) => An.result(Types.Uni)
+    case Ast.TopType(_) => An.valid(Types.Top)
+    case Ast.BottomType(_) => An.valid(Types.Bottom)
+    case Ast.UnitType(_) => An.valid(Types.Uni)
     case Ast.TupleType(ts, _) => An.seq(ts.map(typeExprType)).map { types =>
       Types.Tuple(types)
     }
-    case Ast.NamedType(nameWithPos, typeArgs, pos) =>
-      namedType(nameWithPos, typeArgs, pos)
+    case Ast.NamedType(nsPath, name, typeArgs, pos) => namedType(nsPath, name, typeArgs, pos)
     case Ast.RecordType(fields, _) =>
       An.step(fields)(Namespace.empty[Types.Type]){ case (ns, Ast.FieldDecl(name, typeExpr, pos)) =>
         lazy val duplicateName = SourceMessage(pos, safe"Duplicate field name `$name`")
@@ -56,9 +49,9 @@ case class TypeExprAnalyzerImpl(env: Env) {
 
 object TypeExprAnalyzer {
   def namedTypeCon(env: Env, n: Ast.NameWithPos): An[TypeCons.TypeCon] =
-    TypeExprAnalyzerImpl(env).namedTypeCon(n)
+    NameResolver.typeCon(env, Nil, n.name, n.pos)
   def namedNullaryType(env: Env, name: String, pos: Pos): An[Types.Type] =
-    TypeExprAnalyzerImpl(env).namedType(Ast.NameWithPos(name, pos), Nil, pos)
+    TypeExprAnalyzerImpl(env).namedType(Nil, Ast.NameWithPos(name, pos), Nil, pos)
   def typeExprType(env: Env, typeExpr: Ast.TypeExpr): An[Types.Type] =
     TypeExprAnalyzerImpl(env).typeExprType(typeExpr)
 }

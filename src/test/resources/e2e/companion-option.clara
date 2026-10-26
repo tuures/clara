@@ -1,0 +1,22 @@
+::opaque String
+::declare console: { log: String => () }
+// the shape of the Option fixture without ::methods: a generic alias of its companion's members
+
+::alias Option<A>: Option.Some<A> | Option.None
+
+::extend Option {
+  ::boxed Some<A>: A
+  ::singleton None
+
+  empty: Option<!> = None
+}
+
+name: Option<String> = Option.Some("clara")
+missing: Option<String> = Option.empty
+describe = (o: Option<String>) => o @ #(
+  Option.None => "none",
+  _ => "some",
+)
+console.log(describe(name))
+console.log(describe(missing))
+()

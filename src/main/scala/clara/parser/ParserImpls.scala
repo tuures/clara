@@ -262,13 +262,15 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
 
   def namedValue[X: P]: P[NamedValue] = P(pp(name)(NamedValue.apply _))
 
-  def namedType[X: P]: P[NamedType] = P(pp(nameWithPos ~ maybeTypeArgs)(NamedType.apply _))
+  def nsPath[X: P]: P[Seq[NameWithPos]] = P((nameWithPos ~~ dot).repX)
+
+  def namedType[X: P]: P[NamedType] = P(pp(nsPath ~~ nameWithPos ~ maybeTypeArgs)(NamedType.apply _))
 
   // NOTE: Character.isUpperCase works only with BMP characters
   def anyUpperCaseChar[X: P]: P[Unit] = P(CharPred(Character.isUpperCase(_)))
 
   def namedConstantPattern[X: P]: P[NamedConstantPattern] =
-    P(pp(&(anyUpperCaseChar) ~~ name)(NamedConstantPattern.apply _))
+    P(pp(&(anyUpperCaseChar) ~~ nsPath ~~ nameWithPos)(NamedConstantPattern.apply _))
 
   def capturePattern[X: P]: P[CapturePattern] =
     P(pp(/*!(anyUpperCaseChar) ~~ */name)(CapturePattern.apply _))
@@ -491,6 +493,11 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
     declTargetType ~ typed.?
   )(TypeDef.apply _))
 
+  def namespaceDef[X: P]: P[NamespaceDef] = P(pp(
+    (keyword("namespace").map(_ => false) | keyword("extend").map(_ => true)) ~
+    nameWithPos ~ recordSyntax(typeDef | namespaceDef | valueDecl | valueDef)
+  )(NamespaceDef.apply _))
+
   def methodDef[X: P]: P[MethodDef] = P(pp(attributes ~ nameWithPos ~ typed.? ~ equalsSign ~ valueExpr)(MethodDef.apply _))
 
   def methodDecl[X: P]: P[MethodDecl] = P(pp(attributes ~ nameWithPos ~ typed)(MethodDecl.apply _))
@@ -502,11 +509,11 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
     keyword("methods") ~/ declTargetType ~ simplePattern.? ~ colon ~ nl.rep ~ methodsBody
   )(MethodSection.apply _))
 
-  def valueDecl[X: P]: P[ValueDecl] = P(pp(keyword("declare") ~ name ~ typed)(ValueDecl.apply _))
+  def valueDecl[X: P]: P[ValueDecl] = P(pp(keyword("declare") ~ nameWithPos ~ typed)(ValueDecl.apply _))
 
   def valueDef[X: P]: P[ValueDef] = P(pp(pattern ~ equalsSign ~ nl.rep ~ valueExpr)(ValueDef.apply _))
 
-  def inBlockDecl[X: P]: P[InBlockDecl] = P(typeDef | methodSection | valueDecl | valueDef)
+  def inBlockDecl[X: P]: P[InBlockDecl] = P(typeDef | namespaceDef | methodSection | valueDecl | valueDef)
 
   //////
   // Top level rules

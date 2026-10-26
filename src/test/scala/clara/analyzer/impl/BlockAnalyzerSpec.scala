@@ -5,13 +5,13 @@ import clara.asg.{Terms, Types, TypeCons}
 import clara.testutil.{AstTestHelpers, BaseSpec}
 
 class BlockAnalyzerSpec extends BaseSpec {
-  import Ast.{Lambda => _, TypeDef => _, NamedType => _, _}
+  import Ast.{Lambda => _, TypeDef => _, NamedType => _, ValueDecl => _, _}
   import AstTestHelpers._
 
   test("empty Block (program block) should produce unit type with no warning about missing expression") {
     val block = Block(Seq.empty)
 
-    val blockTermAn = BlockAnalyzer.regularBlockTerm(Env.empty, block)
+    val blockTermAn = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
 
     val expectedTerm = Terms.Block(Seq.empty, Types.Uni)
     assert(blockTermAn.value.value === expectedTerm)
@@ -24,21 +24,22 @@ class BlockAnalyzerSpec extends BaseSpec {
     val typeDef = TypeDef(TypeDefKind.Alias, "Unit", UnitType())
     val block = Block(Seq(typeDef))
 
-    val endState = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs)
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).flatMap { endState =>
+      BlockAnalyzerImpl.finishBlock(An.valid(endState), block.pos, isProgramBlock = false).map(term => (endState, term))
+    }.run
+    val (endState, blockTerm) = result.value.value
 
-    val typ = endState.value.value.currentEnv.getTypeCon("Unit").get.con
+    val typ = endState.currentEnv.getTypeEntry("Unit").collect { case EnvTypeCon(con, _) => con }.get
 
     inside(typ) {
-      case TypeCons.WrapperTypeCon(typeDefKind, name, typeParams, wrappedType, _, _) =>
-        assert((typeDefKind, name, typeParams, wrappedType) === (TypeDefKind.Alias, "Unit", Nil, Types.Uni))
+      case con @ TypeCons.WrapperTypeCon(typeDefKind, name, typeParams, _, _, _) =>
+        val structure = result.log.typeStructures.structure(con)
+        assert((typeDefKind, name, typeParams, structure) === (TypeDefKind.Alias, "Unit", Nil, Types.Uni))
     }
 
-    val blockTermAn = BlockAnalyzerImpl.finishBlock(endState, block.pos, isProgramBlock = false)
+    assert(blockTerm === Terms.Block(Seq(Terms.TypeDef(typ)), Types.Uni))
 
-    val expectedTerm = Terms.Block(Seq(Terms.TypeDef(typ)), Types.Uni)
-    assert(blockTermAn.value.value === expectedTerm)
-
-    assert(blockTermAn.log.warnings.map(_.message) === Seq(
+    assert(result.log.warnings.map(_.message) === Seq(
       "Unused type `Unit`",
       "Block should end with an expression. Implicitly returning unit.",
     ))
@@ -51,7 +52,7 @@ class BlockAnalyzerSpec extends BaseSpec {
       TypeDef(TypeDefKind.Singleton, "Last"),
     ))
 
-    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block)
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
 
     assert(result.log.warnings.map(_.message) === Seq(
       "Unused type `Last`",
@@ -66,48 +67,52 @@ class BlockAnalyzerSpec extends BaseSpec {
       Tuple(Seq(NamedValue("declared"), NamedValue("defined"))),
     ))
 
-    val endState = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs)
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).flatMap { endState =>
+      BlockAnalyzerImpl.finishBlock(An.valid(endState), block.pos, isProgramBlock = false).map(term => (endState, term))
+    }.run
+    val (endState, blockTerm) = result.value.value
 
-    assert(endState.value.value.currentEnv.getValue("declared").map(_.typ) === Some(Types.Uni))
-    assert(endState.value.value.currentEnv.getValue("defined").map(_.typ) === Some(Types.Uni))
-
-    val blockTermAn = BlockAnalyzerImpl.finishBlock(endState, block.pos, isProgramBlock = false)
+    assert(endState.currentEnv.getValue("declared").map(_.typ) === Some(Types.Uni))
+    assert(endState.currentEnv.getValue("defined").map(_.typ) === Some(Types.Uni))
 
     val expectedTerm = Terms.Block(Seq(
       Terms.ValueDecl("declared"),
-      Terms.ValueDef(Terms.CapturePattern("defined", Types.Uni), Terms.UnitLiteral()),
+      Terms.ValueDef(Terms.CapturePattern("defined", Types.Uni), Nil, Terms.UnitLiteral()),
       Terms.Tuple(
-        Seq(Terms.NamedValue("declared", Types.Uni), Terms.NamedValue("defined", Types.Uni)),
+        Seq(Terms.NamedValue("declared", Nil, Types.Uni), Terms.NamedValue("defined", Nil, Types.Uni)),
         Types.Tuple(Seq(Types.Uni, Types.Uni)),
       ),
     ), Types.Tuple(Seq(Types.Uni, Types.Uni)))
-    assert(blockTermAn.value.value === expectedTerm)
-    assert(blockTermAn.log.warnings.isEmpty)
+    assert(blockTerm === expectedTerm)
+    assert(result.log.warnings.isEmpty)
   }
 
-  test("valueDecl should fail when shadowing an existing local value") {
+  // forward references: the types of the block are analyzed before its values (see ScopeAnalyzerSpec)
+
+  test("a value is used before its definition") {
     val block = Block(Seq(
-      ValueDecl("value", UnitType()),
-      ValueDecl("value", UnitType()),
+      ValueDef(CapturePattern("early"), NamedValue("late")),
+      ValueDef(CapturePattern("late"), UnitLiteral()),
     ))
 
-    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs)
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
 
-    assert(result.value.left.value.map(_.message) === Seq("Cannot shadow existing value with same name `value`"))
+    assert(result.value.left.value.map(_.message) === Seq("`late` is used before its definition"))
   }
 
-  test("typeDef should fail when shadowing an existing local type") {
+  test("a value of a block shadows an outer one also before its definition") {
     val block = Block(Seq(
-      TypeDef(TypeDefKind.Alias, "Type", UnitType()),
-      TypeDef(TypeDefKind.Alias, "Type", UnitType()),
+      ValueDef(CapturePattern("x"), UnitLiteral()),
+      Block(Seq(
+        ValueDef(CapturePattern("y"), NamedValue("x")),
+        ValueDef(CapturePattern("x"), UnitLiteral()),
+      )),
     ))
 
-    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs)
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
 
-    assert(result.value.left.value.map(_.message) === Seq("Cannot shadow existing type with same name `Type`"))
+    assert(result.value.left.value.map(_.message) === Seq("`x` is used before its definition"))
   }
-
-  // forward references: type defs are analyzed before the values of the block, in dependency order
 
   test("a value can refer to a type defined below it") {
     val block = Block(Seq(
@@ -116,30 +121,15 @@ class BlockAnalyzerSpec extends BaseSpec {
       NamedValue("x"),
     ))
 
-    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block)
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
 
     inside(result.value.value) { case Terms.Block(Seq(Terms.TypeDef(belowCon: TypeCons.WrapperTypeCon), _*), typ) =>
-      assert(typ === Types.Alias(belowCon, Nil, Types.Uni))
+      assert(typ === Types.Alias(belowCon, Nil))
     }
     assert(result.log.warnings.isEmpty)
   }
 
-  test("a type def can refer to a type defined below it") {
-    val block = Block(Seq(
-      TypeDef(TypeDefKind.Alias, "Pair", TupleType(Seq(NamedType("Below"), NamedType("Below")))),
-      TypeDef(TypeDefKind.Singleton, "Below"),
-    ))
-
-    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs)
-
-    inside(result.value.value.currentContents) {
-      case Seq(Terms.TypeDef(belowCon: TypeCons.SingletonTypeCon), Terms.TypeDef(pairCon: TypeCons.WrapperTypeCon)) =>
-        val below = Types.Singleton(belowCon)
-        assert(pairCon.wrappedType === Types.Tuple(Seq(below, below)))
-    }
-  }
-
-  test("type defs come first in the block term, in dependency order") {
+  test("type defs come first in the block term, in source order") {
     val block = Block(Seq(
       ValueDecl("x", NamedType("Dependent")),
       TypeDef(TypeDefKind.Alias, "Dependent", NamedType("Dependency")),
@@ -147,55 +137,200 @@ class BlockAnalyzerSpec extends BaseSpec {
       TypeDef(TypeDefKind.Singleton, "Dependency"),
     ))
 
-    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs)
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
 
     assert(result.value.value.currentContents.map(_.getClass.getSimpleName) === Seq("TypeDef", "TypeDef", "ValueDecl", "NamedValue"))
-    assert(result.value.value.currentContents.collect { case Terms.TypeDef(con) => con.name } === Seq("Dependency", "Dependent"))
+    assert(result.value.value.currentContents.collect { case Terms.TypeDef(con) => con.name } === Seq("Dependent", "Dependency"))
   }
 
-  test("recursive type defs are an error") {
+  // namespaces: types and singletons are registered with the type defs, values at the namespace's position
+
+  private def color(members: InBlockDecl*) = NamespaceDef(false, NameWithPos("Color"), members)
+  private def colorMember(name: String) = MemberSelection(NamedValue("Color"), NamedValue(name))
+
+  test("namespace members are qualified outside the namespace and unqualified inside it") {
     val block = Block(Seq(
-      TypeDef(TypeDefKind.Alias, "A", TupleType(Seq(NamedType("B"), UnitType()))),
-      TypeDef(TypeDefKind.Alias, "B", NamedType("A")),
+      color(
+        TypeDef(TypeDefKind.Singleton, "Red"),
+        ValueDef(CapturePattern("favorite"), NamedValue("Red")),
+      ),
+      colorMember("favorite"),
     ))
 
-    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs)
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
 
-    assert(result.value.left.value.map(_.message) === Seq("Recursive types aren't supported yet: `A` -> `B` -> `A`"))
+    inside(result.value.value.bcs) {
+      case Seq(
+        Terms.TypeDef(redCon: TypeCons.SingletonTypeCon),
+        Terms.ValueDef(_, Seq("Color"), insideRef),
+        outsideRef,
+      ) =>
+        val red = Types.Singleton(redCon)
+        assert(redCon.definedInNs === Seq("Color"))
+        assert(insideRef === Terms.NamedValue("Red", Seq("Color"), red))
+        assert(outsideRef === Terms.NamedValue("favorite", Seq("Color"), red))
+    }
+    assert(result.log.warnings.isEmpty)
   }
 
-  test("a type def referring to itself is an error") {
-    val block = Block(Seq(TypeDef(TypeDefKind.Tagged, "Self", NamedType("Self"))))
-
-    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs)
-
-    assert(result.value.left.value.map(_.message) === Seq("Recursive types aren't supported yet: `Self` -> `Self`"))
-  }
-
-  test("type params named like a type def of the block are not references to it") {
+  test("a namespace's values can only be used after its position") {
     val block = Block(Seq(
-      TypeDef(TypeDefKind.Tagged, "Box", Seq(Ast.TypeParam("A")), NamedType("A")),
-      TypeDef(TypeDefKind.Alias, "A", Ast.FuncType(Seq(Ast.TypeParam("Box")), NamedType("Box"), NamedType("Box"))),
+      colorMember("favorite"),
+      color(ValueDef(CapturePattern("favorite"), UnitLiteral())),
     ))
 
-    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs)
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
 
-    // no false cycle (Box -> A -> Box), and each name resolved to the type param, not to the block's type def
-    inside(result.value.value.currentContents) {
-      case Seq(Terms.TypeDef(boxCon: TypeCons.WrapperTypeCon), Terms.TypeDef(aCon: TypeCons.WrapperTypeCon)) =>
-        assert(boxCon.wrappedType === Types.Param(boxCon.typeParams.head))
-        inside(aCon.wrappedType) { case Types.Func(Seq(boxParam), parameter, result) =>
-          assert((parameter, result) === ((Types.Param(boxParam), Types.Param(boxParam))))
-        }
+    assert(result.value.left.value.map(_.message) === Seq("`Color.favorite` is used before its definition"))
+  }
+
+  test("an error in a namespace's value doesn't lose its other values") {
+    val block = Block(Seq(
+      color(
+        ValueDef(CapturePattern("broken"), NamedValue("unknown")),
+        ValueDef(CapturePattern("fine"), UnitLiteral()),
+      ),
+      colorMember("fine"),
+    ))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq("Unknown value `unknown`"))
+  }
+
+  test("a namespace's members are reachable qualified inside it and inside its nested namespaces") {
+    val block = Block(Seq(
+      color(
+        ValueDef(CapturePattern("a"), UnitLiteral()),
+        ValueDef(CapturePattern("b"), colorMember("a")),
+        NamespaceDef(false, NameWithPos("Shades"), Seq(ValueDef(CapturePattern("c"), colorMember("b")))),
+      ),
+      MemberSelection(colorMember("Shades"), NamedValue("c")),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    inside(result.value.value.bcs) {
+      case Seq(_, Terms.ValueDef(_, _, bRef), Terms.ValueDef(_, _, cRef), _) =>
+        assert(bRef === Terms.NamedValue("a", Seq("Color"), Types.Uni))
+        assert(cRef === Terms.NamedValue("b", Seq("Color"), Types.Uni))
     }
   }
 
+  test("a member of a namespace member that is a value is selected from the value") {
+    val block = Block(Seq(
+      color(ValueDef(CapturePattern("favorite"), Record(Seq(FieldDef("a", None, UnitLiteral()))))),
+      MemberSelection(colorMember("favorite"), NamedValue("a")),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    assert(result.value.value.typ === Types.Uni)
+  }
+
+  test("an unknown namespace member is reported once also when selecting from it") {
+    val block = Block(Seq(
+      color(),
+      MemberSelection(colorMember("nope"), NamedValue("a")),
+    ))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq("`nope` is not a member of namespace `Color`"))
+  }
+
+  test("an unused namespace is reported once") {
+    val block = Block(Seq(color(), UnitLiteral()))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    assert(result.log.warnings.map(_.message) === Seq("Unused namespace `Color`"))
+  }
+
+  test("the unused members of a used namespace are reported with their qualified names") {
+    val block = Block(Seq(
+      color(
+        TypeDef(TypeDefKind.Singleton, "Red"),
+        ValueDef(CapturePattern("favorite"), UnitLiteral()),
+        ValueDef(CapturePattern("unused"), UnitLiteral()),
+        NamespaceDef(false, NameWithPos("Shades"), Seq(ValueDef(CapturePattern("dark"), UnitLiteral()))),
+      ),
+      colorMember("favorite"),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    // as a set, the warnings are sorted by position and these have none
+    assert(result.log.warnings.map(_.message).toSet === Set(
+      "Unused type `Color.Red`",
+      "Unused value `Color.unused`",
+      // an unused namespace is reported alone, not its members
+      "Unused namespace `Color.Shades`",
+    ))
+  }
+
+  // companions: `::extend X` is the namespace of the type X defined in the same scope
+
+  private def extend(name: String, members: InBlockDecl*) = NamespaceDef(true, NameWithPos(name), members)
+
+  test("a tagged type's companion can't redefine its constructor apply yet, however it's defined") {
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Tagged, "Id", UnitType()),
+      extend("Id", ValueDef(CapturePattern("apply"), UnitLiteral())),
+      TypeDef(TypeDefKind.Boxed, "Box", UnitType()),
+      extend("Box", ValueDef(TuplePattern(Seq(CapturePattern("apply"), WildcardPattern())), Tuple(Seq(UnitLiteral(), UnitLiteral())))),
+    ))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq(
+      "`apply` of `Id` is its constructor, it can't be redefined yet",
+      "`apply` of `Box` is its constructor, it can't be redefined yet",
+    ))
+  }
+
+  test("a companion's members are reachable qualified inside it") {
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Opaque, "Token"),
+      extend("Token",
+        ValueDef(CapturePattern("prefix"), UnitLiteral()),
+        ValueDef(CapturePattern("again"), MemberSelection(NamedValue("Token"), NamedValue("prefix"))),
+      ),
+      MemberSelection(NamedValue("Token"), NamedValue("again")),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    assert(result.value.value.bcs.last === Terms.NamedValue("again", Seq("Token"), Types.Uni))
+  }
+
+  test("an unused type with a companion is reported once, as a type") {
+    val block = Block(Seq(extend("Id"), TypeDef(TypeDefKind.Tagged, "Id", UnitType()), UnitLiteral()))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    assert(result.log.warnings.map(_.message) === Seq("Unused type `Id`"))
+  }
+
+  test("the unused members of a used type's companion are reported with their qualified names") {
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Tagged, "Id", UnitType()),
+      extend("Id", ValueDef(CapturePattern("helper"), UnitLiteral())),
+      NamedValue("Id"),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    // the type is used through its constructor, its companion's generated `apply`
+    assert(result.log.warnings.map(_.message) === Seq("Unused value `Id.helper`"))
+  }
+
   test("valueDecl should allow shadowing a value from the parent scope") {
-    val parentEnv = Env.empty.addOrShadowValue("value", Types.Uni, NoPos).value.value
+    val parentEnv = Env.empty.addValue("value", Types.Uni, NoPos).run.value.value
     val parentValue = parentEnv.getValue("value").get
     val block = Block(Seq(ValueDecl("value", UnitType())))
 
-    val result = BlockAnalyzerImpl.walkBlockContents(parentEnv, block.bcs)
+    val result = BlockAnalyzerImpl.walkBlockContents(parentEnv, block.bcs).run
 
     assert(result.value.isRight)
     assert(result.log.warnings.isEmpty)
@@ -203,18 +338,17 @@ class BlockAnalyzerSpec extends BaseSpec {
   }
 
   test("typeDef should allow shadowing a type from the parent scope") {
-    val parentEnv = TypeDefAnalyzer.typeDefTerm(
-      Env.empty,
-      TypeDef(TypeDefKind.Alias, "Type", UnitType()),
-    ).value.value._1
-    val parentType = parentEnv.getTypeCon("Type").get
+    val parentTypeDef = TypeDef(TypeDefKind.Alias, "Type", UnitType())
+    val parentEnv = TypeDefAnalyzer.typeCon(Env.empty, parentTypeDef).
+      flatMap(TypeDefAnalyzer.registerName(Env.empty, parentTypeDef, _)).run.value.value
+    val parentType = parentEnv.getTypeEntry("Type").get
     val block = Block(Seq(TypeDef(TypeDefKind.Alias, "Type", UnitType())))
 
-    val result = BlockAnalyzerImpl.walkBlockContents(parentEnv, block.bcs)
+    val result = BlockAnalyzerImpl.walkBlockContents(parentEnv, block.bcs).run
 
     assert(result.value.isRight)
     assert(result.log.warnings.isEmpty)
-    assert(result.value.value.currentEnv.local.typeCons.get("Type").get.defId !== parentType.defId)
+    assert(result.value.value.currentEnv.local.types.get("Type").get.defId !== parentType.defId)
   }
 
   test("lambda parameter should allow shadowing an outer value") {
@@ -227,10 +361,42 @@ class BlockAnalyzerSpec extends BaseSpec {
       NamedValue("f"),
     ))
 
-    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block)
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
 
     assert(result.value.isRight)
     assert(result.log.warnings.map(_.message) === Seq("Unused value `x`"))
+  }
+
+  test("case pattern should allow shadowing an outer value") {
+    val block = Block(Seq(
+      ValueDef(CapturePattern("x"), UnitLiteral()),
+      ValueDef(CapturePattern("f"), Piecewise(Seq(
+        PatternAs(CapturePattern("x"), UnitType()) -> NamedValue("x"),
+      ))),
+      NamedValue("f"),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    assert(result.value.isRight)
+    assert(result.log.warnings.map(_.message) === Seq("Unused value `x`"))
+  }
+
+  test("a case pattern's names in a namespace are local to the case") {
+    val block = Block(Seq(
+      NamespaceDef(false, NameWithPos("Space"), Seq(
+        ValueDef(CapturePattern("f"), Piecewise(Seq(
+          PatternAs(CapturePattern("x"), UnitType()) -> NamedValue("x"),
+        ))),
+      )),
+      MemberSelection(NamedValue("Space"), NamedValue("f")),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    inside(result.value.value.bcs) { case Seq(Terms.ValueDef(_, Seq("Space"), Terms.Piecewise(Seq((_, body)), _)), _) =>
+      assert(body === Terms.NamedValue("x", Nil, Types.Uni))
+    }
   }
 
   test("lambda type parameter should allow shadowing an outer type") {
@@ -244,7 +410,7 @@ class BlockAnalyzerSpec extends BaseSpec {
       NamedValue("f"),
     ))
 
-    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block)
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
 
     assert(result.value.isRight)
     assert(result.log.warnings.map(_.message) === Seq("Unused type `T`"))
@@ -257,7 +423,7 @@ class BlockAnalyzerSpec extends BaseSpec {
       NamedValue("used"),
     ))
 
-    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block)
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
 
     assert(result.log.warnings.map(_.message) === Seq("Unused value `unused`"))
   }
@@ -270,7 +436,7 @@ class BlockAnalyzerSpec extends BaseSpec {
       NamedValue("typed"),
     ))
 
-    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block)
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
 
     assert(result.log.warnings.map(_.message) === Seq("Unused type `Unused`"))
   }
@@ -283,7 +449,7 @@ class BlockAnalyzerSpec extends BaseSpec {
       Tuple(Seq(NamedValue("typed"), NamedValue("AsValue"))),
     ))
 
-    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block)
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
 
     assert(result.log.warnings.map(_.message) === Nil)
   }
@@ -294,7 +460,7 @@ class BlockAnalyzerSpec extends BaseSpec {
       UnitLiteral(),
     ))
 
-    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block)
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
 
     assert(result.log.warnings.map(_.message) === Seq("Unused type `Unused`"))
   }
@@ -305,7 +471,7 @@ class BlockAnalyzerSpec extends BaseSpec {
       NamedValue("Id"),
     ))
 
-    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block)
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
 
     assert(result.log.warnings.map(_.message) === Nil)
   }
@@ -316,7 +482,7 @@ class BlockAnalyzerSpec extends BaseSpec {
       Block(Seq(NamedValue("x"))),
     ))
 
-    val result = BlockAnalyzer.regularBlockTerm(Env.empty, outer)
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, outer).run
 
     assert(result.log.warnings.isEmpty)
   }
@@ -327,7 +493,7 @@ class BlockAnalyzerSpec extends BaseSpec {
 
     val block = Block(Seq(lambdaAst, lambdaAst))
 
-    val blockTermAn = BlockAnalyzer.programBlockTerm(Env.empty, block)
+    val blockTermAn = BlockAnalyzer.programBlockTerm(Env.empty, block).run
 
     val expectedTerm = Terms.Block(Seq(lambdaTerm, lambdaTerm), Types.Func(Nil, Types.Uni, Types.Uni))
     assert(blockTermAn.value.value === expectedTerm)
@@ -349,7 +515,7 @@ class BlockAnalyzerSpec extends BaseSpec {
       lambdaAst,
     ))
 
-    val blockTermAn = BlockAnalyzer.regularBlockTerm(Env.empty, block)
+    val blockTermAn = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
 
     val expectedBlockTermBody = Seq(
       lambdaTerm,

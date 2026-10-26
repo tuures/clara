@@ -1,0 +1,34 @@
+::opaque String
+::declare console: { log: String => () }
+
+// types and singletons of a namespace can be used before it, its values only after it (like any value)
+::alias AnyColor: Color.Red | Color.Green
+first: AnyColor = Color.Green
+
+::namespace Color {
+  ::singleton Red
+  ::singleton Green
+
+  // members are unqualified inside the namespace
+  favorite: Red = Red
+  describe = #(Red => "red", Green => "green")
+
+  ::namespace Shades {
+    dark = "dark"
+  }
+}
+
+// a namespace in a nested block is local to it and shadows an outer namespace of the same name there
+shout = (name: String) => (
+  ::namespace Color {
+    loud = "$(name)!"
+  }
+  Color.loud
+)
+
+favorite: AnyColor = Color.favorite
+console.log(favorite @ Color.describe)
+console.log(first @ #(Color.Red => "red again", Color.Green => "green again"))
+console.log(Color.Shades.dark)
+console.log(shout("hey"))
+()

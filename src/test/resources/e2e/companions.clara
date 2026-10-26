@@ -1,0 +1,26 @@
+::opaque String
+::declare console: { log: String => () }
+
+// the companion's types can be referred to from the type itself, and used before both
+first: Color = Color.Green
+
+::alias Color: Color.Red | Color.Green
+
+::extend Color {
+  ::singleton Red
+  ::singleton Green
+  describe = #(Red => "red", Green => "green")
+}
+
+// a bare companion of a tagged type is its constructor, members are unqualified inside the companion
+::extend Id {
+  prefix = "id-"
+  fromName = (name: String) => Id("$(prefix)$(name)")
+}
+
+::tagged Id: String
+
+console.log(first @ Color.describe)
+console.log(Id.fromName("clara"))
+console.log(Id("raw"))
+()

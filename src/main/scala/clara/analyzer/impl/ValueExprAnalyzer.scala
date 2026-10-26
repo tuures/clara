@@ -1,6 +1,6 @@
 package clara.analyzer.impl
 
-import clara.asg.{TermLiteral, Terms, Types, TypeCons, Namespace}
+import clara.asg.{Namespace, TermLiteral, Terms, Types}
 import clara.ast.{Ast, AstLiteral, Pos, SourceMessage}
 
 import clara.util.Safe._
@@ -10,25 +10,13 @@ case class ValueExprAnalyzerImpl(env: Env) {
   def namedNullaryType(name: String, pos: Pos): An[Types.Type] =
     TypeExprAnalyzer.namedNullaryType(env, name, pos)
 
-  def namedValue(name: String, pos: Pos): An[Terms.NamedValue] = {
-    env.getValue(name).map { case EnvValue(typ, _, defId) =>
-      An.result(Terms.NamedValue(name, typ)).tellUsage(defId, pos)
-    }.orElse {
-      env.getTypeCon(name).map { case EnvTypeCon(con, defId) =>
-        con match {
-          case con: TypeCons.WrapperTypeCon =>
-            An.result(Terms.NamedValue(name, TypeCons.wrapperConstructorFunc(con))).tellUsage(defId, pos)
-          case _ => An.error(SourceMessage(pos, safe"Unknown value `$name`. Type `$name` cannot be used as a value."))
-        }
-      }
-    }.getOrElse(An.error(SourceMessage(pos, safe"Unknown value `$name`")))
-  }
+  def namedValue(name: String, pos: Pos): An[Terms.NamedValue] = NameResolver.value(env, Nil, name, pos)
 
   def lambdaTerm(lambda: Ast.Lambda, expectedParameterType: Option[Types.Type]): An[Terms.Lambda] = {
     val Ast.Lambda(typeParams, parameter, body, _) = lambda
 
     TypeParamAnalyzer(env).walkTypeParams(typeParams).flatMap { case (withTypeParamsEnv, typeParamCons) =>
-      PatternAnalyzer.walkAssignment(withTypeParamsEnv, parameter, expectedParameterType).
+      PatternAnalyzer.walkParameter(withTypeParamsEnv, parameter, expectedParameterType).
         flatMap { case (funcBodyEnv, parameterTerm) =>
           ValueExprAnalyzerImpl(funcBodyEnv).valueExprTerm(body).map { bodyTerm =>
             val typ = Types.Func(typeParamCons, parameterTerm.typ, bodyTerm.typ)
@@ -42,7 +30,7 @@ case class ValueExprAnalyzerImpl(env: Env) {
     case class PieceState(pieces: Seq[((Terms.Pattern, Terms.ValueExpr), Types.Func)])
     An.step(piecewise.pieces)(PieceState(Nil)) { case (state, (pattern, body)) =>
 
-      PatternAnalyzer.walkCase(env, pattern, expectedParameterType).
+      PatternAnalyzer.walkCase(env.startNestedScope, pattern, expectedParameterType).
         flatMap { case (funcBodyEnv, parameterTerm) =>
           ValueExprAnalyzerImpl(funcBodyEnv).valueExprTerm(body).map { bodyTerm =>
             val typ = Types.Func(Nil, parameterTerm.typ, bodyTerm.typ)
@@ -55,43 +43,10 @@ case class ValueExprAnalyzerImpl(env: Env) {
       val (patternsWithBodies, funcTypes) = state.pieces.unzip
       val typ = Types.Intersection(funcTypes)
 
-      casesCheck(piecewise, patternsWithBodies.map(_._1), expectedParameterType).map { case () =>
+      TypeInterpreter.casesCheck(piecewise, patternsWithBodies.map(_._1), expectedParameterType).map { case () =>
         Terms.Piecewise(patternsWithBodies, typ)
       }
     }
-  }
-
-  // Every value of the matched type has to be covered by some case (error otherwise), and each case has to be able to
-  // match some value earlier cases don't cover (warning otherwise). Without an expected type the matched type is what
-  // the cases can match together, e.g. #(1 => ...) alone would be an Int => ... failing for other integers.
-  def casesCheck(piecewise: Ast.Piecewise, patterns: Seq[Terms.Pattern], matchedType: Option[Types.Type]): An[Unit] = {
-    val covered = patterns.map(PatternAnalyzer.coveredType)
-
-    val unreachableCases = patterns.zip(piecewise.pieces).zipWithIndex.collect {
-      // TODO: could this be expressed somehow as a reduce so that we accumulate the covered types
-      // and check reachability in one pass, instead of using take(i) for each case, for better performance?
-      case ((pattern, (astPattern, _)), i) if Types.isAssignable(pattern.typ, Types.Union(covered.take(i))) =>
-        SourceMessage(astPattern.pos,
-          safe"${PatternAnalyzer.quotedPattern(astPattern.pos)} is unreachable, earlier cases already match all its values"
-        )
-    }
-
-    val matched = matchedType.getOrElse(Types.Union(patterns.map(_.typ)))
-
-    // TODO remove when type patterns get runtime type tests (see construct patterns in TODO.md)
-    val typeTestCases = patterns.zip(piecewise.pieces).collect {
-      case (pattern, (astPattern, _)) if PatternAnalyzer.needsTypeTest(pattern, matched) =>
-        An.error(SourceMessage(astPattern.pos,
-          safe"${PatternAnalyzer.quotedPattern(astPattern.pos)} needs to test the type of the value at runtime, which isn't supported yet"
-        ))
-    }
-
-    // TODO: show which values/patterns are not covered, i.e. which type/pattern is left uncovered
-    val exhaustive = An.errorIf(!Types.isAssignable(matched, Types.Union(covered)))(SourceMessage(piecewise.pos,
-      safe"Cases of the piecewise function don't match every value of type `${Types.toSource(matched)}`, e.g. add a last case `_ => ...`"
-    ))
-
-    An.seq(typeTestCases :+ exhaustive).map(_ => ()).tellWarnings(unreachableCases)
   }
 
   def callTerm(callee: Ast.ValueExpr, argument: Ast.ValueExpr): An[Terms.Call] = callee match {
@@ -185,7 +140,8 @@ case class ValueExprAnalyzerImpl(env: Env) {
 
   def valueExprTermExpecting(valueExpr: Ast.ValueExpr, expectedType: Option[Types.Type]): An[Terms.ValueExpr] =
     (valueExpr, expectedType) match {
-      case (_, Some(Types.Alias(_, _, wrappedType))) => valueExprTermExpecting(valueExpr, Some(wrappedType))
+      case (_, Some(alias: Types.Alias)) =>
+        TypeInterpreter.wrappedType(alias).flatMap(wrappedType => valueExprTermExpecting(valueExpr, Some(wrappedType)))
       case (l: Ast.Lambda, Some(Types.Func(Nil, p, _))) => lambdaTerm(l, Some(p))
       case (pw: Ast.Piecewise, Some(Types.Func(Nil, p, _))) => piecewiseTerm(pw, Some(p))
       case (Ast.Tuple(es, _), Some(Types.Tuple(expectedTypes))) if es.length == expectedTypes.length =>
@@ -203,14 +159,14 @@ case class ValueExprAnalyzerImpl(env: Env) {
     An.step(fields)(Namespace.empty[Terms.Field]){ case (ns, Ast.FieldDef(name, typeExprOpt, body, pos)) =>
       lazy val duplicateName = SourceMessage(pos, safe"Duplicate field name `$name`")
 
-      typeExprOpt.fold(An.result(Option.empty[(Types.Type, Pos)])) { typeExpr =>
+      typeExprOpt.fold(An.valid(Option.empty[(Types.Type, Pos)])) { typeExpr =>
         TypeExprAnalyzer.typeExprType(env, typeExpr).map(typ => Some((typ, typeExpr.pos)))
       }.flatMap { annotation =>
         // the field's own type annotation takes precedence over the expected type
         val expectedType = annotation.map(_._1).orElse(expectedFieldTypes.get(name))
 
         valueExprTermExpecting(body, expectedType).flatMap { bodyTerm =>
-          annotation.fold(An.result(())) { case (typ, typePos) =>
+          annotation.fold(An.valid(())) { case (typ, typePos) =>
             TypeInterpreter.expectAssignable(bodyTerm.typ, typ, typePos)
           }.flatMap { case () =>
             An.fromSomeOrError(ns.add((name, Terms.Field(bodyTerm))), duplicateName)
@@ -221,8 +177,20 @@ case class ValueExprAnalyzerImpl(env: Env) {
       Terms.Record(fields, Types.Record(fields.mapValues(_.body.typ)))
     }
 
+  def memberSelection(obj: Ast.ValueExpr, name: String, memberPos: Pos): An[Terms.ValueExpr] =
+    NameResolver.valueNsPath(env, obj) match {
+      // obj is a named namespace, resolve name there
+      case Some(nsPath) => NameResolver.value(env, nsPath, name, memberPos)
+      // otherwise obj must be a value, try to resolve the member from it
+      case None => valueExprTerm(obj).flatMap { objectTerm =>
+        MemberSelectionAnalyzer.memberSelection(env, objectTerm, name, memberPos).map { case (selectedMember, typ) =>
+          Terms.MemberSelection(objectTerm, name, selectedMember, typ)
+        }
+      }
+    }
+
   def valueExprTerm(valueExpr: Ast.ValueExpr): An[Terms.ValueExpr] = valueExpr match {
-    case Ast.UnitLiteral(_) => An.result(Terms.UnitLiteral())
+    case Ast.UnitLiteral(_) => An.valid(Terms.UnitLiteral())
     case Ast.IntegerLiteral(value, pos) => namedNullaryType("Int", pos).map { typ =>
       Terms.IntegerLiteral(TermLiteral.integer(value), typ)
     }
@@ -231,8 +199,8 @@ case class ValueExprAnalyzerImpl(env: Env) {
     }
     case Ast.StringLiteral(parts, pos) =>
       val analyzedParts: An[Seq[TermLiteral.StringValuePart]] = An.seq(parts.map {
-        case AstLiteral.StringPlainPart(value) => An.result(TermLiteral.StringPlainPart(value))
-        case AstLiteral.StringEscapePart(escapes) => An.result(TermLiteral.StringEscapePart(escapes))
+        case AstLiteral.StringPlainPart(value) => An.valid(TermLiteral.StringPlainPart(value))
+        case AstLiteral.StringEscapePart(escapes) => An.valid(TermLiteral.StringEscapePart(escapes))
         case AstLiteral.StringValueExprPart(e) => valueExprTerm(e).map(TermLiteral.StringValueExprPart(_))
       })
       analyzedParts.zip(namedNullaryType("String", pos)).map { case (parts, typ) =>
@@ -253,12 +221,7 @@ case class ValueExprAnalyzerImpl(env: Env) {
     case l: Ast.Lambda => lambdaTerm(l, None)
     case p: Ast.Piecewise => piecewiseTerm(p, None)
     // FIXME Ast.NamedMember?
-    case Ast.MemberSelection(obj, Ast.NamedValue(name, memberPos), _) =>
-      valueExprTerm(obj).flatMap { objectTerm =>
-        MemberSelectionAnalyzer.memberSelection(env, objectTerm, name, memberPos).map { case (selectedMember, typ) =>
-          Terms.MemberSelection(objectTerm, name, selectedMember, typ)
-        }
-      }
+    case Ast.MemberSelection(obj, Ast.NamedValue(name, memberPos), _) => memberSelection(obj, name, memberPos)
     case Ast.Call(callee, argument, _) => callTerm(callee, argument)
     case Ast.Pipe(argument, callee, _) => callTerm(callee, argument)
   }
