@@ -60,7 +60,19 @@ object TypeInterpreter {
   }
 }
 
-case class TypeInterpreterImpl(typeStructures: TypeStructures) {
+// A recursive type unwraps into itself, so each check that unwraps a tagged or boxed type remembers what it's doing
+// (assumedAssignable, assumedOverlapping, expanding) while it checks the wrapped types, and reaching the same again
+// ends there instead of looping. Each unwrapping step checks a copy with one more remembered, so they're empty for a
+// new check. This terminates for regular recursion (a recursive reference has the type params of the con as its type
+// args, so a finite number of types is reached) that is contractive (it's inside a tuple, a record or a function,
+// so the head of a type unwraps into a non-wrapper in a finite number of steps).
+case class TypeInterpreterImpl(
+  typeStructures: TypeStructures,
+  private val assumedAssignable: Set[(Type, Type)] = Set.empty,
+  private val assumedOverlapping: Set[(Type, Type)] = Set.empty,
+  // the cons and type args of the wrappers being expanded, the same for their expanded (narrowed) versions
+  private val expanding: Set[(TypeConId, Seq[Type])] = Set.empty,
+) {
   import NormalizeImpl._, ExpandUnionsImpl._, AssignableImpl._, DisjointImpl._
 
   def wrapperConstructorFunc(con: WrapperTypeCon): Func = {
@@ -84,6 +96,9 @@ case class TypeInterpreterImpl(typeStructures: TypeStructures) {
   def isAssignable(t1: Type, t2: Type): Boolean = (t1, t2) match {
     // Check for equality before any decomposition or subtyping based rules
     case _ if t1 == t2 => true
+    // Reached the same comparison again while comparing the wrapped types for it: assumed to hold, so the answer depends
+    // only on the other parts of the comparison (coinductive, the usual for recursive types)
+    case _ if assumedAssignable.contains((t1, t2)) => true
     // Alias needs to be unwrapped first
     case (t1: Alias, t2) => isAssignable(wrappedType(t1), t2)
     case (t1, t2: Alias) => isAssignable(t1, wrappedType(t2))
@@ -119,7 +134,7 @@ case class TypeInterpreterImpl(typeStructures: TypeStructures) {
     case (Intersection(ts1), t2) => ts1.exists(t1 => isAssignable(t1, t2))
     case (p1: Param, p2: Param) => sameCon(p1, p2)
     case (t1: Tagged, t2: Tagged) => sameCon(t1, t2) && isAssignableWrapper(t1, t2)
-    case (t1: Tagged, t2) => isAssignable(wrappedType(t1), t2)
+    case (t1: Tagged, t2) => assumingAssignable(t1, t2).isAssignable(wrappedType(t1), t2)
     case (t1: Boxed, t2: Boxed) => sameCon(t1, t2) && isAssignableWrapper(t1, t2)
     case (t1: Opaque, t2: Opaque) => sameCon(t1, t2) && isAssignableInvariantArgs(t1.typeArgs, t2.typeArgs)
     case (t1: Singleton, t2: Singleton) => sameCon(t1, t2)
@@ -132,14 +147,16 @@ case class TypeInterpreterImpl(typeStructures: TypeStructures) {
   // e.g. ::alias Number = Int | Float instead of ::opaque Number
   def disjoint(t1: Type, t2: Type): Boolean = (t1, t2) match {
     case (Bottom, _) | (_, Bottom) => true
+    // Reached the same comparison again while comparing the wrapped types for it: overlap can't be ruled out
+    case _ if assumedOverlapping.contains((t1, t2)) => false
     case (t1: Alias, t2) => disjoint(wrappedType(t1), t2)
     case (t1, t2: Alias) => disjoint(t1, wrappedType(t2))
     case (Union(ts), t2) => ts.forall(disjoint(_, t2))
     case (t1, Union(ts)) => ts.forall(disjoint(t1, _))
     case (Intersection(ts), t2) => ts.exists(disjoint(_, t2))
     case (t1, Intersection(ts)) => ts.exists(disjoint(t1, _))
-    case (t1: Tagged, t2) => disjoint(wrappedType(t1), t2)
-    case (t1, t2: Tagged) => disjoint(t1, wrappedType(t2))
+    case (t1: Tagged, t2) => assumingOverlapping(t1, t2).disjoint(wrappedType(t1), t2)
+    case (t1, t2: Tagged) => assumingOverlapping(t1, t2).disjoint(t1, wrappedType(t2))
     case (Tuple(ts1), Tuple(ts2)) =>
       ts1.length != ts2.length || ts1.zip(ts2).exists { case (t1, t2) => disjoint(t1, t2) }
     case (_: Tuple, t2) => isDisjointFromTuples(t2)
@@ -147,13 +164,17 @@ case class TypeInterpreterImpl(typeStructures: TypeStructures) {
     // only shared fields matter, e.g. {a: Red} and {b: Blue} share the value {a: Red, b: Blue}
     case (Record(fields1), Record(fields2)) =>
       fields1.entries.exists { case (name, t1) => fields2.get(name).exists(disjoint(t1, _)) }
-    case (t1: Boxed, t2: Boxed) => !sameCon(t1, t2) || disjoint(wrappedType(t1), wrappedType(t2))
+    case (t1: Boxed, t2: Boxed) =>
+      !sameCon(t1, t2) || assumingOverlapping(t1, t2).disjoint(wrappedType(t1), wrappedType(t2))
     case (t1: Singleton, t2: Singleton) => !sameCon(t1, t2)
     case (_: Singleton, _: Boxed) | (_: Boxed, _: Singleton) => true
     case (t1: Opaque, t2: Opaque) => !sameCon(t1, t2)
     case (_: Opaque, _: Singleton | _: Boxed) | (_: Singleton | _: Boxed, _: Opaque) => true
     case _ => false
   }
+
+  private def assumingAssignable(t1: Type, t2: Type) = copy(assumedAssignable = assumedAssignable + (t1 -> t2))
+  private def assumingOverlapping(t1: Type, t2: Type) = copy(assumedOverlapping = assumedOverlapping + (t1 -> t2))
 
   def narrow(t1: Type, t2: Type): Type =
     if (isAssignable(t1, t2)) t1
@@ -257,12 +278,14 @@ case class TypeInterpreterImpl(typeStructures: TypeStructures) {
         // Type args can't be narrowed in general since the union might not come from a type param,
         // e.g. ::tagged Counted<A> {value: A, size: Small | Large} becomes (internally for this logic):
         // Counted<A>{value: A, size: Small} | Counted<A>{value: A, size: Large}
-        case t: Tagged => expandUnions(wrappedType(t)).map {
+        // reached the same wrapper again while expanding its wrapped type: left unexpanded
+        case t: Wrapper if expanding.contains((t.con.uniq, t.typeArgs)) => Some(Seq(t))
+        case t: Tagged => expandWrappedType(t).map {
           // did not contain an union to expand so keep the original tagged type
           case Seq(_) => Seq(t)
           case unionMembers => unionMembers.map(unionMember => t.copy(expandedWrappedType = Some(unionMember)))
         }
-        case t: Boxed => expandUnions(wrappedType(t)).map {
+        case t: Boxed => expandWrappedType(t).map {
           case Seq(_) => Seq(t)
           case unionMembers => unionMembers.map(unionMember => t.copy(expandedWrappedType = Some(unionMember)))
         }
@@ -273,6 +296,9 @@ case class TypeInterpreterImpl(typeStructures: TypeStructures) {
         case t => Some(Seq(t))
       }
     }
+
+    def expandWrappedType(t: Wrapper): Option[Seq[Type]] =
+      copy(expanding = expanding + (t.con.uniq -> t.typeArgs)).ExpandUnionsImpl.expandUnions(wrappedType(t))
   }
 
   object AssignableImpl {
@@ -325,14 +351,14 @@ case class TypeInterpreterImpl(typeStructures: TypeStructures) {
     // phantom: unused) and compare same-con types by their type args according to it instead of by wrapped types.
     // Replaces isAssignableWrapper and mentionsParam, gives annotations something to be checked against
     // ("declared covariant but used as input"), makes unannotated phantom type params an error, and is cheaper and
-    // terminates for recursive types since args are compared instead of expanded wrapped types.
+    // needs no assumptions for recursive types since args are compared instead of expanded wrapped types.
     // t1 and t2 have the same con
     def isAssignableWrapper(t1: Wrapper, t2: Wrapper): Boolean = {
       val phantom = t1.con.typeParams.map(param => !mentionsParam(param.uniq, typeStructures.structure(t1.con)))
       def phantomArgs(typeArgs: Seq[Type]) = typeArgs.zip(phantom).collect { case (t, true) => t }
 
       isAssignableInvariantArgs(phantomArgs(t1.typeArgs), phantomArgs(t2.typeArgs)) &&
-        isAssignable(wrappedType(t1), wrappedType(t2))
+        assumingAssignable(t1, t2).isAssignable(wrappedType(t1), wrappedType(t2))
     }
 
     def mentionsParam(uniq: TypeConId, typ: Type): Boolean = {

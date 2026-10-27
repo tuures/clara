@@ -608,4 +608,45 @@ class TypeInterpreterSpec extends BaseSpec {
     Func(Tuple(Seq(redOrBlue, Uni)), Uni),
     "((Red, ()) => ()) & ((Blue, ()) => ()), (Red | Blue, ()) => ()"
   )
+
+  // recursive types: a check that reaches the same comparison or expansion again ends there. A boxed type is unwrapped
+  // only against the same con, a tagged one also against other types, so both are covered
+
+  // ::boxed BoxedList<A>: (A, BoxedList<A>) | ()
+  val boxedListCon = WrapperTypeCon(TypeDefKind.Boxed, "BoxedList", Seq(aParamCon), Nil, NoPos)
+  def boxedListType(t: Type) = Boxed(boxedListCon, Seq(t))
+  val boxedListStructure =
+    TypeStructures(Map(boxedListCon.uniq -> Union(Seq(Tuple(Seq(aParam, boxedListType(aParam))), Uni))))
+  // ::tagged TaggedList<A>: (A, TaggedList<A>) | ()
+  val taggedListCon = WrapperTypeCon(TypeDefKind.Tagged, "TaggedList", Seq(aParamCon), Nil, NoPos)
+  def taggedListType(t: Type) = Tagged(taggedListCon, Seq(t))
+  val taggedListStructure =
+    TypeStructures(Map(taggedListCon.uniq -> Union(Seq(Tuple(Seq(aParam, taggedListType(aParam))), Uni))))
+
+  testAssignable(true)(
+    boxedListType(redSingleton), boxedListType(redOrBlue), "BoxedList<Red>, BoxedList<Red | Blue>",
+    typeStructures = boxedListStructure,
+  )
+  testAssignable(false)(
+    boxedListType(redOrBlue), boxedListType(redSingleton), "BoxedList<Red | Blue>, BoxedList<Red>",
+    typeStructures = boxedListStructure,
+  )
+  testAssignable(false)(
+    boxedListType(redOrBlue), Union(Seq(boxedListType(redSingleton), boxedListType(blueSingleton))),
+    "BoxedList<Red | Blue>, BoxedList<Red> | BoxedList<Blue> (the expansion stops at the inner BoxedList<Red | Blue>)",
+    typeStructures = boxedListStructure,
+  )
+  testAssignable(true)(
+    taggedListType(redSingleton), Union(Seq(Tuple(Seq(redSingleton, taggedListType(redSingleton))), Uni)),
+    "TaggedList<Red>, (Red, TaggedList<Red>) | ()",
+    typeStructures = taggedListStructure,
+  )
+  testDisjoint(false)(
+    boxedListType(redSingleton), boxedListType(redOrBlue), "BoxedList<Red>, BoxedList<Red | Blue>",
+    typeStructures = boxedListStructure,
+  )
+  testDisjoint(false)(
+    taggedListType(redSingleton), taggedListType(blueSingleton), "TaggedList<Red>, TaggedList<Blue> (both have ())",
+    typeStructures = taggedListStructure,
+  )
 }

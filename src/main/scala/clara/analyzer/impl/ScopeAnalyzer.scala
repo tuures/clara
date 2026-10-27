@@ -192,7 +192,8 @@ object ScopeAnalyzerImpl {
     case _ => false
   }
 
-  // TODO: recursive types: a type's wrapped type referring to itself needs termination in TypeInterpreterImpl
+  // TODO: recursive types: allow recursion through a nominal wrapper that is regular and contractive (TypeInterpreterImpl
+  // terminates only for those, see Roadmap 2c)
   def rejectRecursion(typeDefTerms: Seq[Terms.BlockContent]): An[Unit] = An.currentLog.flatMap { log =>
     val typeStructures = log.typeStructures
     val cons = typeDefTerms.collect { case Terms.TypeDef(con: TypeCons.WrapperTypeCon) => con }
