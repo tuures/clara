@@ -1,6 +1,4 @@
-::declare console: { log: String => () }
-
-// types can be used before their declaration in the same block
+// types and `::declare`d values can be used before their declaration in the same block
 answer: Boolean = Yes
 console.log(answer @ #(Yes => "yes", No => "no"))
 
@@ -8,4 +6,5 @@ console.log(answer @ #(Yes => "yes", No => "no"))
 ::singleton Yes
 ::singleton No
 ::opaque String
+::declare console: { log: String => () }
 ()

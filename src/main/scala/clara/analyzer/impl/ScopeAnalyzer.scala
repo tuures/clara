@@ -7,12 +7,14 @@ import clara.util.Safe._
 
 // A scope (a block or a namespace body) is analyzed in three passes, each over the whole scope before the next:
 // 1. the names pass registers every name of the scope (type cons, namespaces, companions, values) without analyzing
-//    any expression, and returns the terms of the type defs; a value is declared, the values pass defines it,
-// 2. the types pass analyzes the type expressions (what each wrapper type wraps). The types pass also runs after errors
-//    in the names pass (what failed to be registered is skipped) so that its errors are reported too, then the types of
-//    the whole block (its namespaces included) are checked for recursion
-// 3. the values pass analyzes the value expressions in source order (BlockAnalyzer).
-// So a type can refer to any type of the scope, defined before or after it.
+//    any expression, and returns the terms of the type defs; a value is declared, a later pass defines it,
+// 2. the types pass analyzes the type expressions (what each wrapper type wraps, the types of `::declare`d values) and
+//    defines the `::declare`d values. The types pass also runs after errors in the names pass (what failed to be
+//    registered is skipped) so that its errors are reported too, then the types of the whole block (its namespaces
+//    included) are checked for recursion
+// 3. the values pass analyzes the value expressions in source order (BlockAnalyzer) and defines the other values.
+// So a type can refer to any type of the scope, defined before or after it, and so can a value to a `::declare`d value
+// (it has no value expression to evaluate before it can be used).
 //
 // A namespace body has no passes of its own: each pass of the scope it's in walks the body too, so that types inside
 // and outside it can refer to each other. An error in a declaration loses only what the declaration would have done,
@@ -111,8 +113,9 @@ case class ScopeAnalyzerImpl(bcs: Seq[Ast.BlockContent]) {
       companion(typeDef).fold(An.valid(typedEnv))(registerMemberTypes(typedEnv, _))
     }
     case (env, (namespaceDef: Ast.NamespaceDef, true)) if !namespaceDef.isExtend => registerMemberTypes(env, namespaceDef)
-    // an `::extend`'s types are registered with its type, a later declaration of a name is a duplicate, values have no
-    // types to register yet
+    case (env, (valueDecl: Ast.ValueDecl, _)) => registerValueDeclType(env, valueDecl)
+    // an `::extend`'s types are registered with its type, a later declaration of a name is a duplicate, value defs have
+    // no types to register yet
     case (env, _) => An.valid(env)
   }
 }
@@ -148,6 +151,20 @@ object ScopeAnalyzerImpl {
     case Some(con: TypeCons.ParamCon) =>
       throw new java.lang.AssertionError(safe"type def `${con.name}` registered a type param")
     case None => An.valid(env)
+  }
+
+  // a `::declare`d value is defined by its type. A duplicate (reported in the names pass) finds the name of another
+  // declaration: skipped if it's defined already, defined if it's an earlier value def's (unseen, the values pass doesn't
+  // run after the error), until a DefId per declaration (see the error type TODO)
+  def registerValueDeclType(env: Env, valueDecl: Ast.ValueDecl): An[Env] = {
+    val Ast.NameWithPos(name, pos) = valueDecl.name
+
+    TypeExprAnalyzer.typeExprType(env, valueDecl.t).flatMap { typ =>
+      env.local.values.get(name) match {
+        case Some(_: EnvDeclaredValue) => env.defineValue(name, typ, pos)
+        case Some(_: EnvValue | _: EnvNamespaceRef) | None => An.valid(env)
+      }
+    }
   }
 
   def registerWrapperTypes(env: Env, typeDef: Ast.TypeDef, con: TypeCons.WrapperTypeCon): An[Env] =

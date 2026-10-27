@@ -70,12 +70,8 @@ object BlockAnalyzerImpl {
 
         An.valid(BlockContentStep(currentEnv, Seq(valueExprTerm), Some(valueExprTerm.typ))).tellWarnings(maybeDiscardWarning)
       }
-    case Ast.ValueDecl(Ast.NameWithPos(name, namePos), t, _) =>
-      TypeExprAnalyzer.typeExprType(currentEnv, t).flatMap { typ =>
-        currentEnv.defineValue(name, typ, namePos)
-      }.map { nextEnv =>
-        BlockContentStep(nextEnv, Seq(Terms.ValueDecl(name)), None)
-      }
+    // defined by the types pass
+    case Ast.ValueDecl(Ast.NameWithPos(name, _), _, _) => An.valid(BlockContentStep(currentEnv, Seq(Terms.ValueDecl(name)), None))
     case Ast.ValueDef(target, e, _) =>
       ValueExprAnalyzer.valueExprTerm(currentEnv, e).flatMap { valueExprTerm =>
         PatternAnalyzer.walkValueDef(currentEnv, target, Some(valueExprTerm.typ)).

@@ -38,6 +38,21 @@ class ScopeAnalyzerSpec extends BaseSpec {
     ))
   }
 
+  test("a `::declare` duplicating a value def or another `::declare` is reported once") {
+    val block = Block(Seq(
+      ValueDef(CapturePattern("value"), UnitLiteral()),
+      ValueDecl("value", UnitType()),
+      ValueDecl("value", UnitType()),
+    ))
+
+    val result = ScopeAnalyzer.registerNamesAndTypes(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq(
+      "Cannot shadow existing value with same name `value`",
+      "Cannot shadow existing value with same name `value`",
+    ))
+  }
+
   test("a namespace and a value with the same name in the same scope is an error") {
     val block = Block(Seq(
       NamespaceDef(false, NameWithPos("Color"), Nil),
@@ -142,21 +157,45 @@ class ScopeAnalyzerSpec extends BaseSpec {
     assert(result.value.left.value.map(_.message) === Seq("Cannot shadow existing type with same name `Type`"))
   }
 
-  // values: the names pass declares them, the values pass defines them
+  // values: the names pass declares them, the types pass defines the `::declare`d ones, the values pass the others
 
-  test("the names pass declares the names a value def/decl binds") {
+  test("the names pass declares the names a value def binds") {
     val block = Block(Seq(
       ValueDef(TuplePattern(Seq(CapturePattern("a"), PatternAs(CapturePattern("b"), UnitType()))), Tuple(Seq(UnitLiteral(), UnitLiteral()))),
-      ValueDecl("c", UnitType()),
       NamespaceDef(false, NameWithPos("Space"), Seq(ValueDef(CapturePattern("member"), UnitLiteral()))),
     ))
 
     val result = ScopeAnalyzer.registerNamesAndTypes(Env.empty, block.bcs).run
 
     val (env, _) = result.value.value
-    for (name <- Seq("a", "b", "c")) inside(env.local.values.get(name)) { case Some(_: EnvDeclaredValue) => }
+    for (name <- Seq("a", "b")) inside(env.local.values.get(name)) { case Some(_: EnvDeclaredValue) => }
     inside(env.local.values.get("Space")) { case Some(EnvNamespaceRef(spaceNsId, _)) =>
       inside(env.namespaceMembers(spaceNsId).values.get("member")) { case Some(_: EnvDeclaredValue) => }
+    }
+  }
+
+  test("the types pass defines a `::declare`d value by its type, keeping its DefId") {
+    val block = Block(Seq(
+      ValueDecl("declared", NamedType("Below")),
+      TypeDef(TypeDefKind.Singleton, "Below"),
+      NamespaceDef(false, NameWithPos("Space"), Seq(ValueDecl("member", UnitType()))),
+    ))
+    val impl = ScopeAnalyzerImpl(block.bcs)
+
+    val result = impl.registerNames(Env.empty).flatMap { case (namedEnv, _) =>
+      impl.registerTypes(namedEnv).map(typedEnv => (namedEnv, typedEnv))
+    }.run
+
+    val (namedEnv, typedEnv) = result.value.value
+    inside((namedEnv.local.values.get("declared"), typedEnv.local.values.get("declared"))) {
+      case (Some(EnvDeclaredValue(declaredId, _)), Some(EnvValue(Types.Singleton(belowCon), definedId, Nil, _))) =>
+        assert(belowCon.name === "Below")
+        assert(definedId === declaredId)
+    }
+    inside(typedEnv.local.values.get("Space")) { case Some(EnvNamespaceRef(spaceNsId, _)) =>
+      inside(typedEnv.namespaceMembers(spaceNsId).values.get("member")) {
+        case Some(EnvValue(Types.Uni, _, Seq("Space"), _)) =>
+      }
     }
   }
 

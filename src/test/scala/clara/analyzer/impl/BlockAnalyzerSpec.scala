@@ -100,6 +100,19 @@ class BlockAnalyzerSpec extends BaseSpec {
     assert(result.value.left.value.map(_.message) === Seq("`late` is used before its definition"))
   }
 
+  test("a `::declare`d value can be used before its declaration") {
+    val block = Block(Seq(
+      ValueDef(CapturePattern("early"), NamedValue("declared")),
+      ValueDecl("declared", UnitType()),
+      NamedValue("early"),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    assert(result.value.value.typ === Types.Uni)
+    assert(result.log.warnings.isEmpty)
+  }
+
   test("a value of a block shadows an outer one also before its definition") {
     val block = Block(Seq(
       ValueDef(CapturePattern("x"), UnitLiteral()),
@@ -182,6 +195,17 @@ class BlockAnalyzerSpec extends BaseSpec {
     val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
 
     assert(result.value.left.value.map(_.message) === Seq("`Color.favorite` is used before its definition"))
+  }
+
+  test("a namespace's `::declare`d values can be used before its position") {
+    val block = Block(Seq(
+      colorMember("dark"),
+      color(ValueDecl("dark", UnitType())),
+    ))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+
+    assert(result.value.value.currentContents.head === Terms.NamedValue("dark", Seq("Color"), Types.Uni))
   }
 
   test("an error in a namespace's value doesn't lose its other values") {
