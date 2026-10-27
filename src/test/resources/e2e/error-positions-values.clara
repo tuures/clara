@@ -1,0 +1,12 @@
+// an unknown value is reported at the name itself, a value that doesn't fit its type at the whole type
+::namespace Outer {
+  ::namespace Inner {
+    ::alias Pair<A, B>: (A, B)
+    value = ()
+  }
+}
+
+missingValue = Outer.Inner.nope
+missingConstant = #(Outer.Inner.Nope => ())
+notAssignable: Outer.Inner.Pair<(), ()> = Outer.Inner.value
+()

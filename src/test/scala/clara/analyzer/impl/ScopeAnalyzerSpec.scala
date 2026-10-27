@@ -38,11 +38,26 @@ class ScopeAnalyzerSpec extends BaseSpec {
     ))
   }
 
-  test("a `::declare` duplicating a value def or another `::declare` is reported once") {
+  test("a `::declare` is a duplicate of an earlier value def or `::declare` of the same name") {
     val block = Block(Seq(
       ValueDef(CapturePattern("value"), UnitLiteral()),
       ValueDecl("value", UnitType()),
       ValueDecl("value", UnitType()),
+    ))
+
+    val result = ScopeAnalyzer.registerNamesAndTypes(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq(
+      "Cannot shadow existing value with same name `value`",
+      "Cannot shadow existing value with same name `value`",
+    ))
+  }
+
+  test("an annotated value def is a duplicate of an earlier value def of the same name, annotated or not") {
+    val block = Block(Seq(
+      ValueDef(CapturePattern("value"), UnitLiteral()),
+      ValueDef(PatternAs(CapturePattern("value"), UnitType()), UnitLiteral()),
+      ValueDef(PatternAs(CapturePattern("value"), UnitType()), UnitLiteral()),
     ))
 
     val result = ScopeAnalyzer.registerNamesAndTypes(Env.empty, block.bcs).run
@@ -188,7 +203,7 @@ class ScopeAnalyzerSpec extends BaseSpec {
 
     val (namedEnv, typedEnv) = result.value.value
     inside((namedEnv.local.values.get("declared"), typedEnv.local.values.get("declared"))) {
-      case (Some(EnvDeclaredValue(declaredId, _)), Some(EnvValue(Types.Singleton(belowCon), definedId, Nil, _))) =>
+      case (Some(EnvDeclaredValue(declaredId, None, _)), Some(EnvValue(Types.Singleton(belowCon), definedId, Nil, _))) =>
         assert(belowCon.name === "Below")
         assert(definedId === declaredId)
     }
@@ -196,6 +211,27 @@ class ScopeAnalyzerSpec extends BaseSpec {
       inside(typedEnv.namespaceMembers(spaceNsId).values.get("member")) {
         case Some(EnvValue(Types.Uni, _, Seq("Space"), _)) =>
       }
+    }
+  }
+
+  test("the types pass gives a value def a signature from its top-level annotation only") {
+    val block = Block(Seq(
+      ValueDef(PatternAs(CapturePattern("signed"), NamedType("Below")), NamedValue("Below")),
+      TypeDef(TypeDefKind.Singleton, "Below"),
+      ValueDef(TuplePattern(Seq(PatternAs(CapturePattern("a"), UnitType()), CapturePattern("b"))), Tuple(Seq(UnitLiteral(), UnitLiteral()))),
+      NamespaceDef(false, NameWithPos("Space"), Seq(ValueDef(PatternAs(CapturePattern("member"), UnitType()), UnitLiteral()))),
+    ))
+
+    val result = ScopeAnalyzer.registerNamesAndTypes(Env.empty, block.bcs).run
+
+    val (env, _) = result.value.value
+    inside(env.local.values.get("signed")) { case Some(EnvDeclaredValue(_, Some(Types.Singleton(belowCon)), _)) =>
+      assert(belowCon.name === "Below")
+    }
+    // the annotations inside other patterns are checked by the values pass
+    for (name <- Seq("a", "b")) inside(env.local.values.get(name)) { case Some(EnvDeclaredValue(_, None, _)) => }
+    inside(env.local.values.get("Space")) { case Some(EnvNamespaceRef(spaceNsId, _)) =>
+      inside(env.namespaceMembers(spaceNsId).values.get("member")) { case Some(EnvDeclaredValue(_, Some(Types.Uni), _)) => }
     }
   }
 

@@ -232,4 +232,6 @@ object ValueExprAnalyzer {
     ValueExprAnalyzerImpl(env).namedValue(name, pos)
   def valueExprTerm(env: Env, valueExpr: Ast.ValueExpr): An[Terms.ValueExpr] =
     ValueExprAnalyzerImpl(env).valueExprTerm(valueExpr)
+  def valueExprTermExpecting(env: Env, valueExpr: Ast.ValueExpr, expectedType: Option[Types.Type]): An[Terms.ValueExpr] =
+    ValueExprAnalyzerImpl(env).valueExprTermExpecting(valueExpr, expectedType)
 }

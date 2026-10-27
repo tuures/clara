@@ -1,6 +1,3 @@
 src/test/resources/e2e/error-positions.clara:10:26(–28): `Foo` is not a member of namespace `Outer.Inner`
-src/test/resources/e2e/error-positions.clara:11:28(–31): `nope` is not a member of namespace `Outer.Inner`
-src/test/resources/e2e/error-positions.clara:12:33(–36): `Nope` is not a member of namespace `Outer.Inner`
-src/test/resources/e2e/error-positions.clara:14:14(–33): Type `Unit` does not take any type arguments, but 1 given
-src/test/resources/e2e/error-positions.clara:15:13(–32): Type `Pair<A, B>` expects 2 type arguments, but 1 given
-src/test/resources/e2e/error-positions.clara:16:16(–39): Type `()` is not assignable to type `Pair<(), ()>`
+src/test/resources/e2e/error-positions.clara:11:14(–33): Type `Unit` does not take any type arguments, but 1 given
+src/test/resources/e2e/error-positions.clara:12:13(–32): Type `Pair<A, B>` expects 2 type arguments, but 1 given

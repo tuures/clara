@@ -12,7 +12,7 @@ import clara.asg.Attributes.MethodAttributes
 sealed trait EnvValueEntry {
   def defId: DefId
 }
-case class EnvDeclaredValue(defId: DefId, definedAt: Pos) extends EnvValueEntry
+case class EnvDeclaredValue(defId: DefId, signature: Option[Type], definedAt: Pos) extends EnvValueEntry
 case class EnvValue(typ: Type, defId: DefId, definedInNs: Seq[String], definedAt: Pos) extends EnvValueEntry
 case class EnvNamespaceRef(namespace: NsId, defId: DefId) extends EnvValueEntry
 
@@ -62,9 +62,14 @@ case class Env(
   // adding names
   def addValue(name: String, typ: Type, pos: Pos, defId: DefId = DefId()): An[Env] =
     addValueEntry(name, EnvValue(typ, defId, nsPath, pos), pos)
-  def declareValue(name: String, pos: Pos): An[Env] = addValueEntry(name, EnvDeclaredValue(DefId(), pos), pos)
+  def declareValue(name: String, pos: Pos): An[Env] = addValueEntry(name, EnvDeclaredValue(DefId(), None, pos), pos)
+  def declareValueSignature(name: String, signature: Type): Env = local.values.get(name) match {
+    case Some(declared @ EnvDeclaredValue(_, None, _)) =>
+      withLocal(local.copy(values = local.values.addOrModify((name, declared.copy(signature = Some(signature))))))
+    case _ => throw new java.lang.AssertionError(safe"value `$name` hasn't been declared without a signature")
+  }
   def defineValue(name: String, typ: Type, pos: Pos): An[Env] = local.values.get(name) match {
-    case Some(EnvDeclaredValue(defId, _)) =>
+    case Some(EnvDeclaredValue(defId, _, _)) =>
       An.valid(withLocal(local.copy(values = local.values.addOrModify((name, EnvValue(typ, defId, nsPath, pos))))))
     case _ => throw new java.lang.AssertionError(safe"value `$name` hasn't been declared")
   }

@@ -38,6 +38,23 @@ object ScopeAnalyzer {
   def registeredNamespace(env: Env, namespaceDef: Ast.NamespaceDef): Option[NsId] =
     if (namespaceDef.isExtend) env.localCompanionNamespace(namespaceDef.name.name)
     else env.localStandaloneNamespace(namespaceDef.name.name)
+
+  // the name and type of a value def whose target is a single annotated capture (`f: T = ...`): its type is known
+  // before its value expression is analyzed. The annotations inside other patterns (e.g. a tuple's) are only checked
+  // by the values pass.
+  def topLevelSignature(target: Ast.Pattern): Option[(Ast.NameWithPos, Ast.TypeExpr)] = target match {
+    case Ast.PatternAs(Ast.CapturePattern(name, pos), t, _) => Some((Ast.NameWithPos(name, pos), t))
+    case _: Ast.WildcardPattern | _: Ast.UnitPattern | _: Ast.IntegerPattern | _: Ast.FloatPattern |
+      _: Ast.StringPattern | _: Ast.TuplePattern | _: Ast.NamedConstantPattern | _: Ast.CapturePattern |
+      _: Ast.GuardPattern | _: Ast.DefaultValuePattern | _: Ast.PatternAs | _: Ast.RecordPattern | _: Ast.OrPattern |
+      _: Ast.ConstructPattern => None
+  }
+
+  // the signature the value def of this name got in the types pass (see topLevelSignature)
+  def registeredSignature(env: Env, name: String): Types.Type = env.local.values.get(name) match {
+    case Some(EnvDeclaredValue(_, Some(signature), _)) => signature
+    case _ => throw new java.lang.AssertionError(safe"value `$name` hasn't been given a signature")
+  }
 }
 
 case class ScopeAnalyzerImpl(bcs: Seq[Ast.BlockContent]) {
@@ -113,9 +130,9 @@ case class ScopeAnalyzerImpl(bcs: Seq[Ast.BlockContent]) {
       companion(typeDef).fold(An.valid(typedEnv))(registerMemberTypes(typedEnv, _))
     }
     case (env, (namespaceDef: Ast.NamespaceDef, true)) if !namespaceDef.isExtend => registerMemberTypes(env, namespaceDef)
+    case (env, (valueDef: Ast.ValueDef, _)) => registerSignature(env, valueDef)
     case (env, (valueDecl: Ast.ValueDecl, _)) => registerValueDeclType(env, valueDecl)
-    // an `::extend`'s types are registered with its type, a later declaration of a name is a duplicate, value defs have
-    // no types to register yet
+    // an `::extend`'s types are registered with its type, a later declaration of a name is a duplicate
     case (env, _) => An.valid(env)
   }
 }
@@ -153,6 +170,18 @@ object ScopeAnalyzerImpl {
     case None => An.valid(env)
   }
 
+  def registerSignature(env: Env, valueDef: Ast.ValueDef): An[Env] =
+    ScopeAnalyzer.topLevelSignature(valueDef.target) match {
+      case None => An.valid(env)
+      case Some((Ast.NameWithPos(name, _), t)) => TypeExprAnalyzer.typeExprType(env, t).map { typ =>
+        env.local.values.get(name) match {
+          case Some(EnvDeclaredValue(_, None, _)) => env.declareValueSignature(name, typ)
+          case Some(EnvDeclaredValue(_, Some(_), _) | _: EnvValue | _: EnvNamespaceRef) | None => env
+        }
+      }
+    }
+
+  // FIXME:
   // a `::declare`d value is defined by its type. A duplicate (reported in the names pass) finds the name of another
   // declaration: skipped if it's defined already, defined if it's an earlier value def's (unseen, the values pass doesn't
   // run after the error), until a DefId per declaration (see the error type TODO)
@@ -182,7 +211,7 @@ object ScopeAnalyzerImpl {
       case Some(member) =>
         val pos = member match {
           case EnvValue(_, _, _, definedAt) => definedAt
-          case EnvDeclaredValue(_, definedAt) => definedAt
+          case EnvDeclaredValue(_, _, definedAt) => definedAt
           case _: EnvNamespaceRef => con.definedAt
         }
 

@@ -87,12 +87,39 @@ class BlockAnalyzerSpec extends BaseSpec {
     assert(result.log.warnings.isEmpty)
   }
 
+  test("the signature of an annotated value def is the expected type of its value expression") {
+    val block = Block(Seq(
+      ValueDef(
+        PatternAs(CapturePattern("f"), Ast.FuncType(Nil, UnitType(), UnitType())),
+        Lambda(CapturePattern("x"), NamedValue("x")),
+      ),
+      Call(NamedValue("f"), UnitLiteral()),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    // the lambda's parameter has the signature's parameter type
+    assert(result.value.value.typ === Types.Uni)
+    assert(result.log.warnings.isEmpty)
+  }
+
   // forward references: the types of the block are analyzed before its values (see ScopeAnalyzerSpec)
 
   test("a value is used before its definition") {
     val block = Block(Seq(
       ValueDef(CapturePattern("early"), NamedValue("late")),
       ValueDef(CapturePattern("late"), UnitLiteral()),
+    ))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq("`late` is used before its definition"))
+  }
+
+  test("an annotated value def can't be used before its definition either") {
+    val block = Block(Seq(
+      ValueDef(CapturePattern("early"), NamedValue("late")),
+      ValueDef(PatternAs(CapturePattern("late"), UnitType()), UnitLiteral()),
     ))
 
     val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run

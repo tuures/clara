@@ -73,7 +73,11 @@ object BlockAnalyzerImpl {
     // defined by the types pass
     case Ast.ValueDecl(Ast.NameWithPos(name, _), _, _) => An.valid(BlockContentStep(currentEnv, Seq(Terms.ValueDecl(name)), None))
     case Ast.ValueDef(target, e, _) =>
-      ValueExprAnalyzer.valueExprTerm(currentEnv, e).flatMap { valueExprTerm =>
+      val signature = ScopeAnalyzer.topLevelSignature(target).map { case (name, _) =>
+        ScopeAnalyzer.registeredSignature(currentEnv, name.name)
+      }
+
+      ValueExprAnalyzer.valueExprTermExpecting(currentEnv, e, signature).flatMap { valueExprTerm =>
         PatternAnalyzer.walkValueDef(currentEnv, target, Some(valueExprTerm.typ)).
           map { case (nextEnv, targetTerm) =>
             BlockContentStep(nextEnv, Seq(Terms.ValueDef(targetTerm, currentEnv.nsPath, valueExprTerm)), None)

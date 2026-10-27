@@ -1,0 +1,3 @@
+src/test/resources/e2e/error-positions-values.clara:9:28(–31): `nope` is not a member of namespace `Outer.Inner`
+src/test/resources/e2e/error-positions-values.clara:10:33(–36): `Nope` is not a member of namespace `Outer.Inner`
+src/test/resources/e2e/error-positions-values.clara:11:16(–39): Type `()` is not assignable to type `Pair<(), ()>`
