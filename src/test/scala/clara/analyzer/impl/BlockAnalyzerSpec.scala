@@ -127,6 +127,86 @@ class BlockAnalyzerSpec extends BaseSpec {
     assert(result.value.left.value.map(_.message) === Seq("`late` is used before its definition"))
   }
 
+  private def valueDefFuncUniUni(name: String, body: ValueExpr) =
+    ValueDef(PatternAs(CapturePattern(name), Ast.FuncType(Nil, UnitType(), UnitType())), Lambda(UnitPattern(), body))
+  private def call(name: String) = Call(NamedValue(name), UnitLiteral())
+
+  test("the function runs of a block are its consecutive function defs") {
+    val block = Block(Seq(
+      valueDefFuncUniUni("a", UnitLiteral()),
+      ValueDef(CapturePattern("b"), Piecewise(Seq(UnitPattern() -> UnitLiteral()))),
+      ValueDef(CapturePattern("value"), UnitLiteral()),
+      valueDefFuncUniUni("c", UnitLiteral()),
+      TypeDef(TypeDefKind.Alias, "Type", UnitType()),
+      valueDefFuncUniUni("d", UnitLiteral()),
+    ))
+
+    assert(BlockAnalyzerImpl.functionRuns(block.bcs) === Seq(Seq("a", "b"), Seq("a", "b"), Nil, Seq("c"), Nil, Seq("d")))
+  }
+
+  test("functions defined one after another can refer to each other before their definitions") {
+    val block = Block(Seq(
+      valueDefFuncUniUni("ping", call("pong")),
+      valueDefFuncUniUni("pong", call("ping")),
+      call("ping"),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    assert(result.value.value.typ === Types.Uni)
+    // the use before its definition counts
+    assert(result.log.warnings.isEmpty)
+  }
+
+  test("a function can refer to itself") {
+    val block = Block(Seq(
+      valueDefFuncUniUni("loop", call("loop")),
+      call("loop"),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    assert(result.value.value.typ === Types.Uni)
+  }
+
+  test("the functions of a namespace can refer to each other before their definitions, also qualified") {
+    val block = Block(Seq(
+      color(
+        valueDefFuncUniUni("ping", Call(colorMember("pong"), UnitLiteral())),
+        valueDefFuncUniUni("pong", call("ping")),
+      ),
+      Call(colorMember("ping"), UnitLiteral()),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    assert(result.value.value.typ === Types.Uni)
+    assert(result.log.warnings.isEmpty)
+  }
+
+  test("a function can't refer to a function defined after a value in between") {
+    val block = Block(Seq(
+      valueDefFuncUniUni("early", call("late")),
+      ValueDef(CapturePattern("between"), UnitLiteral()),
+      valueDefFuncUniUni("late", UnitLiteral()),
+    ))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq("`late` is used before its definition"))
+  }
+
+  test("a function referred to before its definition needs a signature") {
+    val block = Block(Seq(
+      valueDefFuncUniUni("early", call("late")),
+      ValueDef(CapturePattern("late"), Lambda(UnitPattern(), UnitLiteral())),
+    ))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq("`late` needs a type annotation to be used before its definition"))
+  }
+
   test("a `::declare`d value can be used before its declaration") {
     val block = Block(Seq(
       ValueDef(CapturePattern("early"), NamedValue("declared")),

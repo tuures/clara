@@ -5,6 +5,8 @@ import clara.ast.{Ast, Pos, SourceMessage}
 
 import clara.util.Safe._
 
+import scala.annotation.tailrec
+
 object BlockAnalyzerImpl {
 
   case class BlockState(
@@ -60,7 +62,41 @@ object BlockAnalyzerImpl {
 
   case class BlockContentStep(nextEnv: Env, contentTerms: Seq[Terms.BlockContent], nextReturnType: Option[Types.Type])
 
-  def walkBlockContent(currentEnv: Env, bc: Ast.BlockContent, isLast: Boolean): An[BlockContentStep] = bc match {
+  // consecutive function defs
+  // each function def in the run gets the names of the whole run
+  def functionRuns(bcs: Seq[Ast.BlockContent]): Vector[Seq[String]] = {
+    @tailrec
+    def loop(rest: List[Ast.BlockContent], namesSoFar: Vector[Seq[String]]): Vector[Seq[String]] =
+      rest.span(functionDefTarget(_).isDefined) match {
+        case (Nil, Nil) => namesSoFar
+        case (Nil, _ :: tail) => loop(tail, namesSoFar :+ Nil)
+        case (run, afterRun) =>
+          val runNames = run.flatMap(functionDefTarget).flatMap(PatternAnalyzer.boundNames).map(_.name)
+          // each function def in the run gets the names of the whole run
+          loop(afterRun, namesSoFar ++ run.map(_ => runNames))
+      }
+
+    loop(bcs.toList, Vector.empty)
+  }
+
+  // the target of a function def, None for other contents
+  def functionDefTarget(bc: Ast.BlockContent): Option[Ast.Pattern] = bc match {
+    case Ast.ValueDef(target, e, _) => e match {
+      case _: Ast.Lambda | _: Ast.Piecewise => Some(target)
+      case _: Ast.UnitLiteral | _: Ast.IntegerLiteral | _: Ast.FloatLiteral | _: Ast.StringLiteral | _: Ast.Tuple |
+        _: Ast.Block | _: Ast.NamedValue | _: Ast.ValueAs | _: Ast.Record | _: Ast.MemberSelection | _: Ast.Call |
+        _: Ast.Pipe => None
+    }
+    case _: Ast.ValueExpr | _: Ast.ValueDecl | _: Ast.TypeDef | _: Ast.NamespaceDef | _: Ast.MethodSection => None
+  }
+
+  // functionRun: the names of the run of function defs bc is in (see functionRuns)
+  def walkBlockContent(
+    currentEnv: Env,
+    bc: Ast.BlockContent,
+    functionRun: Seq[String],
+    isLast: Boolean,
+  ): An[BlockContentStep] = bc match {
     case valueExprAst: Ast.ValueExpr =>
       ValueExprAnalyzer.valueExprTerm(currentEnv, valueExprAst).flatMap { valueExprTerm =>
         val isUnit = valueExprTerm.typ === Types.Uni
@@ -77,7 +113,10 @@ object BlockAnalyzerImpl {
         ScopeAnalyzer.registeredSignature(currentEnv, name.name)
       }
 
-      ValueExprAnalyzer.valueExprTermExpecting(currentEnv, e, signature).flatMap { valueExprTerm =>
+      val functionRunIds = functionRun.flatMap(currentEnv.local.values.get).map(_.defId).toSet
+      val valueEnv = currentEnv.allowForwardReferences(functionRunIds)
+
+      ValueExprAnalyzer.valueExprTermExpecting(valueEnv, e, signature).flatMap { valueExprTerm =>
         PatternAnalyzer.walkValueDef(currentEnv, target, Some(valueExprTerm.typ)).
           map { case (nextEnv, targetTerm) =>
             BlockContentStep(nextEnv, Seq(Terms.ValueDef(targetTerm, currentEnv.nsPath, valueExprTerm)), None)
@@ -95,8 +134,10 @@ object BlockAnalyzerImpl {
       )
       val bodyEnv = currentEnv.enterNamespace(namespaceDef.name.name, nsId)
 
-      An.stepDeferring(namespaceDef.body)((bodyEnv, Vector.empty[Terms.BlockContent])) { case ((bodyEnv, terms), member) =>
-        walkBlockContent(bodyEnv, member, isLast = false).map(step => (step.nextEnv, terms ++ step.contentTerms))
+      val members = namespaceDef.body.zip(functionRuns(namespaceDef.body))
+
+      An.stepDeferring(members)((bodyEnv, Vector.empty[Terms.BlockContent])) { case ((bodyEnv, terms), (member, functionRun)) =>
+        walkBlockContent(bodyEnv, member, functionRun, isLast = false).map(step => (step.nextEnv, terms ++ step.contentTerms))
       }.map { case (bodyEnv, terms) => BlockContentStep(currentEnv.leaveNamespace(bodyEnv), terms, None) }
     case methodSection: Ast.MethodSection =>
       MethodSectionAnalyzer.methodSectionTerm(currentEnv, methodSection).
@@ -109,10 +150,10 @@ object BlockAnalyzerImpl {
     }
 
     typesAn.flatMap { stateWithTypeDefs =>
-      An.step(bcs.zipWithIndex)(stateWithTypeDefs) { case (currentState, (bc, index)) =>
+      An.step(bcs.zip(functionRuns(bcs)).zipWithIndex)(stateWithTypeDefs) { case (currentState, ((bc, functionRun), index)) =>
         val BlockState(currentEnv, currentContents, _) = currentState
 
-        walkBlockContent(currentEnv, bc, index === bcs.length - 1).
+        walkBlockContent(currentEnv, bc, functionRun, index === bcs.length - 1).
           map { case BlockContentStep(nextEnv, contentTerms, nextReturnType) =>
             BlockState(nextEnv, currentContents ++ contentTerms, nextReturnType)
           }

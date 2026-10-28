@@ -12,7 +12,8 @@ import clara.asg.Attributes.MethodAttributes
 sealed trait EnvValueEntry {
   def defId: DefId
 }
-case class EnvDeclaredValue(defId: DefId, signature: Option[Type], definedAt: Pos) extends EnvValueEntry
+case class EnvDeclaredValue(defId: DefId, signature: Option[Type], definedInNs: Seq[String], definedAt: Pos)
+  extends EnvValueEntry
 case class EnvValue(typ: Type, defId: DefId, definedInNs: Seq[String], definedAt: Pos) extends EnvValueEntry
 case class EnvNamespaceRef(namespace: NsId, defId: DefId) extends EnvValueEntry
 
@@ -39,6 +40,8 @@ case class Env(
   private val methods: UniqInfo[TypeConId, Namespace[EnvMethod]],
   private val namespaces: UniqInfo[NsId, BlockScope],
   private val inNs: Option[InNamespace],
+  // see allowForwardReferences
+  private val forwardReferable: Set[DefId],
 ) {
   def nsPath: Seq[String] = inNs.fold(Seq.empty[String])(_.nsPath)
 
@@ -58,18 +61,21 @@ case class Env(
   // back from the body of a namespace entered from this env: keeps the members the pass added and the namespaces the
   // pass added or updated (e.g. nested ones), the namespaces of the body env are the newer version of this env's
   def leaveNamespace(bodyEnv: Env): Env = this.copy(namespaces = bodyEnv.namespaces)
+  // the declared values that the value expressions analyzed with this env can refer to before their definitions
+  def allowForwardReferences(defIds: Set[DefId]): Env = this.copy(forwardReferable = forwardReferable ++ defIds)
+  def isForwardReferable(defId: DefId): Boolean = forwardReferable(defId)
 
   // adding names
   def addValue(name: String, typ: Type, pos: Pos, defId: DefId = DefId()): An[Env] =
     addValueEntry(name, EnvValue(typ, defId, nsPath, pos), pos)
-  def declareValue(name: String, pos: Pos): An[Env] = addValueEntry(name, EnvDeclaredValue(DefId(), None, pos), pos)
+  def declareValue(name: String, pos: Pos): An[Env] = addValueEntry(name, EnvDeclaredValue(DefId(), None, nsPath, pos), pos)
   def declareValueSignature(name: String, signature: Type): Env = local.values.get(name) match {
-    case Some(declared @ EnvDeclaredValue(_, None, _)) =>
+    case Some(declared @ EnvDeclaredValue(_, None, _, _)) =>
       withLocal(local.copy(values = local.values.addOrModify((name, declared.copy(signature = Some(signature))))))
     case _ => throw new java.lang.AssertionError(safe"value `$name` hasn't been declared without a signature")
   }
   def defineValue(name: String, typ: Type, pos: Pos): An[Env] = local.values.get(name) match {
-    case Some(EnvDeclaredValue(defId, _, _)) =>
+    case Some(EnvDeclaredValue(defId, _, _, _)) =>
       An.valid(withLocal(local.copy(values = local.values.addOrModify((name, EnvValue(typ, defId, nsPath, pos))))))
     case _ => throw new java.lang.AssertionError(safe"value `$name` hasn't been declared")
   }
@@ -152,5 +158,5 @@ case class Env(
 }
 
 object Env {
-  def empty: Env = Env(BlockScope.empty, BlockScope.empty, UniqInfo.empty, UniqInfo.empty, None)
+  def empty: Env = Env(BlockScope.empty, BlockScope.empty, UniqInfo.empty, UniqInfo.empty, None, Set.empty)
 }

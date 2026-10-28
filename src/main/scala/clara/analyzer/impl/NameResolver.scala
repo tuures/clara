@@ -44,6 +44,13 @@ case class NameResolverImpl(env: Env) {
       valueIn(lookup.enterNs(name, env.namespaceMembers(nsId)), TypeCons.ConstructorName, pos).tellUsage(defId, pos)
     case Some(_: EnvNamespaceRef) =>
       An.error(SourceMessage(pos, safe"`${lookup.qualified(name)}` is a namespace, not a value"))
+    // a function of the function run being analyzed, see BlockAnalyzerImpl.functionRuns
+    case Some(EnvDeclaredValue(defId, signature, definedInNs, _)) if env.isForwardReferable(defId) => signature match {
+      case Some(typ) => An.valid(Terms.NamedValue(name, definedInNs, typ)).tellUsage(defId, pos)
+      case None => An.error(SourceMessage(pos,
+        safe"`${lookup.qualified(name)}` needs a type annotation to be used before its definition"
+      ))
+    }
     case Some(_: EnvDeclaredValue) =>
       An.error(SourceMessage(pos, safe"`${lookup.qualified(name)}` is used before its definition"))
     case None => lookup.typeEntry(name) match {

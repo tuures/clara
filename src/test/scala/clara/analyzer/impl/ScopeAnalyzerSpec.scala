@@ -203,7 +203,7 @@ class ScopeAnalyzerSpec extends BaseSpec {
 
     val (namedEnv, typedEnv) = result.value.value
     inside((namedEnv.local.values.get("declared"), typedEnv.local.values.get("declared"))) {
-      case (Some(EnvDeclaredValue(declaredId, None, _)), Some(EnvValue(Types.Singleton(belowCon), definedId, Nil, _))) =>
+      case (Some(EnvDeclaredValue(declaredId, None, _, _)), Some(EnvValue(Types.Singleton(belowCon), definedId, Nil, _))) =>
         assert(belowCon.name === "Below")
         assert(definedId === declaredId)
     }
@@ -225,13 +225,15 @@ class ScopeAnalyzerSpec extends BaseSpec {
     val result = ScopeAnalyzer.registerNamesAndTypes(Env.empty, block.bcs).run
 
     val (env, _) = result.value.value
-    inside(env.local.values.get("signed")) { case Some(EnvDeclaredValue(_, Some(Types.Singleton(belowCon)), _)) =>
+    inside(env.local.values.get("signed")) { case Some(EnvDeclaredValue(_, Some(Types.Singleton(belowCon)), _, _)) =>
       assert(belowCon.name === "Below")
     }
     // the annotations inside other patterns are checked by the values pass
-    for (name <- Seq("a", "b")) inside(env.local.values.get(name)) { case Some(EnvDeclaredValue(_, None, _)) => }
+    for (name <- Seq("a", "b")) inside(env.local.values.get(name)) { case Some(EnvDeclaredValue(_, None, _, _)) => }
     inside(env.local.values.get("Space")) { case Some(EnvNamespaceRef(spaceNsId, _)) =>
-      inside(env.namespaceMembers(spaceNsId).values.get("member")) { case Some(EnvDeclaredValue(_, Some(Types.Uni), _)) => }
+      inside(env.namespaceMembers(spaceNsId).values.get("member")) {
+        case Some(EnvDeclaredValue(_, Some(Types.Uni), Seq("Space"), _)) =>
+      }
     }
   }
 

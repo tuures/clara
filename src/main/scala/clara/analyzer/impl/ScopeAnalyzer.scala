@@ -52,7 +52,7 @@ object ScopeAnalyzer {
 
   // the signature the value def of this name got in the types pass (see topLevelSignature)
   def registeredSignature(env: Env, name: String): Types.Type = env.local.values.get(name) match {
-    case Some(EnvDeclaredValue(_, Some(signature), _)) => signature
+    case Some(EnvDeclaredValue(_, Some(signature), _, _)) => signature
     case _ => throw new java.lang.AssertionError(safe"value `$name` hasn't been given a signature")
   }
 }
@@ -175,8 +175,8 @@ object ScopeAnalyzerImpl {
       case None => An.valid(env)
       case Some((Ast.NameWithPos(name, _), t)) => TypeExprAnalyzer.typeExprType(env, t).map { typ =>
         env.local.values.get(name) match {
-          case Some(EnvDeclaredValue(_, None, _)) => env.declareValueSignature(name, typ)
-          case Some(EnvDeclaredValue(_, Some(_), _) | _: EnvValue | _: EnvNamespaceRef) | None => env
+          case Some(EnvDeclaredValue(_, None, _, _)) => env.declareValueSignature(name, typ)
+          case Some(EnvDeclaredValue(_, Some(_), _, _) | _: EnvValue | _: EnvNamespaceRef) | None => env
         }
       }
     }
@@ -211,7 +211,7 @@ object ScopeAnalyzerImpl {
       case Some(member) =>
         val pos = member match {
           case EnvValue(_, _, _, definedAt) => definedAt
-          case EnvDeclaredValue(_, _, definedAt) => definedAt
+          case EnvDeclaredValue(_, _, _, definedAt) => definedAt
           case _: EnvNamespaceRef => con.definedAt
         }
 

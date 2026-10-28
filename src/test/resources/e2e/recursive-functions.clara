@@ -1,0 +1,25 @@
+::opaque String
+::singleton True
+::singleton False
+::alias Boolean: True | False
+::singleton Zero
+::singleton One
+::singleton Two
+::singleton Three
+::alias Count: Zero | One | Two | Three
+
+::declare console: { log: String => () }
+
+// functions defined one after another can refer to each other and themselves before their definitions
+isEven: Count => Boolean = #(Zero => True, One => isOdd(Zero), Two => isOdd(One), Three => isOdd(Two))
+isOdd: Count => Boolean = #(Zero => False, One => isEven(Zero), Two => isEven(One), Three => isEven(Two))
+countDown: Count => String = #(
+  Zero => "zero",
+  One => "one, $(countDown(Zero))",
+  Two => "two, $(countDown(One))",
+  Three => "three, $(countDown(Two))",
+)
+
+console.log(isEven(Three) @ #(True => "three is even", False => "three is odd"))
+console.log(countDown(Three))
+()
