@@ -1,0 +1,18 @@
+::opaque String
+
+::declare console: { log: String => () }
+
+// a recursive type refers to itself inside a tuple, a record, a function or a boxed type, and through a tagged or
+// boxed type (no generic list yet: the type args of a constructor call aren't inferred from a union)
+::tagged Words: () | (String, Words)
+
+join: Words => String = #(
+  () => ".",
+  (word, rest) => "[$(word)]$(join(rest))",
+)
+
+empty = Words(())
+world = Words(("world", empty))
+helloWorld = Words(("hello", world))
+console.log(join(helloWorld))
+()

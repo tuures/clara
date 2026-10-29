@@ -256,7 +256,54 @@ class ScopeAnalyzerSpec extends BaseSpec {
 
   // recursion
 
-  test("recursive type defs are an error") {
+  private val a = Seq(Ast.TypeParam("A"))
+  private def generic(name: String, typeArg: TypeExpr) = NamedType(name, Seq(typeArg))
+
+  test("a boxed type can refer to itself directly") {
+    // ::boxed Count: () | Count, each step is a box
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Boxed, "Count", UnionType(Seq(UnitType(), NamedType("Count")))),
+    ))
+
+    val result = ScopeAnalyzer.registerNamesAndTypes(Env.empty, block.bcs).run
+
+    assert(result.value.isRight)
+  }
+
+  test("a tagged type can refer to itself inside a tuple") {
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Tagged, "Chain", UnionType(Seq(UnitType(), TupleType(Seq(UnitType(), NamedType("Chain")))))),
+    ))
+
+    val result = ScopeAnalyzer.registerNamesAndTypes(Env.empty, block.bcs).run
+
+    assert(result.value.isRight)
+  }
+
+  test("an alias and a boxed type can refer to each other") {
+    // ::alias Tree<A>: A | Branch<A>, ::boxed Branch<A>: (Tree<A>, Tree<A>)
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Alias, "Tree", a, UnionType(Seq(NamedType("A"), generic("Branch", NamedType("A"))))),
+      TypeDef(TypeDefKind.Boxed, "Branch", a, TupleType(Seq(generic("Tree", NamedType("A")), generic("Tree", NamedType("A"))))),
+    ))
+
+    val result = ScopeAnalyzer.registerNamesAndTypes(Env.empty, block.bcs).run
+
+    assert(result.value.isRight)
+  }
+
+  test("a recursive type can refer to itself with its own type parameters as type arguments") {
+    // ::boxed List<A>: () | (A, List<A>)
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Boxed, "List", a, UnionType(Seq(UnitType(), TupleType(Seq(NamedType("A"), generic("List", NamedType("A"))))))),
+    ))
+
+    val result = ScopeAnalyzer.registerNamesAndTypes(Env.empty, block.bcs).run
+
+    assert(result.value.isRight)
+  }
+
+  test("recursive aliases are an error") {
     val block = Block(Seq(
       TypeDef(TypeDefKind.Alias, "A", TupleType(Seq(NamedType("B"), UnitType()))),
       TypeDef(TypeDefKind.Alias, "B", NamedType("A")),
@@ -264,15 +311,53 @@ class ScopeAnalyzerSpec extends BaseSpec {
 
     val result = ScopeAnalyzer.registerNamesAndTypes(Env.empty, block.bcs).run
 
-    assert(result.value.left.value.map(_.message) === Seq("Recursive types aren't supported yet: `A` -> `B` -> `A`"))
+    assert(result.value.left.value.map(_.message) === Seq(
+      "Recursive aliases aren't supported, the recursion needs to go through a tagged or boxed type: `A` -> `B` -> `A`"
+    ))
   }
 
-  test("a type def referring to itself is an error") {
-    val block = Block(Seq(TypeDef(TypeDefKind.Tagged, "Self", NamedType("Self"))))
+  test("a recursive type referring to itself directly is an error") {
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Tagged, "Self", UnionType(Seq(NamedType("Self"), UnitType()))),
+    ))
 
     val result = ScopeAnalyzer.registerNamesAndTypes(Env.empty, block.bcs).run
 
-    assert(result.value.left.value.map(_.message) === Seq("Recursive types aren't supported yet: `Self` -> `Self`"))
+    assert(result.value.left.value.map(_.message) === Seq(
+      "A recursive type can only refer to itself inside a tuple, a record, a function or a boxed type: `Self` -> `Self`"
+    ))
+  }
+
+  test("a recursive type referring to itself with other type arguments than type parameters is an error") {
+    // ::boxed Nest<A>: () | (A, Nest<(A, A)>)
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Boxed, "Nest", a,
+        UnionType(Seq(UnitType(), TupleType(Seq(NamedType("A"), generic("Nest", TupleType(Seq(NamedType("A"), NamedType("A"))))))))
+      ),
+    ))
+
+    val result = ScopeAnalyzer.registerNamesAndTypes(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq(
+      "A recursive type can only refer to itself with type parameters as type arguments, not `Nest<(A, A)>`"
+    ))
+  }
+
+  test("each group of recursive types is checked on its own, with an error for each rule it breaks") {
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Alias, "Loop", NamedType("Loop")),
+      TypeDef(TypeDefKind.Tagged, "Self", NamedType("Self")),
+      TypeDef(TypeDefKind.Boxed, "Fine", UnionType(Seq(UnitType(), NamedType("Fine")))),
+    ))
+
+    val result = ScopeAnalyzer.registerNamesAndTypes(Env.empty, block.bcs).run
+
+    // `Loop` breaks two rules
+    assert(result.value.left.value.map(_.message) === Seq(
+      "Recursive aliases aren't supported, the recursion needs to go through a tagged or boxed type: `Loop` -> `Loop`",
+      "A recursive type can only refer to itself inside a tuple, a record, a function or a boxed type: `Loop` -> `Loop`",
+      "A recursive type can only refer to itself inside a tuple, a record, a function or a boxed type: `Self` -> `Self`",
+    ))
   }
 
   test("type params named like a type def of the block are not references to it") {
@@ -393,7 +478,7 @@ class ScopeAnalyzerSpec extends BaseSpec {
     assert(result.value.isRight)
   }
 
-  test("a type and its companion's type referring to each other is a recursive type") {
+  test("an alias and its companion's alias can't refer to each other") {
     val block = Block(Seq(
       TypeDef(TypeDefKind.Alias, "Color", qualifiedType("Color", "Again")),
       extend("Color", TypeDef(TypeDefKind.Alias, "Again", NamedType("Color"))),
@@ -401,6 +486,9 @@ class ScopeAnalyzerSpec extends BaseSpec {
 
     val result = ScopeAnalyzer.registerNamesAndTypes(Env.empty, block.bcs).run
 
-    assert(result.value.left.value.map(_.message) === Seq("Recursive types aren't supported yet: `Color` -> `Again` -> `Color`"))
+    assert(result.value.left.value.map(_.message) === Seq(
+      "Recursive aliases aren't supported, the recursion needs to go through a tagged or boxed type: `Color` -> `Again` -> `Color`",
+      "A recursive type can only refer to itself inside a tuple, a record, a function or a boxed type: `Color` -> `Again` -> `Color`",
+    ))
   }
 }
