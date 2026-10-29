@@ -38,14 +38,14 @@ class TypeInterpreterSpec extends BaseSpec {
   testInstantiate(aParamCon, Seq(Uni))(None)
 
   val unitAliasCon = WrapperTypeCon(TypeDefKind.Alias, "UnitAlias", Nil, Nil, NoPos)
-  val unitAliasStructure = TypeStructures(Map(unitAliasCon.uniq -> Uni))
+  val unitAliasStructure = TypeStructures(Map(unitAliasCon.tcId -> Uni))
   val unitAlias = Alias(unitAliasCon, Nil)
   testInstantiate(unitAliasCon, Nil)(Some(unitAlias))
   testInstantiate(unitAliasCon, Seq(Uni))(None)
   testWrappedType(unitAlias, unitAliasStructure)(Uni)
 
   val functionAliasCon = WrapperTypeCon(TypeDefKind.Alias, "Function", Seq(aParamCon, bParamCon), Nil, NoPos)
-  val functionAliasStructure = TypeStructures(Map(functionAliasCon.uniq -> Func(aParam, bParam)))
+  val functionAliasStructure = TypeStructures(Map(functionAliasCon.tcId -> Func(aParam, bParam)))
   val functionAlias = Alias(functionAliasCon, Seq(Uni, cParam))
   testInstantiate(functionAliasCon, Seq(Uni, cParam))(Some(functionAlias))
   testInstantiate(functionAliasCon, Seq(Uni))(None)
@@ -53,7 +53,7 @@ class TypeInterpreterSpec extends BaseSpec {
   testWrappedType(functionAlias, functionAliasStructure)(Func(Uni, cParam))
 
   val aliasOfAliasCon = WrapperTypeCon(TypeDefKind.Alias, "AliasOfFunction", Seq(cParamCon, dParamCon), Nil, NoPos)
-  val aliasOfAliasStructure = TypeStructures(Map(aliasOfAliasCon.uniq -> Alias(functionAliasCon, Seq(cParam, dParam))))
+  val aliasOfAliasStructure = TypeStructures(Map(aliasOfAliasCon.tcId -> Alias(functionAliasCon, Seq(cParam, dParam))))
   val aliasOfAlias = Alias(aliasOfAliasCon, Seq(Uni, Uni))
   testInstantiate(aliasOfAliasCon, Seq(Uni, Uni))(Some(aliasOfAlias))
   testInstantiate(aliasOfAliasCon, Seq(Uni, Uni, Uni))(None)
@@ -122,16 +122,16 @@ class TypeInterpreterSpec extends BaseSpec {
     Nil,
     NoPos,
   )
-  val funcAliasStructure = TypeStructures(Map(funcAliasCon.uniq -> Func(aParam, bParam)))
+  val funcAliasStructure = TypeStructures(Map(funcAliasCon.tcId -> Func(aParam, bParam)))
   val funcUniUniAliasType = Alias(funcAliasCon, Seq(Uni, Uni))
 
   val justTaggedCon = WrapperTypeCon(TypeDefKind.Tagged, "JustTagged", Seq(aParam.con), Nil, NoPos)
-  val justTaggedStructure = TypeStructures(Map(justTaggedCon.uniq -> aParam))
+  val justTaggedStructure = TypeStructures(Map(justTaggedCon.tcId -> aParam))
   val justUniTaggedType = Tagged(justTaggedCon, Seq(Uni))
   val justTopTaggedType = Tagged(justTaggedCon, Seq(Top))
 
   val justBoxedCon = WrapperTypeCon(TypeDefKind.Boxed, "JustBoxed", Seq(aParam.con), Nil, NoPos)
-  val justBoxedStructure = TypeStructures(Map(justBoxedCon.uniq -> aParam))
+  val justBoxedStructure = TypeStructures(Map(justBoxedCon.tcId -> aParam))
   val justUniBoxedType = Boxed(justBoxedCon, Seq(Uni))
   val justTopBoxedType = Boxed(justBoxedCon, Seq(Top))
 
@@ -149,11 +149,11 @@ class TypeInterpreterSpec extends BaseSpec {
   val blueSingleton = Singleton(SingletonTypeCon("BlueSingleton", Nil, NoPos))
   val redSingleton = Singleton(SingletonTypeCon("RedSingleton", Nil, NoPos))
   val unusedTaggedCon = WrapperTypeCon(TypeDefKind.Tagged, "UnusedTagged", Seq(aParam.con), Nil, NoPos)
-  val unusedTaggedStructure = TypeStructures(Map(unusedTaggedCon.uniq -> Uni))
+  val unusedTaggedStructure = TypeStructures(Map(unusedTaggedCon.tcId -> Uni))
   val handlerTaggedCon = WrapperTypeCon(TypeDefKind.Tagged, "Handler", Seq(aParam.con), Nil, NoPos)
-  val handlerTaggedStructure = TypeStructures(Map(handlerTaggedCon.uniq -> Func(aParam, Uni)))
+  val handlerTaggedStructure = TypeStructures(Map(handlerTaggedCon.tcId -> Func(aParam, Uni)))
   val unusedBoxedCon = WrapperTypeCon(TypeDefKind.Boxed, "UnusedBoxed", Seq(aParam.con), Nil, NoPos)
-  val unusedBoxedStructure = TypeStructures(Map(unusedBoxedCon.uniq -> Uni))
+  val unusedBoxedStructure = TypeStructures(Map(unusedBoxedCon.tcId -> Uni))
 
   testHeadNormalization(
     Intersection(Seq(blueSingleton, redSingleton)),
@@ -168,7 +168,7 @@ class TypeInterpreterSpec extends BaseSpec {
     Nil,
     NoPos,
   )
-  val redBlueUnionAliasStructure = TypeStructures(Map(redBlueUnionAliasCon.uniq -> Union(Seq(redSingleton, blueSingleton))))
+  val redBlueUnionAliasStructure = TypeStructures(Map(redBlueUnionAliasCon.tcId -> Union(Seq(redSingleton, blueSingleton))))
   val redBlueUnionAliasType = Alias(redBlueUnionAliasCon, Nil)
   val greenSingleton = Singleton(SingletonTypeCon("GreenSingleton", Nil, NoPos))
 
@@ -194,7 +194,7 @@ class TypeInterpreterSpec extends BaseSpec {
   }
 
   val redGreenTaggedCon = WrapperTypeCon(TypeDefKind.Tagged, "RedGreenTagged", Nil, Nil, NoPos)
-  val redGreenTaggedStructure = TypeStructures(Map(redGreenTaggedCon.uniq -> Union(Seq(redSingleton, greenSingleton))))
+  val redGreenTaggedStructure = TypeStructures(Map(redGreenTaggedCon.tcId -> Union(Seq(redSingleton, greenSingleton))))
   val redGreenTaggedType = Tagged(redGreenTaggedCon, Nil)
 
   testDisjoint(true)(Bottom, aParam, "!, A")
@@ -479,7 +479,7 @@ class TypeInterpreterSpec extends BaseSpec {
 
   val redOrBlue = Union(Seq(redSingleton, blueSingleton))
   val redOrBlueTaggedCon = WrapperTypeCon(TypeDefKind.Tagged, "RedOrBlueTagged", Nil, Nil, NoPos)
-  val redOrBlueTaggedStructure = TypeStructures(Map(redOrBlueTaggedCon.uniq -> redOrBlue))
+  val redOrBlueTaggedStructure = TypeStructures(Map(redOrBlueTaggedCon.tcId -> redOrBlue))
   val redOrBlueTaggedType = Tagged(redOrBlueTaggedCon, Nil)
 
   testAssignable(true)(
@@ -522,7 +522,7 @@ class TypeInterpreterSpec extends BaseSpec {
   )
 
   val someCon = WrapperTypeCon(TypeDefKind.Tagged, "Some", Seq(aParam.con), Nil, NoPos)
-  val someStructure = TypeStructures(Map(someCon.uniq -> aParam))
+  val someStructure = TypeStructures(Map(someCon.tcId -> aParam))
   def someType(t: Type) = Tagged(someCon, Seq(t))
   val noneSingleton = Singleton(SingletonTypeCon("None", Nil, NoPos))
 
@@ -616,12 +616,12 @@ class TypeInterpreterSpec extends BaseSpec {
   val boxedListCon = WrapperTypeCon(TypeDefKind.Boxed, "BoxedList", Seq(aParamCon), Nil, NoPos)
   def boxedListType(t: Type) = Boxed(boxedListCon, Seq(t))
   val boxedListStructure =
-    TypeStructures(Map(boxedListCon.uniq -> Union(Seq(Tuple(Seq(aParam, boxedListType(aParam))), Uni))))
+    TypeStructures(Map(boxedListCon.tcId -> Union(Seq(Tuple(Seq(aParam, boxedListType(aParam))), Uni))))
   // ::tagged TaggedList<A>: (A, TaggedList<A>) | ()
   val taggedListCon = WrapperTypeCon(TypeDefKind.Tagged, "TaggedList", Seq(aParamCon), Nil, NoPos)
   def taggedListType(t: Type) = Tagged(taggedListCon, Seq(t))
   val taggedListStructure =
-    TypeStructures(Map(taggedListCon.uniq -> Union(Seq(Tuple(Seq(aParam, taggedListType(aParam))), Uni))))
+    TypeStructures(Map(taggedListCon.tcId -> Union(Seq(Tuple(Seq(aParam, taggedListType(aParam))), Uni))))
 
   testAssignable(true)(
     boxedListType(redSingleton), boxedListType(redOrBlue), "BoxedList<Red>, BoxedList<Red | Blue>",

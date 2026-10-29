@@ -81,7 +81,7 @@ case class TypeInterpreterImpl(
   }
 
   def wrappedType(t: Wrapper): Type = t.expandedWrappedType.getOrElse(
-    substituteParams(t.con.typeParams.map(_.uniq).zip(t.typeArgs).toMap, typeStructures.structure(t.con))
+    substituteParams(t.con.typeParams.map(_.tcId).zip(t.typeArgs).toMap, typeStructures.structure(t.con))
   )
 
   // Normal form used by the checking logic. Intersections become unions of intersections
@@ -110,7 +110,7 @@ case class TypeInterpreterImpl(
     case (Func(typeParams1, p1, r1), Func(typeParams2, p2, r2)) =>
       typeParams1.length == typeParams2.length && {
         val substitutions = typeParams2.zip(typeParams1).map { case (param2, param1) =>
-          param2.uniq -> Param(param1)
+          param2.tcId -> Param(param1)
         }.toMap
         val p2Renamed = substituteParams(substitutions, p2)
         val r2Renamed = substituteParams(substitutions, r2)
@@ -279,7 +279,7 @@ case class TypeInterpreterImpl(
         // e.g. ::tagged Counted<A> {value: A, size: Small | Large} becomes (internally for this logic):
         // Counted<A>{value: A, size: Small} | Counted<A>{value: A, size: Large}
         // reached the same wrapper again while expanding its wrapped type: left unexpanded
-        case t: Wrapper if expanding.contains((t.con.uniq, t.typeArgs)) => Some(Seq(t))
+        case t: Wrapper if expanding.contains((t.con.tcId, t.typeArgs)) => Some(Seq(t))
         case t: Tagged => expandWrappedType(t).map {
           // did not contain an union to expand so keep the original tagged type
           case Seq(_) => Seq(t)
@@ -298,7 +298,7 @@ case class TypeInterpreterImpl(
     }
 
     def expandWrappedType(t: Wrapper): Option[Seq[Type]] =
-      copy(expanding = expanding + (t.con.uniq -> t.typeArgs)).ExpandUnionsImpl.expandUnions(wrappedType(t))
+      copy(expanding = expanding + (t.con.tcId -> t.typeArgs)).ExpandUnionsImpl.expandUnions(wrappedType(t))
   }
 
   object AssignableImpl {
@@ -354,7 +354,7 @@ case class TypeInterpreterImpl(
     // needs no assumptions for recursive types since args are compared instead of expanded wrapped types.
     // t1 and t2 have the same con
     def isAssignableWrapper(t1: Wrapper, t2: Wrapper): Boolean = {
-      val phantom = t1.con.typeParams.map(param => !mentionsParam(param.uniq, typeStructures.structure(t1.con)))
+      val phantom = t1.con.typeParams.map(param => !mentionsParam(param.tcId, typeStructures.structure(t1.con)))
       def phantomArgs(typeArgs: Seq[Type]) = typeArgs.zip(phantom).collect { case (t, true) => t }
 
       isAssignableInvariantArgs(phantomArgs(t1.typeArgs), phantomArgs(t2.typeArgs)) &&
@@ -364,7 +364,7 @@ case class TypeInterpreterImpl(
     def mentionsParam(uniq: TypeConId, typ: Type): Boolean = {
       def mentions(t: Type) = mentionsParam(uniq, t)
       typ match {
-        case p: Param => p.con.uniq === uniq
+        case p: Param => p.con.tcId === uniq
         case Func(_, parameter, result) => mentions(parameter) || mentions(result)
         case Record(fields) => fields.entries.exists { case (_, t) => mentions(t) }
         case Tuple(ts) => ts.exists(mentions)
@@ -448,7 +448,7 @@ object TypeInterpreterImpl {
 
   def matchTypeArgs(paramCons: Seq[ParamCon], args: Seq[Type], con: TypeCon, pos: Pos): An[Map[TypeConId, Type]] = {
     if (paramCons.length === args.length) {
-      An.valid(paramCons.map(_.uniq).zip(args).toMap)
+      An.valid(paramCons.map(_.tcId).zip(args).toMap)
     } else {
       An.error(mismatchingTypeArgsMessage(paramCons, args, con, pos))
     }

@@ -126,11 +126,11 @@ case class ValueExprAnalyzerImpl(env: Env) {
   def inferFuncTypeArgs(polyFunc: Types.Func, argumentType: Types.Type): Types.Func = {
     val Types.Func(typeParams, parameterType, resultType) = polyFunc
 
-    val foundSubstitutions = Types.findSubstitutions(typeParams.map(_.uniq).toSet, parameterType, argumentType)
+    val foundSubstitutions = Types.findSubstitutions(typeParams.map(_.tcId).toSet, parameterType, argumentType)
 
     val inferredTypeArgs = typeParams.map { paramCon =>
       // FIXME are there any "valid" cases where param cannot be resolved other than unused type parameter?
-      (paramCon.uniq, foundSubstitutions.getOrElse(paramCon.uniq, Types.Bottom))
+      (paramCon.tcId, foundSubstitutions.getOrElse(paramCon.tcId, Types.Bottom))
     }.toMap
 
     val substituteParams = Types.substituteParams(inferredTypeArgs, _)

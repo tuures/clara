@@ -18,7 +18,7 @@ case class UsageTrace(defs: Map[DefId, Set[Pos]] = Map.empty) {
 }
 
 case class TypeStructures(structures: Map[TypeConId, Types.Type]) {
-  def structure(con: TypeCons.WrapperTypeCon): Types.Type = structures.getOrElse(con.uniq,
+  def structure(con: TypeCons.WrapperTypeCon): Types.Type = structures.getOrElse(con.tcId,
     throw new java.lang.AssertionError(safe"the structure of type `${con.name}` hasn't been registered")
   )
 

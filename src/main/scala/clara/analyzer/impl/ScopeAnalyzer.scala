@@ -250,10 +250,10 @@ object ScopeAnalyzerImpl {
   // own, with an error for each rule it breaks.
   def rejectUnsupportedRecursion(typeDefTerms: Seq[Terms.BlockContent]): An[Unit] = An.currentLog.flatMap { log =>
     val cons = typeDefTerms.collect { case Terms.TypeDef(con: TypeCons.WrapperTypeCon) => con }
-    val conIds = cons.map(_.uniq).toSet
+    val conIds = cons.map(_.tcId).toSet
 
     val referencesFrom: Map[TypeConId, Seq[Reference]] = cons.map { con =>
-      con.uniq -> references(log.typeStructures.structure(con), guarded = false).filter(r => conIds(r.to.con.uniq))
+      con.tcId -> references(log.typeStructures.structure(con), guarded = false).filter(r => conIds(r.to.con.tcId))
     }.toMap
 
     // the cons reachable through the references of con, con itself only through a cycle
@@ -262,15 +262,15 @@ object ScopeAnalyzerImpl {
       def loop(toVisit: List[TypeConId], seen: Set[TypeConId]): Set[TypeConId] = toVisit match {
         case Nil => seen
         case next :: rest =>
-          val unseen = referencesFrom(next).map(_.to.con.uniq).distinct.filterNot(seen)
+          val unseen = referencesFrom(next).map(_.to.con.tcId).distinct.filterNot(seen)
           loop(unseen.toList ++ rest, seen ++ unseen)
       }
-      loop(List(con.uniq), Set.empty)
+      loop(List(con.tcId), Set.empty)
     }
-    val reachableFrom = cons.map(con => con.uniq -> reachable(con)).toMap
+    val reachableFrom = cons.map(con => con.tcId -> reachable(con)).toMap
 
-    val components = cons.filter(con => reachableFrom(con.uniq)(con.uniq)).map { con =>
-      cons.filter(other => reachableFrom(con.uniq)(other.uniq) && reachableFrom(other.uniq)(con.uniq))
+    val components = cons.filter(con => reachableFrom(con.tcId)(con.tcId)).map { con =>
+      cons.filter(other => reachableFrom(con.tcId)(other.tcId) && reachableFrom(other.tcId)(con.tcId))
     }.distinct
 
     An.seq(components.map(rejectUnsupportedComponent(_, referencesFrom))).map(_ => ())
@@ -295,7 +295,7 @@ object ScopeAnalyzerImpl {
         )
       }
     val irregularReferenceErrors = component.flatMap { con =>
-      referencesFrom(con.uniq).
+      referencesFrom(con.tcId).
         filter(r => component.contains(r.to.con)).
         // each type argument of the referred type must be a plain type parameter of the referring type
         filterNot(r => r.to.typeArgs.forall(arg => con.typeParams.exists(arg == Types.Param(_)))).
@@ -319,17 +319,17 @@ object ScopeAnalyzerImpl {
     // a cycle found, or the cons visited without one
     type Visited = Either[Cycle, Set[TypeConId]]
 
-    val conIds = cons.map(_.uniq).toSet
-    def next(con: TypeCons.WrapperTypeCon) = referencesFrom(con.uniq).
-      filter(reference => follow(reference) && conIds(reference.to.con.uniq)).map(_.to.con).distinct
+    val conIds = cons.map(_.tcId).toSet
+    def next(con: TypeCons.WrapperTypeCon) = referencesFrom(con.tcId).
+      filter(reference => follow(reference) && conIds(reference.to.con.tcId)).map(_.to.con).distinct
 
     // `path` holds the cons being visited, `done` the ones without a cycle
     def visit(done: Set[TypeConId], path: Cycle, con: TypeCons.WrapperTypeCon): Visited =
-      if (done(con.uniq)) Right(done)
-      else if (path.exists(_.uniq === con.uniq)) Left(path.dropWhile(_.uniq !== con.uniq) :+ con)
+      if (done(con.tcId)) Right(done)
+      else if (path.exists(_.tcId === con.tcId)) Left(path.dropWhile(_.tcId !== con.tcId) :+ con)
       else next(con).foldLeft[Visited](Right(done)) { (visited, nextCon) =>
         visited.flatMap(visit(_, path :+ con, nextCon))
-      }.map(_ + con.uniq)
+      }.map(_ + con.tcId)
 
     val nothingVisited: Visited = Right(Set.empty)
     val allVisited = cons.foldLeft(nothingVisited) { (visited, con) =>

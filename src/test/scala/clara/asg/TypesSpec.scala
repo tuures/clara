@@ -80,28 +80,28 @@ class TypesSpec extends BaseSpec {
       Func(Uni, Top),
     ))
 
-    assert(findSubstitutions(Set(aParamCon.uniq, bParamCon.uniq), parameterType, argumentType) === Map(
-      aParamCon.uniq -> Uni,
-      bParamCon.uniq -> Top,
+    assert(findSubstitutions(Set(aParamCon.tcId, bParamCon.tcId), parameterType, argumentType) === Map(
+      aParamCon.tcId -> Uni,
+      bParamCon.tcId -> Top,
     ))
   }
 
   test("findSubstitutions groups repeated occurrences of a parameter") {
-    assert(findSubstitutions(Set(aParamCon.uniq), Tuple(Seq(aParam, aParam)), Tuple(Seq(Uni, Uni))) === Map(
-      aParamCon.uniq -> Uni,
+    assert(findSubstitutions(Set(aParamCon.tcId), Tuple(Seq(aParam, aParam)), Tuple(Seq(Uni, Uni))) === Map(
+      aParamCon.tcId -> Uni,
     ))
   }
 
   test("findSubstitutions does not infer parameters outside the requested set") {
-    assert(findSubstitutions(Set(aParamCon.uniq), Tuple(Seq(aParam, bParam)), Tuple(Seq(Uni, Top))) === Map(
-      aParamCon.uniq -> Uni,
+    assert(findSubstitutions(Set(aParamCon.tcId), Tuple(Seq(aParam, bParam)), Tuple(Seq(Uni, Top))) === Map(
+      aParamCon.tcId -> Uni,
     ))
   }
 
   test("substituteParams recursively substitutes structural and nominal types") {
     val substitutions = Map[TypeConId, Type](
-      aParamCon.uniq -> Uni,
-      bParamCon.uniq -> Top,
+      aParamCon.tcId -> Uni,
+      bParamCon.tcId -> Top,
     )
     val typ = Func(
       Seq(aParamCon2, bParamCon2),

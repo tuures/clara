@@ -13,14 +13,14 @@ object TypeCons {
     def name: String
     def definedAt: Pos
     // FIXME: rename to typeConId
-    def uniq: TypeConId
+    def tcId: TypeConId
   }
 
   // TODO: allow narrowing Param with boundaries/kind, now it's always "extends Top"
   case class ParamCon(
     name: String,
     definedAt: Pos,
-    uniq: TypeConId = TypeConId(),
+    tcId: TypeConId = TypeConId(),
   ) extends TypeCon
 
   case class WrapperTypeCon(
@@ -29,7 +29,7 @@ object TypeCons {
     typeParams: Seq[ParamCon],
     definedInNs: Seq[String],
     definedAt: Pos,
-    uniq: TypeConId = TypeConId(),
+    tcId: TypeConId = TypeConId(),
   ) extends TypeCon
 
   case class OpaqueTypeCon(
@@ -37,14 +37,14 @@ object TypeCons {
     typeParams: Seq[ParamCon],
     definedInNs: Seq[String],
     definedAt: Pos,
-    uniq: TypeConId = TypeConId(),
+    tcId: TypeConId = TypeConId(),
   ) extends TypeCon
 
   case class SingletonTypeCon(
     name: String,
     definedInNs: Seq[String],
     definedAt: Pos,
-    uniq: TypeConId = TypeConId(),
+    tcId: TypeConId = TypeConId(),
   ) extends TypeCon
 
   def pseudoInstantiate(con: TypeCon): Type = con match {
@@ -195,7 +195,7 @@ object Types {
     con: TypeCons.SingletonTypeCon,
   ) extends Nominal
 
-  def sameCon(t1: Nominal, t2: Nominal): Boolean = t1.con.uniq === t2.con.uniq
+  def sameCon(t1: Nominal, t2: Nominal): Boolean = t1.con.tcId === t2.con.tcId
 
   // def leastCommonSupertype(t1: Type, t2: Type): Type = (t1, t2) match {
   //   case (_, Top)    => Top
@@ -207,7 +207,7 @@ object Types {
 
   def findSubstitutions(params: Set[TypeConId], parameterType: Type, argumentType: Type): Map[TypeConId, Type] = {
     def candidates(t1: Type, t2: Type): Seq[(TypeConId, Type)] = (t1, t2) match {
-      case (p: Param, t2) if params(p.con.uniq) => Seq(p.con.uniq -> t2)
+      case (p: Param, t2) if params(p.con.tcId) => Seq(p.con.tcId -> t2)
       case (Func(Nil, p1, r1), Func(Nil, p2, r2)) => candidates(p1, p2) ++ candidates(r1, r2)
       case (r1: Record, r2: Record) =>
         r2.fields.entries.flatMap { case (name, t2) =>
@@ -237,7 +237,7 @@ object Types {
       case Tuple(ts) => Tuple(ts.map(substitute))
       case Union(ts) => Union(ts.map(substitute))
       case Intersection(ts) => Intersection(ts.map(substitute))
-      case p: Param => substitutions.getOrElse(p.con.uniq, p)
+      case p: Param => substitutions.getOrElse(p.con.tcId, p)
       case Alias(con, typeArgs) => Alias(con, typeArgs.map(substitute))
       case Tagged(con, typeArgs, expandedWrappedType) => Tagged(con, typeArgs.map(substitute), expandedWrappedType.map(substitute))
       case Boxed(con, typeArgs, expandedWrappedType) => Boxed(con, typeArgs.map(substitute), expandedWrappedType.map(substitute))

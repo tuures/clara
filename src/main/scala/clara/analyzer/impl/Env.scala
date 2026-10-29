@@ -134,8 +134,8 @@ case class Env(
   def addMethod(con: TypeCon, name: String, m: EnvMethod, pos: Pos): An[Env] = {
     lazy val error =
       SourceMessage(pos, safe"Method with name `${name}` already exists for type `${TypeCons.toSource(con)}`")
-    val methodsUpdated = methods.get(con.uniq).getOrElse(Namespace.empty[EnvMethod]).
-      add((name, m)).map(ns => methods.addOrModify((con.uniq, ns)))
+    val methodsUpdated = methods.get(con.tcId).getOrElse(Namespace.empty[EnvMethod]).
+      add((name, m)).map(ns => methods.addOrModify((con.tcId, ns)))
 
     An.fromSomeOrError(methodsUpdated, error).map(m => this.copy(methods = m))
   }

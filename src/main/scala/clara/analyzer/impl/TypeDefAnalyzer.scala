@@ -63,7 +63,7 @@ object TypeDefAnalyzer {
     // then names pass (def typeCon) made sure there's a structure
     val structure = typeDef.t.get
     withTypeParamsEnv.flatMap(TypeExprAnalyzer.typeExprType(_, structure)).flatMap { typ =>
-      An.valid(()).tellStructure(con.uniq, typ)
+      An.valid(()).tellStructure(con.tcId, typ)
     }
   }
 }
