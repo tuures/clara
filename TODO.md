@@ -20,6 +20,7 @@
 - `NameResolverSpec`: unit tests resolving names directly in the env of a scope (qualified names, nested namespaces, usage of each namespace of a path, not-a-namespace/value/type, value vs type side, bare namespace `apply`, `valueNsPath`)
 - a namespace's values are the block's own `Terms.ValueDef`s carrying `definedInNs` (no `Terms.NamespaceDef`), the emitter qualifies bindings from it
 - expression `e: T` is a declaration like `x: T = e`: the value's type becomes `T` (`Terms.ValueAs`) and `T` is the expected type for `e` (e.g. `(n => n): Int => Int`)
+- parser: the empty string `""` parses as a literal and as a pattern (`ProcessedStringLiteralImpl` allows zero parts)
 
 # Roadmap (namespacing / enum / typeclasses)
 
@@ -100,7 +101,6 @@ Each step is a vertical slice (parser -> analyzer -> emitter) validated by an e2
 - tagged/boxed/enum, method syntax review, replace companion objects with static methods (to be used later in typeclasses)
 - ~~support recursion for functions and types~~ done (Roadmap 2, recursion steps 4 and 5)
 - parser: nested calls with tuple arguments take exponential time (`Words(("a", Words(("b", Words(())))))` runs for minutes, the parser backtracks through tuple/parens/call alternatives; the e2e `recursive-types` defines the values one by one because of it)
-- parser: the empty string literal `""` doesn't parse (`ProcessedStringLiteralImpl.valueParts` needs at least one part, `repX(1)`)
 - implement basic module support
   - add AST support for Module
   - implement import syntax in parser

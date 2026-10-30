@@ -363,6 +363,12 @@ class JsEmitterSpec extends BaseSpec {
 
   // emitBindingPattern
 
+  test("emitCaseMatch: StringPattern without parts compares to the empty string") {
+    val value = JsAst.Named("x")
+    val caseMatch = JsEmitter.emitCaseMatch(Terms.StringPattern(Seq(), dummyType), value)
+    assert(caseMatch === JsEmitter.CaseMatch(Seq(JsAst.BinaryOperation(value, "===", JsAst.StringLiteral(Seq()))), Nil))
+  }
+
   test("emitBindingPattern: WildcardPattern binds nothing") {
     assert(JsEmitter.emitBindingPattern(Terms.WildcardPattern(dummyType), Nil) === JsAst.IgnoredPattern)
   }

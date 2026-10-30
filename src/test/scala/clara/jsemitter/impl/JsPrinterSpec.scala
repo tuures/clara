@@ -20,6 +20,10 @@ class JsPrinterSpec extends BaseSpec {
     assert(printExpr(NumberLiteral("42")) === "42")
   }
 
+  test("StringLiteral: no parts") {
+    assert(printExpr(StringLiteral(Seq())) === "''")
+  }
+
   test("StringLiteral: simple plain part") {
     assert(printExpr(StringLiteral("hello")) === "'hello'")
   }

@@ -102,6 +102,8 @@ class ParserImplsSpec extends BaseSpec {
   parseAst(p.integerPattern(_))("42")(IntegerPattern(AstLiteral.IntegerDec("42")))
   parseAst(p.integerPattern(_))("#xFF")(IntegerPattern(AstLiteral.IntegerHex("FF")))
 
+  parseAst(p.processedStringValueParts(_))("\"\"")(Seq())
+
   parseAst(p.processedStringValueParts(_))(""""str($val)"""")(Seq(
     AstLiteral.StringPlainPart("str("),
     AstLiteral.StringValueExprPart(NamedValue("val")),
@@ -193,6 +195,7 @@ class ParserImplsSpec extends BaseSpec {
   parseAst(p.verbatimStringPlainPart(_))("' str '")(Seq(
     AstLiteral.StringPlainPart(" str ")
   ))
+  parseAst(p.verbatimStringPlainPart(_))("''")(Seq())
   parseAst(p.verbatimStringPlainPart(_))("'line1 \n line2'")(Seq(
     AstLiteral.StringPlainPart("line1 \n line2")
   ))
@@ -210,9 +213,11 @@ class ParserImplsSpec extends BaseSpec {
   ))
   reject(p.verbatimStringPlainPart(_))("""'''""")
 
+  parseAst(p.stringPattern(_))("\"\"")(StringPattern(Seq()))
   parseAst(p.stringPattern(_))("\"foo\"")(StringPattern(Seq(
     AstLiteral.StringPlainPart("foo")
   )))
+  parseAst(p.stringPattern(_))("''")(StringPattern(Seq()))
   parseAst(p.stringPattern(_))("'bar'")(StringPattern(Seq(
     AstLiteral.StringPlainPart("bar")
   )))

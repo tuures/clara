@@ -186,11 +186,11 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
     }
 
     def valuePart[X: P]: P[AstLiteral.StringValuePart] = P(plainPart | escapePart | valueExprPart)
-    def valueParts[X: P] = P(boundary ~~ valuePart.repX(1) ~~ boundary)
+    def valueParts[X: P] = P(boundary ~~ valuePart.repX ~~ boundary)
 
     def patternPart[X: P]: P[AstLiteral.StringPatternPart] =
       P(plainPart | escapePart | StringPatternPartImpl.withOrWithoutParens)
-    def patternParts[X: P] = P(boundary ~~ patternPart.repX(1) ~~ boundary)
+    def patternParts[X: P] = P(boundary ~~ patternPart.repX ~~ boundary)
   }
   def processedStringValueParts[X: P] = P(ProcessedStringLiteralImpl.valueParts)
   def processedStringPatternParts[X: P] = P(ProcessedStringLiteralImpl.patternParts)
@@ -202,7 +202,7 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
     def endMarker[X: P](hashCount: Int) = P(boundary ~~ hash.repX(exactly=hashCount))
 
     def plainPart[X: P] = P(startMarker.flatMapX { hashCount =>
-      (anythingBefore(endMarker(hashCount)).! ~~ endMarker(hashCount)).map(s => Seq(AstLiteral.StringPlainPart(s)))
+      (anythingBefore(endMarker(hashCount)).! ~~ endMarker(hashCount)).map(s => if (s.isEmpty) Nil else Seq(AstLiteral.StringPlainPart(s)))
     })
   }
   def verbatimStringPlainPart[X: P] = P(VerbatimStringLiteralImpl.plainPart)
