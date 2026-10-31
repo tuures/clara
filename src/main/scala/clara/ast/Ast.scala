@@ -45,7 +45,7 @@ object Ast {
   case class NamedConstantPattern(nsPath: Seq[NameWithPos], name: NameWithPos, pos: Pos = NoPos) extends Pattern
   case class CapturePattern(name: String, pos: Pos = NoPos) extends Pattern
 
-  case class GuardPattern(p: Option[Pattern], guard: ValueExpr, pos: Pos = NoPos) extends Pattern
+  case class GuardPattern(p: Pattern, guard: ValueExpr, pos: Pos = NoPos) extends Pattern
   case class DefaultValuePattern(p: Pattern, default: ValueExpr, pos: Pos = NoPos) extends Pattern
 
   // TODO rename? ValueExprTyped, PatternTyped

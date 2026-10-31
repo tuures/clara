@@ -1,0 +1,10 @@
+::opaque String
+
+::declare console: { log: String => () }
+
+// a block can have just one item
+(_ = "ignored")
+a = "a"
+console.log((a;))
+console.log((;a))
+()

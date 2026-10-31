@@ -225,35 +225,58 @@ class ParserImplsSpec extends BaseSpec {
   //////
   // Basic syntax
 
-  parseAst(p.tuple(_))("((),())")(
+  parseAst(p.tupleOrParensOrBlock(_))("((),())")(
     Tuple(Seq(UnitLiteral(), UnitLiteral()))
   )
-  reject(p.tuple(_))("()")
+  reject(p.tupleOrParensOrBlock(_))("((),)")
+  reject(p.tupleOrParensOrBlock(_))("()")
 
-  parseAst(p.tupleType(_))("(() , ())")(
+  parseAst(p.tupleOrParensType(_))("(() , ())")(
     TupleType(Seq(UnitType(), UnitType()))
   )
-  parseAst(p.tuplePattern(_))("(\n(),\n(),\n)")(
+  parseAst(p.tupleOrParensPattern(_))("(\n(),\n(),\n)")(
     TuplePattern(Seq(UnitPattern(), UnitPattern()))
   )
+  reject(p.tupleOrParensPattern(_))("((),)")
+  reject(p.tupleOrParensPattern(_))("()")
 
 
-  parseAst(p.parens(_))("((()))")(UnitLiteral())
-  parseAst(p.parens(_))("((\n\n  ())\n)")(UnitLiteral())
-  parseAst(p.typeParens(_))("((()))")(UnitType())
-  parseAst(p.patternParens(_))("((()))")(UnitPattern())
+  parseAst(p.tupleOrParensOrBlock(_))("((()))")(UnitLiteral())
+  parseAst(p.tupleOrParensOrBlock(_))("((\n\n  ())\n)")(UnitLiteral())
+  parseAst(p.tupleOrParensType(_))("((()))")(UnitType())
+  parseAst(p.tupleOrParensPattern(_))("((()))")(UnitPattern())
 
-  parseAst(p.block(_))("(\n\n// comment\n()\n;\n()\n();();;)")(
+  parseAst(p.tupleOrParensOrBlock(_))("(\n\n// comment\n()\n;\n()\n();();;)")(
     Block(Seq.fill(4)(UnitLiteral()))
   )
-  parseAst(p.block(_))("(();()//\n)")(
+  parseAst(p.tupleOrParensOrBlock(_))("(();()//\n)")(
     Block(Seq(UnitLiteral(), UnitLiteral()))
   )
-  parseAst(p.block(_))("(//first\n\n\n();()//\n)")(
+  parseAst(p.tupleOrParensOrBlock(_))("(//first\n\n\n();()//\n)")(
     Block(Seq(UnitLiteral(), UnitLiteral()))
   )
-  reject(p.block(_))("(foo)")
-  reject(p.block(_))("()")
+  parseAst(p.tupleOrParensOrBlock(_))("(a; b; c = 1; c)")(
+    Block(Seq(
+      NamedValue("a"),
+      NamedValue("b"),
+      ValueDef(CapturePattern("c"), IntegerLiteral(AstLiteral.IntegerDec("1"))),
+      NamedValue("c"),
+    ))
+  )
+  parseAst(p.tupleOrParensOrBlock(_))("(\n  a\n  b = 1\n)")(
+    Block(Seq(NamedValue("a"), ValueDef(CapturePattern("b"), IntegerLiteral(AstLiteral.IntegerDec("1")))))
+  )
+  parseAst(p.tupleOrParensOrBlock(_))("(foo;)")(Block(Seq(NamedValue("foo"))))
+  parseAst(p.tupleOrParensOrBlock(_))("(;foo)")(Block(Seq(NamedValue("foo"))))
+  parseAst(p.tupleOrParensOrBlock(_))("(foo = 1)")(
+    Block(Seq(ValueDef(CapturePattern("foo"), IntegerLiteral(AstLiteral.IntegerDec("1")))))
+  )
+  parseAst(p.tupleOrParensOrBlock(_))("(\nfoo = 1\n)")(
+    Block(Seq(ValueDef(CapturePattern("foo"), IntegerLiteral(AstLiteral.IntegerDec("1")))))
+  )
+  reject(p.tupleOrParensOrBlock(_))("(;)")
+  reject(p.tupleOrParensOrBlock(_))("(foo, bar = 1)")
+  reject(p.tupleOrParensOrBlock(_))("(foo = 1, bar)")
 
   parseAst(p.namedValue(_))("foo")(NamedValue("foo"))
   parseAst(p.namedValue(_))("foo1")(NamedValue("foo1"))
@@ -287,31 +310,32 @@ class ParserImplsSpec extends BaseSpec {
   parseAst(p.capturePattern(_))("_1")(CapturePattern("_1"))
   // FIXME reject(p.capturePattern(_))("Foo")
 
-  parseAst(p.valueAs(_))("foo: String")(
+  parseAst(p.valueAsOrSpaceCall(_))("foo: String")(
     ValueAs(NamedValue("foo"), NamedType("String"))
   )
-  parseAst(p.valueAs(_))("(foo): (String)")(
+  parseAst(p.valueAsOrSpaceCall(_))("(foo): (String)")(
     ValueAs(NamedValue("foo"), NamedType("String"))
   )
 
-  parseAst(p.patternAs(_))("(): ()")(
+  parseAst(p.pattern(_))("(): ()")(
     PatternAs(UnitPattern(), UnitType())
   )
-  parseAst(p.patternAs(_))("(Foo bar): ()")(
+  parseAst(p.pattern(_))("(Foo bar): ()")(
     PatternAs(ConstructPattern(NameWithPos("Foo"), CapturePattern("bar")), UnitType())
   )
 
-  parseAst(p.guardPattern(_))("x ? isValid")(
-    GuardPattern(Some(CapturePattern("x")), NamedValue("isValid"))
+  parseAst(p.pattern(_))("x ? isValid")(
+    GuardPattern(CapturePattern("x"), NamedValue("isValid"))
   )
-  parseAst(p.guardPattern(_))("? isValid")(
-    GuardPattern(None, NamedValue("isValid"))
+  parseAst(p.pattern(_))("_ ? isValid")(
+    GuardPattern(WildcardPattern(), NamedValue("isValid"))
   )
-  parseAst(p.guardPattern(_))("x ? isValid x")(
-    GuardPattern(Some(CapturePattern("x")), Call(NamedValue("isValid"), NamedValue("x")))
+  reject(p.pattern(_))("? isValid")
+  parseAst(p.pattern(_))("x ? isValid x")(
+    GuardPattern(CapturePattern("x"), Call(NamedValue("isValid"), NamedValue("x")))
   )
 
-  parseAst(p.defaultValuePattern(_))("x ?? 0")(
+  parseAst(p.pattern(_))("x ?? 0")(
     DefaultValuePattern(CapturePattern("x"), IntegerLiteral(AstLiteral.IntegerDec("0")))
   )
 
@@ -351,18 +375,18 @@ class ParserImplsSpec extends BaseSpec {
     FieldPattern("y", None, None)
   )))
 
-  parseAst(p.unionType(_))("A | {} | ()")(
+  parseAst(p.typeExpr(_))("A | {} | ()")(
     UnionType(Seq(NamedType("A"), RecordType(Nil), UnitType()))
   )
 
-  parseAst(p.intersectionType(_))("A & {} & ()")(
+  parseAst(p.typeExpr(_))("A & {} & ()")(
     IntersectionType(Seq(NamedType("A"), RecordType(Nil), UnitType()))
   )
 
-  parseAst(p.orPattern(_))("A | B")(
+  parseAst(p.pattern(_))("A | B")(
     OrPattern(Seq(NamedConstantPattern("A"), NamedConstantPattern("B")))
   )
-  parseAst(p.orPattern(_))("A | B | C")(
+  parseAst(p.pattern(_))("A | B | C")(
     OrPattern(Seq(NamedConstantPattern("A"), NamedConstantPattern("B"), NamedConstantPattern("C")))
   )
 
@@ -386,6 +410,23 @@ class ParserImplsSpec extends BaseSpec {
     Lambda(UnitPattern(), UnitLiteral())
   )
   reject(p.lambda(_))("()\n=> ()")
+  parseAst(p.pipePart(_))("(Foo a) => a")(Lambda(ConstructPattern(NameWithPos("Foo"), CapturePattern("a")), NamedValue("a")))
+  parseAst(p.pipePart(_))("(Foo (a)) => a")(Lambda(ConstructPattern(NameWithPos("Foo"), CapturePattern("a")), NamedValue("a")))
+  reject(p.pipePart(_))("Foo(a) => a")
+  parseAst(p.pipePart(_))("Foo (a)")(Call(NamedValue("Foo"), NamedValue("a")))
+  parseAst(p.pipePart(_))("g (a => a)")(Call(NamedValue("g"), Lambda(CapturePattern("a"), NamedValue("a"))))
+  reject(p.pipePart(_))("Foo a => a")
+  reject(p.pipePart(_))("Foo (a) => a")
+  reject(p.pipePart(_))("Foo (a) b => a")
+  reject(p.pipePart(_))("g a => a")
+  parseAst(p.pipePart(_))("(a | b) => a")(Lambda(OrPattern(Seq(CapturePattern("a"), CapturePattern("b"))), NamedValue("a")))
+  parseAst(p.pipePart(_))("(a ? b) => a")(Lambda(GuardPattern(CapturePattern("a"), NamedValue("b")), NamedValue("a")))
+  reject(p.pipePart(_))("a | b => a")
+  reject(p.pipePart(_))("a ? b => a")
+  reject(p.pipePart(_))("a ?? b => a")
+  reject(p.pipePart(_))("(? b) => a")
+  reject(p.pipePart(_))("g Foo (a) => a")
+  reject(p.pipePart(_))("g (Foo(a)) => a")
 
   parseAst(p.piecewise(_))("#(() => ())")(
     Piecewise(Seq(UnitPattern() -> UnitLiteral()))
@@ -412,39 +453,40 @@ class ParserImplsSpec extends BaseSpec {
     Piecewise(Nil)
   )
 
-  parseAst(p.funcType(_))("() => ()")(
+  reject(p.polyFuncType(_))("() => ()")
+  parseAst(p.typeExpr(_))("() => ()")(
     FuncType(UnitType(), UnitType())
   )
-  parseAst(p.funcType(_))("<A>() => ()")(
+  parseAst(p.polyFuncType(_))("<A>() => ()")(
     FuncType(Seq(TypeParam("A")), UnitType(), UnitType())
   )
 
-  parseAst(p.memberOrJuxtaCall(_))("foo.length.toString")(
+  parseAst(p.spaceCallPart(_))("foo.length.toString")(
     MemberSelection(MemberSelection(NamedValue("foo"), NamedValue("length")), NamedValue("toString"))
   )
-  parseAst(p.memberOrJuxtaCall(_))("{}.a")(
+  parseAst(p.spaceCallPart(_))("{}.a")(
     MemberSelection(Record(Nil), NamedValue("a"))
   )
-  parseAst(p.memberOrJuxtaCall(_))("foo()")(
+  parseAst(p.spaceCallPart(_))("foo()")(
     Call(NamedValue("foo"), UnitLiteral())
   )
-  parseAst(p.memberOrJuxtaCall(_))("foo.bar(zot.baz)(buz(qux))"){
+  parseAst(p.spaceCallPart(_))("foo.bar(zot.baz)(buz(qux))"){
     val foobar = MemberSelection(NamedValue("foo"), NamedValue("bar"))
     val zotbaz = MemberSelection(NamedValue("zot"), NamedValue("baz"))
     val buzqux = Call(NamedValue("buz"), NamedValue("qux"))
 
     Call(Call(foobar, zotbaz), buzqux)
   }
-  parseAst(p.memberOrJuxtaCall(_))("foo.\n  length.\n  toString")(
+  parseAst(p.spaceCallPart(_))("foo.\n  length.\n  toString")(
     MemberSelection(MemberSelection(NamedValue("foo"), NamedValue("length")), NamedValue("toString"))
   )
-  parseAst(p.memberOrJuxtaCall(_))("foo\n  .length\n  .toString")(
+  parseAst(p.spaceCallPart(_))("foo\n  .length\n  .toString")(
     MemberSelection(MemberSelection(NamedValue("foo"), NamedValue("length")), NamedValue("toString"))
   )
-  parseAst(p.memberOrJuxtaCall(_))("foo/**/\n  ./**/length/**/./**/toString")(
+  parseAst(p.spaceCallPart(_))("foo/**/\n  ./**/length/**/./**/toString")(
     MemberSelection(MemberSelection(NamedValue("foo"), NamedValue("length")), NamedValue("toString"))
   )
-  reject(p.memberOrJuxtaCall(_))("foo ()")
+  reject(p.spaceCallPart(_))("foo ()")
   parseAst(p.spaceCall(_))("foo ()")(
     Call(NamedValue("foo"), UnitLiteral())
   )
@@ -474,19 +516,19 @@ class ParserImplsSpec extends BaseSpec {
 
     Call(Call(foobar, zotbaz), buzqux)
   }
-  parseAst(p.pipe(_))("bar @ foo")(
+  parseAst(p.valueExpr(_))("bar @ foo")(
     Pipe(NamedValue("bar"), NamedValue("foo"))
   )
-  parseAst(p.pipe(_))("bar @ foo @ baz")(
+  parseAst(p.valueExpr(_))("bar @ foo @ baz")(
     Pipe(Pipe(NamedValue("bar"), NamedValue("foo")), NamedValue("baz"))
   )
-  parseAst(p.pipe(_))("foo @ bar.zot baz")(
+  parseAst(p.valueExpr(_))("foo @ bar.zot baz")(
     Pipe(NamedValue("foo"), Call(MemberSelection(NamedValue("bar"), NamedValue("zot")), NamedValue("baz")))
   )
-  parseAst(p.pipe(_))("foo bar.zot @ baz")(
+  parseAst(p.valueExpr(_))("foo bar.zot @ baz")(
     Pipe(Call(NamedValue("foo"), MemberSelection(NamedValue("bar"), NamedValue("zot"))), NamedValue("baz"))
   )
-  parseAst(p.pipe(_))("foo\n  .bar\n  @ bas baz.qux\n  @ zot()\n  .noz"){
+  parseAst(p.valueExpr(_))("foo\n  .bar\n  @ bas baz.qux\n  @ zot()\n  .noz"){
     val foobar = MemberSelection(NamedValue("foo"), NamedValue("bar"))
     val bazqux = MemberSelection(NamedValue("baz"), NamedValue("qux"))
     val zotnoz = MemberSelection(Call(NamedValue("zot"), UnitLiteral()), NamedValue("noz"))
@@ -565,7 +607,7 @@ class ParserImplsSpec extends BaseSpec {
   parseAst(p.namespaceDef(_))("::extend Option {\n  ::singleton None\n}")(
     NamespaceDef(true, NameWithPos("Option"), Seq(TypeDef(TypeDefKind.Singleton, "None")))
   )
-  parseAst(p.block(_))("(\n  ::namespace Color { red = 1 }\n  Color.red\n)")(
+  parseAst(p.tupleOrParensOrBlock(_))("(\n  ::namespace Color { red = 1 }\n  Color.red\n)")(
     Block(Seq(
       NamespaceDef(false, NameWithPos("Color"), Seq(ValueDef(CapturePattern("red"), IntegerLiteral(AstLiteral.IntegerDec("1"))))),
       MemberSelection(NamedValue("Color"), NamedValue("red")),
@@ -668,7 +710,23 @@ class ParserImplsSpec extends BaseSpec {
   parseAst(p.pattern(_))("Foo bar")(
     ConstructPattern(NameWithPos("Foo"), CapturePattern("bar"))
   )
-  parseAst(p.pattern(_))("A | B")(
-    OrPattern(Seq(NamedConstantPattern("A"), NamedConstantPattern("B")))
-  )
+
+  //////
+  // Deep nesting
+  {
+    val depth = 40
+
+    def nestedCalls(d: Int): String = if (d === 0) "f(())" else safe"f((\"a\", ${nestedCalls(d - 1)}))"
+    def nestedCallsAst(d: Int): ValueExpr = Call(NamedValue("f"),
+      if (d === 0) UnitLiteral()
+      else Tuple(Seq(StringLiteral(Seq(AstLiteral.StringPlainPart("a"))), nestedCallsAst(d - 1)))
+    )
+
+    parseAst(p.valueExpr(_))(nestedCalls(depth))(nestedCallsAst(depth))
+    parseAst(p.programBlock(_))(nestedCalls(depth))(Block(Seq(nestedCallsAst(depth))))
+    parseAst(p.valueExpr(_))("(" * depth + "a" + ")" * depth)(NamedValue("a"))
+    parseAst(p.pattern(_))("(" * depth + "a" + ")" * depth)(CapturePattern("a"))
+    parseAst(p.typeExpr(_))("(" * depth + "A" + ")" * depth)(NamedType("A"))
+    reject(p.programBlock(_))("(" * depth + "a")
+  }
 }

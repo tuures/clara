@@ -21,6 +21,9 @@
 - a namespace's values are the block's own `Terms.ValueDef`s carrying `definedInNs` (no `Terms.NamespaceDef`), the emitter qualifies bindings from it
 - expression `e: T` is a declaration like `x: T = e`: the value's type becomes `T` (`Terms.ValueAs`) and `T` is the expected type for `e` (e.g. `(n => n): Int => Int`)
 - parser: the empty string `""` parses as a literal and as a pattern (`ProcessedStringLiteralImpl` allows zero parts)
+- parser: nested calls and parens no longer take exponential time, the value, type and pattern rules are left-factored so that nothing is parsed once per alternative (`startingWith`/`ppTail` and the `*Tail` rules, `tupleOrParensOrBlock`); a lambda needs parens as a call argument, and its input is a simple pattern like the input of a function type is a simple type (`(Foo a) => a`, `(a | b) => a`, `(a: T) => a`)
+- parser: a guard pattern always has a pattern on its left (`_ ? isValid`, not `? isValid`)
+- parser: a block can have just one item (`(foo;)`, `(;foo)`, `(foo = 1)`), it's a block when it's not plain parens
 
 # Roadmap (namespacing / enum / typeclasses)
 
@@ -96,11 +99,11 @@ Each step is a vertical slice (parser -> analyzer -> emitter) validated by an e2
 
 ## Other
 
+- emitter: a block that needs an IIFE as a statement after another statement crashes at runtime (`console.log("a")` followed by `(_ = "x"; console.log("b"))` emits `console.log("a")\n(() => {...})()`, a call of the previous statement's result, as statements have no semicolons)
 - figure out how to namespace enums (Color.Red)
 - revisit tagged/boxed and enum approach
 - tagged/boxed/enum, method syntax review, replace companion objects with static methods (to be used later in typeclasses)
 - ~~support recursion for functions and types~~ done (Roadmap 2, recursion steps 4 and 5)
-- parser: nested calls with tuple arguments take exponential time (`Words(("a", Words(("b", Words(())))))` runs for minutes, the parser backtracks through tuple/parens/call alternatives; the e2e `recursive-types` defines the values one by one because of it)
 - implement basic module support
   - add AST support for Module
   - implement import syntax in parser

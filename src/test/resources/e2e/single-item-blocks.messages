@@ -1,0 +1,1 @@
+src/test/resources/e2e/single-item-blocks.clara:6:1(–15): Block should end with an expression. Implicitly returning unit.

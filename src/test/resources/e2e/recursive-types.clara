@@ -11,8 +11,5 @@ join: Words => String = #(
   (word, rest) => "[$(word)]$(join(rest))",
 )
 
-empty = Words(())
-world = Words(("world", empty))
-helloWorld = Words(("hello", world))
-console.log(join(helloWorld))
+console.log(join(Words(("hello", Words(("world", Words(())))))))
 ()

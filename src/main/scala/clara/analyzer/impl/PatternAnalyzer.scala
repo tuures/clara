@@ -184,7 +184,7 @@ object PatternAnalyzer {
     case Ast.TuplePattern(ps, _) => ps.flatMap(boundNames)
     case _: Ast.NamedConstantPattern => Nil
     case Ast.CapturePattern(name, pos) => Seq(Ast.NameWithPos(name, pos))
-    case Ast.GuardPattern(p, _, _) => p.toSeq.flatMap(boundNames)
+    case Ast.GuardPattern(p, _, _) => boundNames(p)
     case Ast.DefaultValuePattern(p, _, _) => boundNames(p)
     case Ast.PatternAs(p, _, _) => boundNames(p)
     case Ast.RecordPattern(fields, _) => fields.flatMap { field =>

@@ -35,12 +35,12 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
     }
   }
 
-  def makePos(from: Int, until: Option[Int]) =
-    sourceInfo.map(SourcePos(_, from, until)).getOrElse(NoPos)
+  def makePos(fromIndex: Int, untilIndex: Option[Int]) =
+    sourceInfo.map(SourcePos(_, fromIndex, untilIndex)).getOrElse(NoPos)
 
   def withPos[T, X: P](p: => P[T]): P[(T, Pos)] = P {
-    (Index ~~ p ~~ Index).map { case (from, t, until) =>
-      (t, makePos(from, Some(until)))
+    (Index ~~ p ~~ Index).map { case (fromIndex, t, untilIndex) =>
+      (t, makePos(fromIndex, Some(untilIndex)))
     }
   }
 
@@ -77,6 +77,16 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
     P(withPos(p).map(t => f(t._1._1, t._1._2, t._1._3, t._1._4, t._2)))
   def pp[A, B, C, D, E, F, X: P](p: => P[(A, B, C, D, E)])(f: (A, B, C, D, E, Pos) => F) =
     P(withPos(p).map(t => f(t._1._1, t._1._2, t._1._3, t._1._4, t._1._5, t._2)))
+
+  case class Prefix[+A](fromIndex: Int, value: A)
+
+  def startingWith[A, B, X: P](p: => P[A])(tails: Prefix[A] => P[B]): P[B] =
+    P((Index ~~ p).flatMapX { case (fromPos, value) => tails(Prefix(fromPos, value)) })
+
+  def ppTail[A, T, B, X: P](prefix: Prefix[A])(p: => P[T])(f: (A, T, Pos) => B): P[B] =
+    P((Pass ~ p ~~ Index).map { case (t, untilIndex) =>
+      f(prefix.value, t, makePos(prefix.fromIndex, Some(untilIndex)))
+    })
 
   //////
   // Basics
@@ -172,8 +182,10 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
     def escapePart[X: P]: P[AstLiteral.StringEscapePart] =
       P((escapeStart.s ~~ escapeBody.!).repX(1).map(AstLiteral.StringEscapePart(_)))
 
+    def parensSyntax[T, X: P](p: => P[T]) = P(parensStart(p) ~ parensEnd)
+
     def valueExprPart[X: P]: P[AstLiteral.StringValueExprPart] =
-      P((exprStart.s ~~ (parens | namedValue)).map(AstLiteral.StringValueExprPart(_)))
+      P((exprStart.s ~~ (parensSyntax(valueExpr) | namedValue)).map(AstLiteral.StringValueExprPart(_)))
 
     object StringPatternPartImpl {
       def withoutParens[X: P]: P[AstLiteral.StringPatternPart] =
@@ -211,45 +223,55 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   def stringPattern[X: P] = P(pp(processedStringPatternParts | verbatimStringPlainPart)(StringPattern.apply _))
 
   //////
-  // Tuples
+  // Parens, tuples, block
+
   val openParens = "("
   val closeParens = ")"
-
-  def tupleSyntax[T, X: P](element: => P[T]) = P(openParens ~ commaSeparatedRep(2, element) ~ closeParens)
-
-  def tuple[X: P]: P[Tuple] = P(pp(tupleSyntax(valueExpr))(Tuple.apply _))
-
-  def tupleType[X: P]: P[TupleType] = P(pp(tupleSyntax(typeExpr))(TupleType.apply _))
-
-  def tuplePattern[X: P]: P[TuplePattern] = P(pp(tupleSyntax(pattern))(TuplePattern.apply _))
-
-  //////
-  // Parens
-
-  def parensSyntax[T, X: P](p: => P[T]) = P(openParens ~ nl.rep ~ p ~ nl.rep ~ closeParens)
-
-  def parens[X: P]: P[ValueExpr] = P(parensSyntax(valueExpr))
-
-  def typeParens[X: P]: P[TypeExpr] = P(parensSyntax(typeExpr))
-
-  def patternParens[X: P]: P[Pattern] = P(parensSyntax(pattern))
-
-  //////
-  // Blocks
-
   val semi = ";"
+
+  def parensStart[T, X: P](p: => P[T]) = P(openParens ~ nl.rep ~ p)
+  def parensEnd[X: P] = P(nl.rep ~ closeParens)
 
   def blockItemSep[X: P] = P(nl | semi)
 
   def blockContent[X: P] = P(inBlockDecl | valueExpr)
 
-  def blockContents[X: P](isProgramBlock: Boolean): P[Seq[BlockContent]] = P {
-    val min = if (isProgramBlock) 0 else 2
+  def blockItems[X: P](min: Int): P[Seq[BlockContent]] =
+    P(blockContent.rep(min=min, sep=blockItemSep.rep(1)) ~ blockItemSep.rep)
 
-    blockItemSep.rep ~ blockContent.rep(min=min, sep=blockItemSep.rep(1)) ~ blockItemSep.rep
+  def blockTail[X: P](prefix: Prefix[BlockContent]): P[ValueExpr] =
+    ppTail(prefix)((blockItemSep.rep(1) ~ blockItems(0)).? ~ closeParens) { (first, rest, pos) =>
+      Block(first +: rest.getOrElse(Nil), pos)
+    }
+
+  def tupleTail[T, X: P](element: => P[T], prefix: Prefix[T])(make: (Seq[T], Pos) => T): P[T] =
+    ppTail(prefix)(comma ~ commaSeparatedRep(1, element) ~ closeParens) { (first, rest, pos) =>
+      make(first +: rest, pos)
+    }
+
+  def parensTail[T, X: P](prefix: Prefix[T]): P[T] = P((Pass ~ parensEnd).map(_ => prefix.value))
+
+  def tupleOrParensTail[T, X: P](element: => P[T], prefix: Prefix[T])(make: (Seq[T], Pos) => T): P[T] =
+    P(tupleTail(element, prefix)(make) | parensTail(prefix))
+
+  def blockWithLeadingSemi[X: P]: P[Block] =
+    P(pp(parensStart(semi ~ blockItemSep.rep ~ blockItems(1)) ~ closeParens)(Block.apply _))
+
+  def tupleOrParensOrBlock[X: P]: P[ValueExpr] = P {
+    startingWith(parensStart(inBlockDecl))(blockTail(_)) |
+    startingWith(parensStart(valueExpr)) { prefix =>
+      tupleOrParensTail(valueExpr, prefix)(Tuple.apply _) | blockTail(prefix)
+    } |
+    blockWithLeadingSemi
   }
 
-  def block[X: P]: P[Block] = P(pp(openParens ~ blockContents(false) ~ closeParens)(Block.apply _))
+  def tupleOrParensSyntax[T, X: P](element: => P[T])(make: (Seq[T], Pos) => T): P[T] = P {
+    startingWith(parensStart(element))(tupleOrParensTail(element, _)(make))
+  }
+
+  def tupleOrParensType[X: P]: P[TypeExpr] = P(tupleOrParensSyntax(typeExpr)(TupleType.apply _))
+
+  def tupleOrParensPattern[X: P]: P[Pattern] = P(tupleOrParensSyntax(pattern)(TuplePattern.apply _))
 
   //////
   // Names
@@ -282,10 +304,9 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
 
   def typed[X: P]: P[TypeExpr] = P(colon ~ nl.rep ~ typeExpr)
 
-  // TODO is NoCut really needed? review all NoCuts
-  def valueAs[X: P]: P[ValueAs] = P(pp(NoCut(simple ~ typed))(ValueAs.apply _))
+  def valueAsTail[X: P](prefix: Prefix[ValueExpr]): P[ValueExpr] = ppTail(prefix)(typed)(ValueAs.apply _)
 
-  def patternAs[X: P]: P[PatternAs] = P(pp(simplePattern ~ typed)(PatternAs.apply _))
+  def patternAsTail[X: P](prefix: Prefix[Pattern]): P[Pattern] = ppTail(prefix)(typed)(PatternAs.apply _)
 
   //////
   // Record
@@ -312,16 +333,16 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   // Simple
 
   def simple[X: P]: P[ValueExpr] =
-    P(unitLiteral | floatLiteral | integerLiteral | stringLiteral | tuple | block | parens | namedValue | record)
+    P(unitLiteral | floatLiteral | integerLiteral | stringLiteral | tupleOrParensOrBlock | namedValue | record)
 
   def simpleType[X: P]: P[TypeExpr] =
-    P(topType | bottomType | unitType | tupleType | typeParens | namedType | recordType)
+    P(topType | bottomType | unitType | tupleOrParensType | namedType | recordType)
 
   def wildcardPattern[X: P]: P[WildcardPattern] =
     P(pp("_" ~~ &(End | CharPred(c => !Character.isLetterOrDigit(c))))(WildcardPattern.apply _))
 
   def simplePattern[X: P]: P[Pattern] =
-    P(wildcardPattern | unitPattern | floatPattern | integerPattern | stringPattern | tuplePattern | patternParens | recordPattern | namedConstantPattern | capturePattern)
+    P(wildcardPattern | unitPattern | floatPattern | integerPattern | stringPattern | tupleOrParensPattern | recordPattern | namedConstantPattern | capturePattern)
 
   def compoundPattern[X: P]: P[Pattern] = P(constructPattern | simplePattern)
 
@@ -330,11 +351,14 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   val verticalBar = "|"
   val ampersand = "&"
 
-  def unionType[X: P]: P[UnionType] = P(pp(simpleType.rep(min=2, sep=verticalBar))(UnionType.apply _))
+  def unionTypeTail[X: P](prefix: Prefix[TypeExpr]): P[TypeExpr] =
+    ppTail(prefix)((verticalBar ~ simpleType).rep(1))((first, rest, pos) => UnionType(first +: rest, pos))
 
-  def intersectionType[X: P]: P[IntersectionType] = P(pp(simpleType.rep(min=2, sep=ampersand))(IntersectionType.apply _))
+  def intersectionTypeTail[X: P](prefix: Prefix[TypeExpr]): P[TypeExpr] =
+    ppTail(prefix)((ampersand ~ simpleType).rep(1))((first, rest, pos) => IntersectionType(first +: rest, pos))
 
-  def orPattern[X: P]: P[OrPattern] = P(pp(compoundPattern.rep(min=2, sep=verticalBar))(OrPattern.apply _))
+  def orPatternTail[X: P](prefix: Prefix[Pattern]): P[Pattern] =
+    ppTail(prefix)((verticalBar ~ compoundPattern).rep(1))((first, rest, pos) => OrPattern(first +: rest, pos))
 
   //////
   // Function syntax
@@ -345,7 +369,7 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   def polyFuncSyntax[T1, T2, X: P](in: => P[T1], out: => P[T2]) =
     P(maybeTypeParams ~ funcSyntax(in, out)).map { case (p, (in, out)) => (p, in, out) }
 
-  def lambda[X: P]: P[Lambda] = P(pp(polyFuncSyntax(pattern, valueExpr))(Lambda.apply _))
+  def lambda[X: P]: P[Lambda] = P(pp(polyFuncSyntax(simplePattern, valueExpr))(Lambda.apply _))
 
   object PiecewiseImpl {
     def piece[X: P] = P(funcSyntax(pattern, valueExpr))
@@ -356,10 +380,13 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   def piecewise[X: P]: P[Piecewise] = {
     import PiecewiseImpl._
 
-    P(pp(hash ~ openParens ~ nl.rep ~ pieces ~ comma.? ~ nl.rep ~ closeParens)(Piecewise.apply _))
+    P(pp(hash ~ parensStart(pieces) ~ comma.? ~ parensEnd)(Piecewise.apply _))
   }
 
-  def funcType[X: P]: P[FuncType] = P(pp(polyFuncSyntax(simpleType, typeExpr))(FuncType.apply _))
+  def funcTypeTail[X: P](prefix: Prefix[TypeExpr]): P[TypeExpr] =
+    ppTail(prefix)(funcArrow ~ nl.rep ~ typeExpr)(FuncType(Nil, _, _, _))
+
+  def polyFuncType[X: P]: P[FuncType] = P(pp(&(angleOpen) ~~ polyFuncSyntax(simpleType, typeExpr))(FuncType.apply _))
 
   //////
   // Member selection / call
@@ -374,52 +401,33 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
 
     def memberPart[X: P] = P(space.rep ~ nl.? ~ dot ~ nl.rep ~ namedValue).map(Left(_))
     def juxtaCallPart[X: P] = P(simple.map(Right(_)))
-  }
 
-  def memberOrJuxtaCall[X: P] = P {
-    import MemberOrJuxtaCallImpl._
-
-    (simple ~~ noSpaceWhitespace ~~ (memberPart | juxtaCallPart).repX(1)).map { case (base, parts) =>
-      val firstNode = makeNode(base, parts.head)
-
-      parts.tail.foldLeft(firstNode){ case (prevNode, nextPart) =>
-        makeNode(prevNode, nextPart)
+    def tail[X: P](base: ValueExpr): P[ValueExpr] =
+      P((noSpaceWhitespace ~~ (memberPart | juxtaCallPart).repX(1)).?).map { parts =>
+        parts.getOrElse(Nil).foldLeft(base)(makeNode(_, _))
       }
-    }
   }
 
-  def spaceCallPart[X: P] = P(memberOrJuxtaCall | simple)
+  def spaceCallPart[X: P]: P[ValueExpr] = P(simple.flatMapX(MemberOrJuxtaCallImpl.tail(_)))
 
-  def spaceCall[X: P]: P[Call] = P {
+  def spaceCallTail[X: P](callee: ValueExpr): P[ValueExpr] = P {
     def makeNode(callee: ValueExpr, argument: ValueExpr) = {
       Call(callee, argument, callee.pos.join(argument.pos))
     }
 
-    (spaceCallPart.repX(min=2, sep=leastOneSpaceWhitespace)).map { parts =>
-      val firstNode = makeNode(parts.head, parts.tail.head)
+    (leastOneSpaceWhitespace ~~ spaceCallPart).repX.map(_.foldLeft(callee)(makeNode(_, _)))
+  }
 
-      parts.tail.tail.foldLeft(firstNode){ case (prevNode, nextArgument) =>
-        makeNode(prevNode, nextArgument)
-      }
+  def spaceCall[X: P]: P[ValueExpr] = P(spaceCallPart.flatMapX(spaceCallTail(_)))
+
+  def valueAsOrSpaceCall[X: P]: P[ValueExpr] = P {
+    startingWith(simple) { prefix =>
+      valueAsTail(prefix) | MemberOrJuxtaCallImpl.tail(prefix.value).flatMapX(spaceCallTail(_))
     }
   }
 
-  def pipePart[X: P] = P(spaceCall | piecewise | lambda | valueAs | spaceCallPart)
+  def pipePart[X: P]: P[ValueExpr] = P(piecewise | lambda | valueAsOrSpaceCall)
   def pipeSep[X: P] = P(nl.? ~ at ~ nl.rep)
-
-  def pipe[X: P]: P[Pipe] = P {
-    def makeNode(argument: ValueExpr, callee: ValueExpr) = {
-      Pipe(argument, callee, argument.pos.join(callee.pos))
-    }
-
-    (pipePart.rep(min=2, sep=pipeSep)).map { parts =>
-      val firstNode = makeNode(parts.head, parts.tail.head)
-
-      parts.tail.tail.foldLeft(firstNode){ case (prevNode, nextCallee) =>
-        makeNode(prevNode, nextCallee)
-      }
-    }
-  }
 
   // TODO: should we allow also lowercase name here?
   def constructPattern[X: P] = P(pp(&(anyUpperCaseChar) ~~ nameWithPos ~ simplePattern)(ConstructPattern.apply _))
@@ -427,13 +435,13 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   val questionMark = "?"
   val doubleQuestionMark = "??"
 
-  def patternEmbeddedExpression[X: P]: P[ValueExpr] = P(spaceCall | spaceCallPart)
+  def patternEmbeddedExpression[X: P]: P[ValueExpr] = P(spaceCall)
 
-  def guardPattern[X: P]: P[GuardPattern] =
-    P(pp(compoundPattern.? ~ questionMark ~ nl.rep ~ patternEmbeddedExpression)(GuardPattern.apply _))
+  def guardPatternTail[X: P](prefix: Prefix[Pattern]): P[Pattern] =
+    ppTail(prefix)(questionMark ~ nl.rep ~ patternEmbeddedExpression)(GuardPattern.apply _)
 
-  def defaultValuePattern[X: P]: P[DefaultValuePattern] =
-    P(pp(compoundPattern ~ doubleQuestionMark ~ nl.rep ~ patternEmbeddedExpression)(DefaultValuePattern.apply _))
+  def defaultValuePatternTail[X: P](prefix: Prefix[Pattern]): P[Pattern] =
+    ppTail(prefix)(doubleQuestionMark ~ nl.rep ~ patternEmbeddedExpression)(DefaultValuePattern.apply _)
 
   //////
   // Type parameters
@@ -518,14 +526,31 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   //////
   // Top level rules
 
-  def valueExpr[X: P]: P[ValueExpr] = P(pipe | pipePart)
+  def valueExpr[X: P]: P[ValueExpr] = P {
+    def makeNode(argument: ValueExpr, callee: ValueExpr) = {
+      Pipe(argument, callee, argument.pos.join(callee.pos))
+    }
 
-  def typeExpr[X: P]: P[TypeExpr] = P(funcType | unionType | intersectionType | simpleType)
+    pipePart.rep(1, sep=pipeSep).map(parts => parts.tail.foldLeft(parts.head)(makeNode(_, _)))
+  }
 
-  def pattern[X: P]: P[Pattern] = P(patternAs | defaultValuePattern | guardPattern | orPattern | compoundPattern)
+  def typeExpr[X: P]: P[TypeExpr] = P {
+    polyFuncType | startingWith(simpleType) { prefix =>
+      funcTypeTail(prefix) | unionTypeTail(prefix) | intersectionTypeTail(prefix) | Pass(prefix.value)
+    }
+  }
+
+  def compoundPatternTail[X: P](prefix: Prefix[Pattern]): P[Pattern] =
+    P(defaultValuePatternTail(prefix) | guardPatternTail(prefix) | orPatternTail(prefix) | Pass(prefix.value))
+
+  def pattern[X: P]: P[Pattern] = P {
+    startingWith(constructPattern)(compoundPatternTail(_)) | startingWith(simplePattern) { prefix =>
+      patternAsTail(prefix) | compoundPatternTail(prefix)
+    }
+  }
 
   //////
   // Start here
 
-  def programBlock[X: P]: P[Block] = P(pp(Start ~ blockContents(true) ~ End)(Block.apply _))
+  def programBlock[X: P]: P[Block] = P(pp(Start ~ blockItemSep.rep ~ blockItems(0) ~ End)(Block.apply _))
 }
