@@ -44,7 +44,7 @@ case class NameResolverImpl(env: Env) {
       valueIn(lookup.enterNs(name, env.namespaceMembers(nsId)), TypeCons.ConstructorName, pos).tellUsage(defId, pos)
     case Some(_: EnvNamespaceRef) =>
       An.error(SourceMessage(pos, safe"`${lookup.qualified(name)}` is a namespace, not a value"))
-    // a function of the function run being analyzed, see BlockAnalyzerImpl.functionRuns
+    // a function of the function run being analyzed, see ValuesPass.functionRuns
     case Some(EnvDeclaredValue(defId, signature, definedInNs, _)) if env.isForwardReferable(defId) => signature match {
       case Some(typ) => An.valid(Terms.NamedValue(name, definedInNs, typ)).tellUsage(defId, pos)
       case None => An.error(SourceMessage(pos,
@@ -65,6 +65,8 @@ case class NameResolverImpl(env: Env) {
   def typeCon(nsPath: Seq[Ast.NameWithPos], name: String, pos: Pos): An[TypeCons.TypeCon] =
     lookupIn(nsPath, lookupNsTypeSide).flatMap { lookup =>
       lookup.typeEntry(name) match {
+        // TODO: use error type instead of reportig it as not found
+        case Some(_: EnvDeclaredType) => An.error(lookup.notFound("type", name, pos))
         case Some(EnvTypeCon(con, defId)) => An.valid(con).tellUsage(defId, pos)
         case Some(EnvCompanion(con, _, defId)) => An.valid(con).tellUsage(defId, pos)
         case Some(_: EnvNamespace) =>
@@ -141,7 +143,8 @@ case class NameResolverImpl(env: Env) {
       case Some(EnvNamespace(nsId, defId, _)) => Right(PathNamespace(nsId, defId))
       case Some(EnvCompanion(_, nsId, defId)) => Right(PathNamespace(nsId, defId))
       case Some(_: EnvTypeCon) => Left(NotNamespace(lookup, name))
-      case None => Left(NoSuchName(lookup, name))
+      // TODO: use error type instead of reportig EnvDeclaredType as not found
+      case Some(_: EnvDeclaredType) | None => Left(NoSuchName(lookup, name))
     }
 
   // the reason why an nsPath doesn't name a namespace as data so that isNamespace can also answer whether it does

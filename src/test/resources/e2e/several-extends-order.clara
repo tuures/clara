@@ -1,0 +1,13 @@
+::opaque String
+::tagged Id: String
+
+// a value of a later ::extend isn't defined yet, also for a function (a function run doesn't span two ::extends)
+::extend Id {
+  first: () => String = () => later
+  early = later
+}
+
+::extend Id {
+  later: String = "later"
+}
+()

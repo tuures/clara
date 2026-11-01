@@ -364,13 +364,13 @@ class PatternAnalyzerSpec extends BaseSpec {
   // the names a pattern binds, declared by the names pass of a scope
 
   test("walkValueDef defines the names the names pass declared, keeping their DefId") {
-    val env = Env.empty.declareValue("x", NoPos).run.value.value
-    val declaredDefId = env.local.values.get("x").map(_.defId)
+    val declaredDefId = DefId()
+    val env = Env.empty.declareValue("x", NoPos, declaredDefId).run.value.value
 
     val result = PatternAnalyzer.walkValueDef(env, Ast.CapturePattern("x"), Some(Types.Uni)).run
 
     inside(result.value.value) { case (nextEnv, _) =>
-      assert(nextEnv.local.values.get("x") === declaredDefId.map(EnvValue(Types.Uni, _, Nil, NoPos)))
+      assert(nextEnv.local.values.get("x") === Some(EnvValue(Types.Uni, declaredDefId, Nil, NoPos)))
     }
   }
 

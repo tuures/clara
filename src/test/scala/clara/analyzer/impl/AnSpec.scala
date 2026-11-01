@@ -1,21 +1,19 @@
 package clara.analyzer.impl
 
-import clara.util.GeneralMessage
-import clara.util.Message
 import clara.util.Safe.SafeStringContext
 import clara.asg.DefId
-import clara.ast.{NoPos, SourceInfo, SourcePos}
+import clara.ast.{NoPos, SourceInfo, SourceMessage, SourcePos}
 
 import clara.testutil.BaseSpec
 
 class AnSpec extends BaseSpec {
 
-  val messageA = GeneralMessage("A")
-  val messageB = GeneralMessage("B")
-  val messageC = GeneralMessage("C")
-  val messageD = GeneralMessage("D")
+  val messageA = SourceMessage(NoPos, "A")
+  val messageB = SourceMessage(NoPos, "B")
+  val messageC = SourceMessage(NoPos, "C")
+  val messageD = SourceMessage(NoPos, "D")
 
-  def anLogWarn(ms: Message*): AnLog = AnLog(warnings = ms.toVector)
+  def anLogWarn(ms: SourceMessage*): AnLog = AnLog(warnings = ms.toVector)
 
   test("AnLog.append combines warnings and usage traces") {
     val defIdA = DefId()
@@ -195,10 +193,10 @@ class AnSpec extends BaseSpec {
     val result = An.step(items)(0)((currentResult, item) => {
       val nextResult: Int = currentResult + item
 
-      An.Valid(nextResult, anLogWarn(GeneralMessage(safe"sum: ${nextResult.toString()}")))
+      An.Valid(nextResult, anLogWarn(SourceMessage(NoPos, safe"sum: ${nextResult.toString()}")))
     }).run
 
-    assert(result.log === anLogWarn(GeneralMessage("sum: 1"), GeneralMessage("sum: 3"), GeneralMessage("sum: 6")))
+    assert(result.log === anLogWarn(SourceMessage(NoPos, "sum: 1"), SourceMessage(NoPos, "sum: 3"), SourceMessage(NoPos, "sum: 6")))
     assert(result.value === Right(6))
   }
 
@@ -208,18 +206,18 @@ class AnSpec extends BaseSpec {
     val result = An.step(items)(0)((currentResult, item) => {
       val nextResult: Int = currentResult + item
 
-      val stepLog = anLogWarn(GeneralMessage(safe"sum: ${nextResult.toString()}"))
+      val stepLog = anLogWarn(SourceMessage(NoPos, safe"sum: ${nextResult.toString()}"))
 
       if (nextResult >= 2) {
-        val error = GeneralMessage(safe"failure at item: ${item.toString()}")
+        val error = SourceMessage(NoPos, safe"failure at item: ${item.toString()}")
         An.Invalid(Vector(error), stepLog)
       } else {
         An.Valid(nextResult, stepLog)
       }
     }).run
 
-    assert(result.log === anLogWarn(GeneralMessage("sum: 1"), GeneralMessage("sum: 3"), GeneralMessage("sum: 4")))
-    assert(result.value === Left(Vector("failure at item: 2", "failure at item: 3").map(GeneralMessage(_))))
+    assert(result.log === anLogWarn(SourceMessage(NoPos, "sum: 1"), SourceMessage(NoPos, "sum: 3"), SourceMessage(NoPos, "sum: 4")))
+    assert(result.value === Left(Vector("failure at item: 2", "failure at item: 3").map(SourceMessage(NoPos, _))))
   }
 
   test("An.deferErrors goes on from the fallback, the errors stay logged") {
@@ -232,12 +230,12 @@ class AnSpec extends BaseSpec {
 
   test("An.stepDeferring keeps the last successful result, the errors of the elements are logged") {
     val an = An.stepDeferring(Seq(1, 2, 3))(0) { (sum, item) =>
-      if (item === 2) An.error(GeneralMessage(safe"failure at item: ${item.toString()}")) else An.valid(sum + item)
+      if (item === 2) An.error(SourceMessage(NoPos, safe"failure at item: ${item.toString()}")) else An.valid(sum + item)
     }
 
     val stepped = an.runFrom(AnLog())
 
-    assert(stepped === ((Some(4), AnLog(errors = Vector(GeneralMessage("failure at item: 2"))))))
+    assert(stepped === ((Some(4), AnLog(errors = Vector(SourceMessage(NoPos, "failure at item: 2"))))))
   }
 
   test("An.escalateErrors has no result when its analysis logged errors") {
@@ -259,29 +257,29 @@ class AnSpec extends BaseSpec {
 
   test("a stepDeferring nested in a step element keeps what it did, its errors are reported in order") {
     val nested = (sum: Int) => An.stepDeferring(Seq(10, 20))(sum) { (sum, item) =>
-      if (item === 10) An.error(GeneralMessage("inner failure")) else An.valid(sum + item)
+      if (item === 10) An.error(SourceMessage(NoPos, "inner failure")) else An.valid(sum + item)
     }
 
     val result = An.step(Seq(1, 2, 3))(0) {
       case (sum, 2) => nested(sum)
-      case (sum, 3) => An.error(GeneralMessage("outer failure")).map(_ => sum)
+      case (sum, 3) => An.error(SourceMessage(NoPos, "outer failure")).map(_ => sum)
       case (sum, item) => An.valid(sum + item)
     }.run
 
-    assert(result.value === Left(Vector(GeneralMessage("inner failure"), GeneralMessage("outer failure"))))
+    assert(result.value === Left(Vector(SourceMessage(NoPos, "inner failure"), SourceMessage(NoPos, "outer failure"))))
   }
 
   test("a stepDeferring nested in a step element passes its result on to the next element") {
     val result = An.step(Seq(1, 2))(0) {
       case (sum, 1) => An.stepDeferring(Seq(10, 20))(sum) { (sum, item) =>
-        if (item === 10) An.error(GeneralMessage("inner failure")) else An.valid(sum + item)
+        if (item === 10) An.error(SourceMessage(NoPos, "inner failure")) else An.valid(sum + item)
       }
-      case (sum, item) => An.valid(sum + item).tellWarning(GeneralMessage(safe"sum: ${(sum + item).toString()}"))
+      case (sum, item) => An.valid(sum + item).tellWarning(SourceMessage(NoPos, safe"sum: ${(sum + item).toString()}"))
     }.run
 
     // the second element continued from the nested stepDeferring's result (20)
-    assert(result.value === Left(Vector(GeneralMessage("inner failure"))))
-    assert(result.log === anLogWarn(GeneralMessage("sum: 22")))
+    assert(result.value === Left(Vector(SourceMessage(NoPos, "inner failure"))))
+    assert(result.log === anLogWarn(SourceMessage(NoPos, "sum: 22")))
   }
 
   test("errors are reported in the order they happened, also when one comes after an analysis without a result") {

@@ -9,7 +9,7 @@ class NameResolverSpec extends BaseSpec {
   import AstTestHelpers._
 
   // the env of a block after its passes, names are resolved in it
-  def envOf(bcs: BlockContent*): Env = BlockAnalyzerImpl.walkBlockContents(Env.empty, bcs).run.value.value.currentEnv
+  def envOf(bcs: BlockContent*): Env = BlockAnalyzerImpl.walkBlockContents(Env.empty, bcs).run.value.value.env
   def nsPath(names: String*): Vector[NameWithPos] = names.map(NameWithPos(_)).toVector
 
   private def color(members: InBlockDecl*) = NamespaceDef(false, NameWithPos("Color"), members)
@@ -81,7 +81,7 @@ class NameResolverSpec extends BaseSpec {
 
   test("a value used before its definition is an error, also through its namespace") {
     // the names pass declares the values, the values pass defines them
-    val (env, _) = ScopeAnalyzer.registerNamesAndTypes(Env.empty, Seq(
+    val (env, _) = BlockAnalyzerImpl.analyzeDeclarations(Env.empty, Seq(
       ValueDef(CapturePattern("value"), UnitLiteral()),
       color(ValueDef(CapturePattern("favorite"), UnitLiteral())),
     )).run.value.value

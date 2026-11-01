@@ -1,9 +1,8 @@
 package clara.analyzer.impl
 
-import clara.util.Message
 import clara.util.Safe._
 import clara.asg.{DefId, TypeConId, TypeCons, Types}
-import clara.ast.Pos
+import clara.ast.{Pos, SourceMessage}
 
 
 // TODO: tracking usage of: 1) record fields (Uniq, String), 2) methods (Uniq, String)
@@ -37,8 +36,8 @@ object TypeStructures {
 }
 
 case class AnLog(
-  errors: Vector[Message] = Vector.empty,
-  warnings: Vector[Message] = Vector.empty,
+  errors: Vector[SourceMessage] = Vector.empty,
+  warnings: Vector[SourceMessage] = Vector.empty,
   usageTrace: UsageTrace = UsageTrace(),
   typeStructures: TypeStructures = TypeStructures.empty,
 ) {

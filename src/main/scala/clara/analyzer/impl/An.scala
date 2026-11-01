@@ -1,8 +1,7 @@
 package clara.analyzer.impl
 
-import clara.util.Message
 import clara.asg.{DefId, TypeConId, Types}
-import clara.ast.Pos
+import clara.ast.{Pos, SourceMessage}
 
 
 case class AnResult[+A](value: Either[An.Errors, A], log: AnLog)
@@ -25,12 +24,16 @@ case class An[+A](runFrom: AnLog => (Option[A], AnLog)) {
     runFrom(log) match { case (result, nextLog) => (result.map(f), nextLog) }
   }
 
-  def tellWarnings(ms: Seq[Message]): An[A] = tell(AnLog(warnings = ms.toVector))
-  def tellWarning(m: Message): An[A] = tellWarnings(Vector(m))
-  def tellUsages(uses: Seq[(DefId, Pos)]): An[A] =
-    tell(AnLog(usageTrace = UsageTrace(uses.groupMapReduce { case (defId, _) => defId } { case (_, pos) => Set(pos) }(_ ++ _))))
+  def tellWarnings(ms: Seq[SourceMessage]): An[A] = tell(AnLog(warnings = ms.toVector))
+  def tellWarning(m: SourceMessage): An[A] = tellWarnings(Vector(m))
+  def tellUsages(uses: Seq[(DefId, Pos)]): An[A] = {
+    val defs = uses.groupMapReduce { case (defId, _) => defId } { case (_, pos) => Set(pos) }(_ ++ _)
+
+    tell(AnLog(usageTrace = UsageTrace(defs)))
+  }
   def tellUsage(defId: DefId, pos: Pos): An[A] = tellUsages(Vector(defId -> pos))
-  def tellStructure(con: TypeConId, structure: Types.Type): An[A] = tell(AnLog(typeStructures = TypeStructures(Map(con -> structure))))
+  def tellStructure(con: TypeConId, structure: Types.Type): An[A] =
+    tell(AnLog(typeStructures = TypeStructures(Map(con -> structure))))
 
   private def tell(entry: AnLog): An[A] = An { log =>
     runFrom(log) match { case (result, nextLog) => (result, nextLog.append(entry)) }
@@ -49,7 +52,7 @@ case class An[+A](runFrom: AnLog => (Option[A], AnLog)) {
 }
 
 object An {
-  type Errors = Vector[Message]
+  type Errors = Vector[SourceMessage]
 
   /** Successful analysis which produced a valid result, adding `log` to the log */
   object Valid {
@@ -60,18 +63,18 @@ object An {
 
   /** Analysis which could not be completed due to errors, adding `log` and the errors to the log */
   object Invalid {
-    def apply[A](errors: Vector[Message], log: AnLog): An[Nothing] =
+    def apply[A](errors: Vector[SourceMessage], log: AnLog): An[Nothing] =
       An(previous => (None, previous.append(log).append(AnLog(errors = errors))))
   }
   /** Builds an Invalid with the error and no log. */
-  def error(e: Message): An[Nothing] = Invalid(Vector(e), AnLog())
+  def error(e: SourceMessage): An[Nothing] = Invalid(Vector(e), AnLog())
 
   /** The log of everything analyzed before, as the result */
   def currentLog: An[AnLog] = An(log => (Some(log), log))
 
-  def errorIf(pred: Boolean)(e: Message): An[Unit] = if (pred) error(e) else valid(())
+  def errorIf(pred: Boolean)(e: SourceMessage): An[Unit] = if (pred) error(e) else valid(())
 
-  def errorFromSome[A](o: Option[A])(f: A => Message): An[Unit] = o.map(a => error(f(a))).getOrElse(valid(()))
+  def errorFromSome[A](o: Option[A])(f: A => SourceMessage): An[Unit] = o.map(a => error(f(a))).getOrElse(valid(()))
 
   /**
    * Combines sequence of independent analyses together, each runs after the previous one (also when one has no
@@ -81,13 +84,14 @@ object An {
     // one fold inside a single An (not nested zips), so a long sequence doesn't grow the stack
     ans.foldLeft((Option(Vector.empty[A]), log)) { case ((results, currentLog), an) =>
       val (result, nextLog) = an.runFrom(currentLog)
+
       (results.zip(result).map { case (results, result) => results :+ result }, nextLog)
     }
   }
 
   def fromSomeOrElse[A](o: Option[A], fallback: => An[A]): An[A] = o.map(An.valid).getOrElse(fallback)
 
-  def fromSomeOrError[A](o: Option[A], e: => Message): An[A] = fromSomeOrElse(o, An.error(e))
+  def fromSomeOrError[A](o: Option[A], e: => SourceMessage): An[A] = fromSomeOrElse(o, An.error(e))
 
   /**
    * Starting with `initialResult` result, for each element in `as`,
@@ -113,6 +117,7 @@ object An {
   def stepDeferring[A, B](as: Seq[A])(initialResult: B)(f: (B, A) => An[B]): An[B] = An { log =>
     val (lastResult, nextLog) = as.foldLeft((initialResult, log)) { case ((currentResult, currentLog), a) =>
       val (result, nextLog) = f(currentResult, a).runFrom(currentLog)
+
       (result.getOrElse(currentResult), nextLog)
     }
 
@@ -125,6 +130,7 @@ object An {
    */
   def deferErrors[A](an: An[A])(fallback: => A): An[A] = An { log =>
     val (result, nextLog) = an.runFrom(log)
+
     (result.orElse(Some(fallback)), nextLog)
   }
 

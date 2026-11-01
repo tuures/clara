@@ -20,6 +20,7 @@ case class EnvNamespaceRef(namespace: NsId, defId: DefId) extends EnvValueEntry
 sealed trait EnvTypeEntry {
   def defId: DefId
 }
+case class EnvDeclaredType(defId: DefId, definedAt: Pos) extends EnvTypeEntry
 case class EnvTypeCon(con: TypeCon, defId: DefId) extends EnvTypeEntry
 case class EnvNamespace(namespace: NsId, defId: DefId, definedAt: Pos) extends EnvTypeEntry
 case class EnvCompanion(con: TypeCon, namespace: NsId, defId: DefId) extends EnvTypeEntry
@@ -68,33 +69,43 @@ case class Env(
   // adding names
   def addValue(name: String, typ: Type, pos: Pos, defId: DefId = DefId()): An[Env] =
     addValueEntry(name, EnvValue(typ, defId, nsPath, pos), pos)
-  def declareValue(name: String, pos: Pos): An[Env] = addValueEntry(name, EnvDeclaredValue(DefId(), None, nsPath, pos), pos)
-  def declareValueSignature(name: String, signature: Type): Env = local.values.get(name) match {
+  def declareValue(name: String, pos: Pos, defId: DefId): An[Env] = addValueEntry(name, EnvDeclaredValue(defId, None, nsPath, pos), pos)
+  def addValueSignature(name: String, signature: Type): Env = local.values.get(name) match {
     case Some(declared @ EnvDeclaredValue(_, None, _, _)) =>
-      withLocal(local.copy(values = local.values.addOrModify((name, declared.copy(signature = Some(signature))))))
+      withLocalValues(local.values.addOrModify((name, declared.copy(signature = Some(signature)))))
     case _ => throw new java.lang.AssertionError(safe"value `$name` hasn't been declared without a signature")
   }
   def defineValue(name: String, typ: Type, pos: Pos): An[Env] = local.values.get(name) match {
     case Some(EnvDeclaredValue(defId, _, _, _)) =>
-      An.valid(withLocal(local.copy(values = local.values.addOrModify((name, EnvValue(typ, defId, nsPath, pos))))))
+      An.valid(withLocalValues(local.values.addOrModify((name, EnvValue(typ, defId, nsPath, pos)))))
     case _ => throw new java.lang.AssertionError(safe"value `$name` hasn't been declared")
   }
   def addTypeCon(name: String, con: TypeCon, pos: Pos, defId: DefId = DefId()): An[Env] =
     addTypeEntry(name, EnvTypeCon(con, defId), pos)
+  def declareType(name: String, defId: DefId, pos: Pos): An[Env] = addTypeEntry(name, EnvDeclaredType(defId, pos), pos)
+  def defineType(name: String, con: TypeCon): Env = local.types.get(name) match {
+    case Some(EnvDeclaredType(defId, _)) => withLocalTypes(local.types.addOrModify((name, EnvTypeCon(con, defId))))
+    case _ => throw new java.lang.AssertionError(safe"type `$name` hasn't been declared")
+  }
   // adding namespaces
   // members are added separately by entering its body (enterNamespace, leaveNamespace)
-  def addStandaloneNamespace(name: String, nsId: NsId, pos: Pos): An[Env] = {
-    val defId = DefId()
+  def addStandaloneNamespace(name: String, nsId: NsId, defId: DefId, pos: Pos): An[Env] =
+    addTypeEntry(name, EnvNamespace(nsId, defId, pos), pos).flatMap { envWithType =>
+      val envWithValueSideNs = envWithType.addValueEntry(name, EnvNamespaceRef(nsId, defId), pos)
 
-    addTypeEntry(name, EnvNamespace(nsId, defId, pos), pos).
-      flatMap(_.addValueEntry(name, EnvNamespaceRef(nsId, defId), pos))
-  }
+      // adding can fail if the name is already taken by a value, but the type side is kept
+      An.deferErrors(envWithValueSideNs)(envWithType)
+    }
   // a companion namespace attached to the type con of the same name in the local scope, the type and its namespace
   // become one declaration (the type's)
   def addCompanionNamespace(name: String, nsId: NsId): An[Env] = local.types.get(name) match {
     case Some(EnvTypeCon(con, defId)) =>
-      withLocal(local.copy(types = local.types.addOrModify((name, EnvCompanion(con, nsId, defId))))).
-        addValueEntry(name, EnvNamespaceRef(nsId, defId), con.definedAt)
+      val envWithCompanionType = withLocalTypes(local.types.addOrModify((name, EnvCompanion(con, nsId, defId))))
+
+      val envWithValueSideNs = envWithCompanionType.addValueEntry(name, EnvNamespaceRef(nsId, defId), con.definedAt)
+
+      // adding can fail if the name is already taken by a value, but the type side is kept
+      An.deferErrors(envWithValueSideNs)(envWithCompanionType)
     case _ => throw new java.lang.AssertionError(safe"no type `$name` to attach a companion namespace to")
   }
   // the compiler generated `apply` of a tagged or boxed type's companion, its constructor
@@ -110,6 +121,10 @@ case class Env(
       }
     case _ => throw new java.lang.AssertionError(safe"no companion `$name` to add a constructor to")
   }
+
+  // whether a name in the local scope is the declaration's own, see ScopeDecl
+  def ownsValue(name: String, defId: DefId): Boolean = local.values.get(name).exists(_.defId === defId)
+  def ownsType(name: String, defId: DefId): Boolean = local.types.get(name).exists(_.defId === defId)
 
   // looking up names
   def getValueEntry(name: String): Option[EnvValueEntry] = local.values.get(name).orElse(parent.values.get(name))
@@ -144,15 +159,17 @@ case class Env(
     this.copy(namespaces = namespaces.addOrModify((namespace, members)))
   private def withLocal(nextLocal: BlockScope): Env =
     inNs.foldLeft(this.copy(local = nextLocal))((env, inNs) => env.updateNamespaceMembers(inNs.nsId, nextLocal))
+  private def withLocalValues(nextValues: Namespace[EnvValueEntry]): Env = withLocal(local.copy(values = nextValues))
+  private def withLocalTypes(nextTypes: Namespace[EnvTypeEntry]): Env = withLocal(local.copy(types = nextTypes))
 
   private def addValueEntry(name: String, entry: EnvValueEntry, pos: Pos): An[Env] =
     local.values.add((name, entry)) match {
-      case Some(updatedNs) => An.valid(withLocal(local.copy(values = updatedNs)))
+      case Some(updatedNs) => An.valid(withLocalValues(updatedNs))
       case None => An.error(SourceMessage(pos, safe"Cannot shadow existing value with same name `${name}`"))
     }
   private def addTypeEntry(name: String, entry: EnvTypeEntry, pos: Pos): An[Env] =
     local.types.add((name, entry)) match {
-      case Some(updatedNs) => An.valid(withLocal(local.copy(types = updatedNs)))
+      case Some(updatedNs) => An.valid(withLocalTypes(updatedNs))
       case None => An.error(SourceMessage(pos, safe"Cannot shadow existing type with same name `${name}`"))
     }
 }

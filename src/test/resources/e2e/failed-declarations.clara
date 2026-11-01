@@ -1,0 +1,32 @@
+// a duplicate or a declaration that failed loses only itself: the name stays taken, the body is still analyzed in a
+// namespace of its own, so the errors of every declaration are reported at once
+
+::singleton Flag
+::extend Flag {
+  ::alias Bad: Unknown1
+}
+
+::singleton Failed<A>
+::extend Failed {
+  ::alias Member: ()
+  ::alias Other: Member
+  ::alias Bad: Unknown2
+}
+::alias Failed: ()
+::alias UsesFailed: Failed
+
+::namespace Space {
+  ::alias Member: ()
+}
+::namespace Space {
+  ::alias Member: ()
+  ::alias Other: Member
+  ::alias Bad: Unknown3
+}
+
+::declare Id: ()
+::tagged Id: ()
+
+value = ()
+::declare value: Unknown4
+()

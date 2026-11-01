@@ -1,8 +1,7 @@
 package clara.analyzer
 
 import clara.asg.Terms
-import clara.ast.Ast
-import clara.util.Message
+import clara.ast.{Ast, SourceMessage}
 
 import impl._
 
@@ -11,7 +10,7 @@ import impl._
 
 case class AnalyzedProgram(result: AnResult[Terms.Block]) {
   def program: Option[Terms.Block] = result.value.toOption
-  def messages: Seq[Message] = result.log.warnings ++ result.value.left.getOrElse(Seq())
+  def messages: Seq[SourceMessage] = (result.log.warnings ++ result.value.left.getOrElse(Seq())).sortBy(_.pos)
 }
 
 object Analyzer {

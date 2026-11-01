@@ -1,0 +1,21 @@
+::opaque String
+::declare console: { log: String => () }
+// the ::extends of a type are one companion: types can refer to each other across them, values go in source order
+
+::extend Greeting {
+  ::alias Text: Later
+  hello: Text = "hello"
+}
+
+::tagged Greeting: String
+
+::extend Greeting {
+  ::alias Later: String
+  world: Later = "world"
+  print: Text => () = text => console.log(text)
+}
+
+Greeting.print(Greeting.hello)
+Greeting.print(Greeting.world)
+_ = Greeting("unused")
+()

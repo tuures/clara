@@ -35,6 +35,8 @@ object TypeInterpreter {
   def wrapperConstructorFunc(con: WrapperTypeCon): An[Func] = withTypeStructures(impl => An.valid(impl.wrapperConstructorFunc(con)))
   def casesCheck(piecewise: Ast.Piecewise, patterns: Seq[Terms.Pattern], matchedType: Option[Type]): An[Unit] =
     withTypeStructures(_.casesCheck(piecewise, patterns, matchedType))
+  def rejectUnsupportedRecursion(cons: Seq[WrapperTypeCon]): An[Unit] =
+    withTypeStructures(impl => TypeRecursionCheck.rejectUnsupported(impl.typeStructures, cons))
 
   private def withTypeStructures[A](f: TypeInterpreterImpl => An[A]): An[A] = An.currentLog.flatMap(log => f(TypeInterpreterImpl(log.typeStructures)))
 
@@ -65,7 +67,8 @@ object TypeInterpreter {
 // ends there instead of looping. Each unwrapping step checks a copy with one more remembered, so they're empty for a
 // new check. This terminates for regular recursion (a recursive reference has the type params of the con as its type
 // args, so a finite number of types is reached) that is contractive (it's inside a tuple, a record or a function,
-// so the head of a type unwraps into a non-wrapper in a finite number of steps).
+// so the head of a type unwraps into a non-wrapper in a finite number of steps). rejectUnsupportedRecursion rejects
+// the others.
 case class TypeInterpreterImpl(
   typeStructures: TypeStructures,
   private val assumedAssignable: Set[(Type, Type)] = Set.empty,
