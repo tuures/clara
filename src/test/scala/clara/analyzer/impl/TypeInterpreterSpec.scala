@@ -199,6 +199,9 @@ class TypeInterpreterSpec extends BaseSpec {
 
   testDisjoint(true)(Bottom, aParam, "!, A")
   testDisjoint(true)(redSingleton, blueSingleton, "Red, Blue")
+  testDisjoint(false)(ErrorType, redSingleton, "<error>, Red")
+  testDisjoint(false)(ErrorType, Bottom, "<error>, !")
+  testDisjoint(false)(ErrorType, Tuple(Seq(Uni)), "<error>, a tuple")
   testDisjoint(false)(redSingleton, redSingleton, "Red, Red")
   testDisjoint(true)(redBlueUnionAliasType, greenSingleton, "RedOrBlueAlias, Green", typeStructures = redBlueUnionAliasStructure)
   testDisjoint(false)(redBlueUnionAliasType, redSingleton, "RedOrBlueAlias, Red", typeStructures = redBlueUnionAliasStructure)
@@ -236,6 +239,15 @@ class TypeInterpreterSpec extends BaseSpec {
       assert(TypeInterpreterImpl(typeStructures).isAssignable(t1, t2) === expected)
     }
   }
+
+  // the error type is assignable both ways, also through what it's a part of
+  testAssignable(true)(ErrorType, Uni)
+  testAssignable(true)(Uni, ErrorType)
+  testAssignable(true)(ErrorType, Bottom)
+  testAssignable(true)(Top, ErrorType)
+  testAssignable(true)(Tuple(Seq(ErrorType, Uni)), Tuple(Seq(Top, Uni)))
+  testAssignable(true)(Func(ErrorType, Uni), Func(Uni, ErrorType))
+  testAssignable(false)(Tuple(Seq(ErrorType, Top)), Tuple(Seq(Uni, Uni)))
 
   testAssignable(true)(Top, Top)
   testAssignable(true)(Bottom, Bottom)

@@ -367,7 +367,7 @@ class PatternAnalyzerSpec extends BaseSpec {
     val declaredDefId = DefId()
     val env = Env.empty.declareValue("x", NoPos, declaredDefId).run.value.value
 
-    val result = PatternAnalyzer.walkValueDef(env, Ast.CapturePattern("x"), Some(Types.Uni)).run
+    val result = PatternAnalyzer.walkValueDef(env, Ast.CapturePattern("x"), Some(Types.Uni), Map("x" -> declaredDefId)).run
 
     inside(result.value.value) { case (nextEnv, _) =>
       assert(nextEnv.local.values.get("x") === Some(EnvValue(Types.Uni, declaredDefId, Nil, NoPos)))

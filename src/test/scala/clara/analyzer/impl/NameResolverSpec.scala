@@ -81,10 +81,10 @@ class NameResolverSpec extends BaseSpec {
 
   test("a value used before its definition is an error, also through its namespace") {
     // the names pass declares the values, the values pass defines them
-    val (env, _) = BlockAnalyzerImpl.analyzeDeclarations(Env.empty, Seq(
+    val (env, _) = BlockAnalyzerImpl.analyzeDeclarations(Env.empty, IndexedBlock.of(Seq(
       ValueDef(CapturePattern("value"), UnitLiteral()),
       color(ValueDef(CapturePattern("favorite"), UnitLiteral())),
-    )).run.value.value
+    ))).run.value.value
 
     val valueResult = NameResolver.value(env, Nil, "value", NoPos).run
     val memberResult = NameResolver.value(env, nsPath("Color"), "favorite", NoPos).run

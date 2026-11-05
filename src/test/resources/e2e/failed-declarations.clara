@@ -1,5 +1,5 @@
 // a duplicate or a declaration that failed loses only itself: the name stays taken, the body is still analyzed in a
-// namespace of its own, so the errors of every declaration are reported at once
+// namespace of its own, so the errors of every declaration are reported at once, without follow-up errors
 
 ::singleton Flag
 ::extend Flag {
@@ -29,4 +29,10 @@
 
 value = ()
 ::declare value: Unknown4
+
+// its annotation is reported once, what uses it gets no follow-up errors
+annotated: Unknown5 = ()
+usesAnnotated: Failed = annotated
+missing = nope
+usesMissing = missing(())
 ()

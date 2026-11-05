@@ -12,15 +12,13 @@ import clara.asg.Attributes.MethodAttributes
 sealed trait EnvValueEntry {
   def defId: DefId
 }
-case class EnvDeclaredValue(defId: DefId, signature: Option[Type], definedInNs: Seq[String], definedAt: Pos)
-  extends EnvValueEntry
+case class EnvDeclaredValue(defId: DefId, definedInNs: Seq[String], definedAt: Pos) extends EnvValueEntry
 case class EnvValue(typ: Type, defId: DefId, definedInNs: Seq[String], definedAt: Pos) extends EnvValueEntry
 case class EnvNamespaceRef(namespace: NsId, defId: DefId) extends EnvValueEntry
 
 sealed trait EnvTypeEntry {
   def defId: DefId
 }
-case class EnvDeclaredType(defId: DefId, definedAt: Pos) extends EnvTypeEntry
 case class EnvTypeCon(con: TypeCon, defId: DefId) extends EnvTypeEntry
 case class EnvNamespace(namespace: NsId, defId: DefId, definedAt: Pos) extends EnvTypeEntry
 case class EnvCompanion(con: TypeCon, namespace: NsId, defId: DefId) extends EnvTypeEntry
@@ -43,6 +41,7 @@ case class Env(
   private val inNs: Option[InNamespace],
   // see allowForwardReferences
   private val forwardReferable: Set[DefId],
+  private val signatures: UniqInfo[DefId, Type],
 ) {
   def nsPath: Seq[String] = inNs.fold(Seq.empty[String])(_.nsPath)
 
@@ -61,7 +60,7 @@ case class Env(
     startNestedScope.copy(local = namespaceMembers(nsId), inNs = Some(InNamespace(nsPath :+ name, nsId)))
   // back from the body of a namespace entered from this env: keeps the members the pass added and the namespaces the
   // pass added or updated (e.g. nested ones), the namespaces of the body env are the newer version of this env's
-  def leaveNamespace(bodyEnv: Env): Env = this.copy(namespaces = bodyEnv.namespaces)
+  def leaveNamespace(bodyEnv: Env): Env = this.copy(namespaces = bodyEnv.namespaces, signatures = bodyEnv.signatures)
   // the declared values that the value expressions analyzed with this env can refer to before their definitions
   def allowForwardReferences(defIds: Set[DefId]): Env = this.copy(forwardReferable = forwardReferable ++ defIds)
   def isForwardReferable(defId: DefId): Boolean = forwardReferable(defId)
@@ -69,24 +68,17 @@ case class Env(
   // adding names
   def addValue(name: String, typ: Type, pos: Pos, defId: DefId = DefId()): An[Env] =
     addValueEntry(name, EnvValue(typ, defId, nsPath, pos), pos)
-  def declareValue(name: String, pos: Pos, defId: DefId): An[Env] = addValueEntry(name, EnvDeclaredValue(defId, None, nsPath, pos), pos)
-  def addValueSignature(name: String, signature: Type): Env = local.values.get(name) match {
-    case Some(declared @ EnvDeclaredValue(_, None, _, _)) =>
-      withLocalValues(local.values.addOrModify((name, declared.copy(signature = Some(signature)))))
-    case _ => throw new java.lang.AssertionError(safe"value `$name` hasn't been declared without a signature")
-  }
-  def defineValue(name: String, typ: Type, pos: Pos): An[Env] = local.values.get(name) match {
-    case Some(EnvDeclaredValue(defId, _, _, _)) =>
-      An.valid(withLocalValues(local.values.addOrModify((name, EnvValue(typ, defId, nsPath, pos)))))
-    case _ => throw new java.lang.AssertionError(safe"value `$name` hasn't been declared")
+  def declareValue(name: String, pos: Pos, defId: DefId): An[Env] = addValueEntry(name, EnvDeclaredValue(defId, nsPath, pos), pos)
+  // the type annotation of a single typed value def, see TypesPass.signature
+  def addSignature(defId: DefId, signature: Type): Env = this.copy(signatures = signatures.addOrModify((defId, signature)))
+  def signature(defId: DefId): Option[Type] = signatures.get(defId)
+  // the value of a declaration whose name is still declared by it, not a duplicate's or one already defined
+  def defineValue(name: String, defId: DefId, typ: Type, pos: Pos): Env = local.values.get(name) match {
+    case Some(EnvDeclaredValue(`defId`, _, _)) => withLocalValues(local.values.addOrModify((name, EnvValue(typ, defId, nsPath, pos))))
+    case _ => this
   }
   def addTypeCon(name: String, con: TypeCon, pos: Pos, defId: DefId = DefId()): An[Env] =
     addTypeEntry(name, EnvTypeCon(con, defId), pos)
-  def declareType(name: String, defId: DefId, pos: Pos): An[Env] = addTypeEntry(name, EnvDeclaredType(defId, pos), pos)
-  def defineType(name: String, con: TypeCon): Env = local.types.get(name) match {
-    case Some(EnvDeclaredType(defId, _)) => withLocalTypes(local.types.addOrModify((name, EnvTypeCon(con, defId))))
-    case _ => throw new java.lang.AssertionError(safe"type `$name` hasn't been declared")
-  }
   // adding namespaces
   // members are added separately by entering its body (enterNamespace, leaveNamespace)
   def addStandaloneNamespace(name: String, nsId: NsId, defId: DefId, pos: Pos): An[Env] =
@@ -122,23 +114,15 @@ case class Env(
     case _ => throw new java.lang.AssertionError(safe"no companion `$name` to add a constructor to")
   }
 
-  // whether a name in the local scope is the declaration's own, see ScopeDecl
-  def ownsValue(name: String, defId: DefId): Boolean = local.values.get(name).exists(_.defId === defId)
-  def ownsType(name: String, defId: DefId): Boolean = local.types.get(name).exists(_.defId === defId)
-
+  // the type con of a type def that owns its name in the local scope, see IndexedBlock
+  def ownTypeCon(name: String, defId: DefId): Option[TypeCon] = local.types.get(name).collect {
+    case EnvTypeCon(con, `defId`) => con
+    case EnvCompanion(con, _, `defId`) => con
+  }
   // looking up names
   def getValueEntry(name: String): Option[EnvValueEntry] = local.values.get(name).orElse(parent.values.get(name))
   def getValue(name: String): Option[EnvValue] = getValueEntry(name).collect { case value: EnvValue => value }
   def getTypeEntry(name: String): Option[EnvTypeEntry] = local.types.get(name).orElse(parent.types.get(name))
-  // the type con declared with this name in the local scope, with or without a companion
-  def localTypeCon(name: String): Option[TypeCon] = local.types.get(name).collect {
-    case EnvTypeCon(con, _) => con
-    case EnvCompanion(con, _, _) => con
-  }
-  // the standalone namespace declared with this name in the local scope
-  def localStandaloneNamespace(name: String): Option[NsId] = local.types.get(name).collect {
-    case EnvNamespace(namespace, _, _) => namespace
-  }
   // the companion namespace of the type declared with this name in the local scope
   def localCompanionNamespace(name: String): Option[NsId] = local.types.get(name).collect {
     case EnvCompanion(_, namespace, _) => namespace
@@ -175,5 +159,5 @@ case class Env(
 }
 
 object Env {
-  def empty: Env = Env(BlockScope.empty, BlockScope.empty, UniqInfo.empty, UniqInfo.empty, None, Set.empty)
+  def empty: Env = Env(BlockScope.empty, BlockScope.empty, UniqInfo.empty, UniqInfo.empty, None, Set.empty, UniqInfo.empty)
 }

@@ -1,13 +1,17 @@
-// an unknown type is reported at the name itself, wrong type args at the whole type
-// (type errors in a scope stop its values from being analyzed, see error-positions-values)
+// an unknown type or value is reported at the name itself, wrong type args and a value that doesn't fit its type at the
+// whole type
 ::namespace Outer {
   ::namespace Inner {
     ::alias Unit: ()
     ::alias Pair<A, B>: (A, B)
+    value = ()
   }
 }
 
 missingType: Outer.Inner.Foo<()> = ()
 tooManyArgs: Outer.Inner.Unit<()> = ()
 tooFewArgs: Outer.Inner.Pair<()> = ()
+missingValue = Outer.Inner.nope
+missingConstant = #(Outer.Inner.Nope => ())
+notAssignable: Outer.Inner.Pair<(), ()> = Outer.Inner.value
 ()

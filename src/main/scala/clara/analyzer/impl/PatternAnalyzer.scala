@@ -1,15 +1,14 @@
 package clara.analyzer.impl
 
-import clara.asg.{TermLiteral, Terms, Types}
+import clara.asg.{DefId, TermLiteral, Terms, Types}
 import clara.ast.{Ast, AstLiteral, Pos, SourceMessage}
 
 import clara.util.Safe._
 
 // refutable: whether the pattern only has to be able to match some values (a case of #()) instead of every value
 // (a value def or a function parameter), see matchType. Applies to the whole pattern including nested patterns.
-// declared: whether the names the pattern binds were declared by the names pass of the scope (a value def), so that
-// the pattern defines them, instead of adding new names (a parameter, a case).
-case class PatternAnalyzerImpl(env: Env, refutable: Boolean, declared: Boolean) {
+// declaredIds: define these names (a value def), instead of adding new names (a parameter, a case).
+case class PatternAnalyzerImpl(env: Env, refutable: Boolean, declaredIds: Option[Map[String, DefId]]) {
   def walk(targetPattern: Ast.Pattern, fromType: Option[Types.Type]): An[(Env, Terms.Pattern)] = targetPattern match {
     case Ast.WildcardPattern(pos) =>
       val typ = fromType.getOrElse(Types.Top)
@@ -114,7 +113,10 @@ case class PatternAnalyzerImpl(env: Env, refutable: Boolean, declared: Boolean) 
   def capture(name: String, fromType: Option[Types.Type], pos: Pos): An[(Env, Terms.CapturePattern)] =
     // FIXME default to Top type and just give warning?
     An.fromSomeOrError(fromType, SourceMessage(pos, "Could not infer type")).flatMap { fromType =>
-      (if (declared) env.defineValue(name, fromType, pos) else env.addValue(name, fromType, pos)).map { nextEnv =>
+      (declaredIds match {
+        case Some(declaredIds) => An.valid(declaredIds.get(name).fold(env)(env.defineValue(name, _, fromType, pos)))
+        case None => env.addValue(name, fromType, pos)
+      }).map { nextEnv =>
         (nextEnv, Terms.CapturePattern(name, fromType))
       }
     }
@@ -146,14 +148,19 @@ case class PatternAnalyzerImpl(env: Env, refutable: Boolean, declared: Boolean) 
 }
 
 object PatternAnalyzer {
-  def walkValueDef(env: Env, targetPattern: Ast.Pattern, fromType: Option[Types.Type]): An[(Env, Terms.Pattern)] =
-    PatternAnalyzerImpl(env, refutable = false, declared = true).walk(targetPattern, fromType)
+  def walkValueDef(
+    env: Env,
+    targetPattern: Ast.Pattern,
+    fromType: Option[Types.Type],
+    declaredIds: Map[String, DefId],
+  ): An[(Env, Terms.Pattern)] =
+    PatternAnalyzerImpl(env, refutable = false, declaredIds = Some(declaredIds)).walk(targetPattern, fromType)
 
   def walkParameter(env: Env, parameterPattern: Ast.Pattern, fromType: Option[Types.Type]): An[(Env, Terms.Pattern)] =
-    PatternAnalyzerImpl(env, refutable = false, declared = false).walk(parameterPattern, fromType)
+    PatternAnalyzerImpl(env, refutable = false, declaredIds = None).walk(parameterPattern, fromType)
 
   def walkCase(env: Env, casePattern: Ast.Pattern, fromType: Option[Types.Type]): An[(Env, Terms.Pattern)] =
-    PatternAnalyzerImpl(env, refutable = true, declared = false).walk(casePattern, fromType)
+    PatternAnalyzerImpl(env, refutable = true, declaredIds = None).walk(casePattern, fromType)
 
   // The type whose every value the pattern matches, e.g. 1 has type Int but doesn't cover it
   def coveredType(pattern: Terms.Pattern): Types.Type = pattern match {

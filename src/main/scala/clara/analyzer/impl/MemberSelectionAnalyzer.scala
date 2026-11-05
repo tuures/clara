@@ -13,6 +13,7 @@ case class MemberSelectionAnalyzerImpl(env: Env, name: String, memberPos: Pos) {
   }
 
   def memberOfType(objectType: Types.Type): An[Option[(Terms.SelectedMember, Types.Type)]] = objectType match {
+    case Types.ErrorType => An.valid(Some((Terms.SelectedField, Types.ErrorType)))
     case Types.Record(fields) => An.valid(fields.get(name).map(typ => (Terms.SelectedField, typ)))
     case Types.Union(ts) =>
       // TODO: fields of records would be quite straightforward

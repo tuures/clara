@@ -124,6 +124,6 @@ object TypeRecursionCheck {
     case Types.Tuple(ts) => ts.flatMap(references(_, guarded = true))
     case Types.Union(ts) => ts.flatMap(references(_, guarded))
     case Types.Intersection(ts) => ts.flatMap(references(_, guarded))
-    case Types.Top | Types.Bottom | Types.Uni | _: Types.Param | _: Types.Singleton => Nil
+    case Types.Top | Types.Bottom | Types.Uni | Types.ErrorType | _: Types.Param | _: Types.Singleton => Nil
   }
 }

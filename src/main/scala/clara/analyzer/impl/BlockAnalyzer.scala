@@ -5,20 +5,23 @@ import clara.ast.{Ast, Pos, SourceMessage}
 
 import clara.util.Safe._
 
-// A scope (a block or a namespace body) is analyzed in three passes, each over the whole scope before the next:
+// A block (a block expression, a namespace body) is analyzed in three passes, each over the whole block before the
+// next:
 // 1. NamesPass gives every declaration its name (type cons, namespaces, companions, values) without analyzing any
 //    expression, so that declarations can refer to each other in any order. It returns the terms of the type defs,
 //    which are hoisted to the top of the block so that singletons and constructors exist before any value uses them.
-//    Only the first declaration of a name in a scope gets the name, a later one is a duplicate (the Env reports it)
-//    and has no entry to act on in the later passes, see ScopeDecl. A type def whose type con fails stays declared,
-//    holding its name.
+//    Only the first declaration of a name in a block gets the name, a later one is a duplicate (the Env reports it)
+//    and has no entry to act on in the later passes, see IndexedBlock.
 // 2. TypesPass resolves the type expressions: what each wrapper type wraps, value def signatures (for recursive
-//    functions), the types of `::declare`d values. Nothing is checked against them yet. It also runs after errors in
-//    the names pass, so that its errors are reported too. If neither pass had errors, the types of the whole block
-//    (its namespaces included) are checked for recursion (TypeInterpreter.rejectUnsupportedRecursion).
-// 3. ValuesPass analyzes the value expressions in source order, checking types. It runs only if there were no errors
-//    before it.
-// A namespace body has no passes of its own: each pass of the scope it's in walks the body too, so that types inside
+//    functions), the types of `::declare`d values. Nothing is checked against them yet. A type expression that fails is
+//    the error type. Then the types of the whole block (its namespaces included) are checked for recursion
+//    (TypeInterpreter.rejectUnsupportedRecursion).
+// 3. ValuesPass analyzes the value expressions in source order, checking types. A value that fails is defined as the
+//    error type. It doesn't run after an unsupported recursive type, as the checks wouldn't terminate on it.
+// Each pass runs also after errors in the earlier ones, what failed is the error type (Types.ErrorType), so that the
+// errors of the whole block are reported at once without follow-up errors. A block with errors has no result.
+//
+// A namespace body has no passes of its own: each pass of the block it's in walks the body too, so that types inside
 // and outside it can refer to each other. An error in a declaration loses only what the declaration would have done,
 // the pass goes on (An.stepDeferring).
 object BlockAnalyzerImpl {
@@ -37,7 +40,7 @@ object BlockAnalyzerImpl {
           Seq(defId -> SourceMessage(con.definedAt, safe"Unused type `${qualified(name)}`"))
         case (name, EnvNamespace(_, defId, definedAt)) if !isUsed(defId) =>
           Seq(defId -> SourceMessage(definedAt, safe"Unused namespace `${qualified(name)}`"))
-        case (_, _: EnvDeclaredType | _: EnvTypeCon) => Nil
+        case (_, _: EnvTypeCon) => Nil
         // an unused namespace (or a type with companion) is only reported alone if unused
         // if used, recurse to check its members
         case (name, EnvCompanion(_, nsId, _)) => unused(env.namespaceMembers(nsId), nsPath :+ name)
@@ -73,22 +76,22 @@ object BlockAnalyzerImpl {
   }
 
   // the names and types passes and the recursion check, the values pass comes after them
-  def analyzeDeclarations(env: Env, bcs: Seq[Ast.BlockContent]): An[(Env, Vector[Terms.TypeDef])] = {
-    val decls = ScopeDecl.of(bcs)
+  def analyzeDeclarations(env: Env, block: IndexedBlock): An[(Env, Vector[Terms.TypeDef])] =
+    NamesPass.walk(env, block).flatMap { case (namedEnv, typeDefTerms) =>
+      TypesPass.walk(namedEnv, block).flatMap { typedEnv =>
+        val cons = typeDefTerms.map(_.con).collect { case con: TypeCons.WrapperTypeCon => con }
 
-    An.escalateErrors(NamesPass.walk(env, decls).flatMap { case (namedEnv, typeDefTerms) =>
-      TypesPass.walk(namedEnv, decls).map(typedEnv => (typedEnv, typeDefTerms))
-    }).flatMap { case (env, typeDefTerms) =>
-      val cons = typeDefTerms.map(_.con).collect { case con: TypeCons.WrapperTypeCon => con }
-
-      TypeInterpreter.rejectUnsupportedRecursion(cons).map(_ => (env, typeDefTerms))
+        TypeInterpreter.rejectUnsupportedRecursion(cons).map(_ => (typedEnv, typeDefTerms))
+      }
     }
+
+  def walkBlockContents(parentEnv: Env, bcs: Seq[Ast.BlockContent]): An[ValuesPass.State] = {
+    val block = IndexedBlock.of(bcs)
+
+    An.escalateErrors(analyzeDeclarations(parentEnv.startNestedScope, block).flatMap { case (env, typeDefTerms) =>
+      ValuesPass.walk(env, typeDefTerms, block)
+    })
   }
-
-  def walkBlockContents(parentEnv: Env, bcs: Seq[Ast.BlockContent]): An[ValuesPass.State] =
-    analyzeDeclarations(parentEnv.startNestedScope, bcs).flatMap { case (env, typeDefTerms) =>
-      ValuesPass.walk(env, typeDefTerms, bcs)
-    }
 
   def finishBlock(state: An[ValuesPass.State], blockPos: Pos, isProgramBlock: Boolean): An[Terms.Block] =
     state.flatMap { state =>

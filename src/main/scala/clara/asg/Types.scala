@@ -89,6 +89,7 @@ object Types {
   case object Top extends Type
   case object Bottom extends Type
   case object Uni extends Type // the unit type
+  case object ErrorType extends Type
 
   // primitive structural composite types
   case class Func(typeParams: Seq[TypeCons.ParamCon], parameter: Type, result: Type) extends Type
@@ -229,7 +230,7 @@ object Types {
 
   def substituteParams(substitutions: Map[TypeConId, Type], typ: Type) = {
     def substitute(typ: Type): Type = typ match {
-      case t @ (Top | Bottom | Uni) => t
+      case t @ (Top | Bottom | Uni | ErrorType) => t
       case Func(typeParams, parameter, result) =>
         // NOTE no need to touch typeParams because they are always fresh with distinct uniqs for each func
         Func(typeParams, substitute(parameter), substitute(result))
@@ -252,6 +253,7 @@ object Types {
     case Top    => "*"
     case Bottom => "!"
     case Uni    => "()"
+    case ErrorType => "<error>"
     case Func(typeParams, parameter, result) =>
       val paramsList = typeListSource(typeParams.map(TypeCons.toSource))
       safe"$paramsList${toSource(parameter)} => ${toSource(result)}"

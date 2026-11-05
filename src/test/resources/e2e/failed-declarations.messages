@@ -1,11 +1,13 @@
 src/test/resources/e2e/failed-declarations.clara:5:10(–13): Extending a singleton isn't supported yet
 src/test/resources/e2e/failed-declarations.clara:6:16(–23): Unknown type `Unknown1`
 src/test/resources/e2e/failed-declarations.clara:9:13(–21): Cannot define type parameters for type `Failed`
+src/test/resources/e2e/failed-declarations.clara:10:10(–15): Extending a singleton isn't supported yet
 src/test/resources/e2e/failed-declarations.clara:13:16(–23): Unknown type `Unknown2`
 src/test/resources/e2e/failed-declarations.clara:15:9(–14): Cannot shadow existing type with same name `Failed`
-src/test/resources/e2e/failed-declarations.clara:16:21(–26): Unknown type `Failed`
 src/test/resources/e2e/failed-declarations.clara:21:13(–17): Cannot shadow existing type with same name `Space`
 src/test/resources/e2e/failed-declarations.clara:24:16(–23): Unknown type `Unknown3`
 src/test/resources/e2e/failed-declarations.clara:28:10(–11): Cannot shadow existing value with same name `Id`
 src/test/resources/e2e/failed-declarations.clara:31:11(–15): Cannot shadow existing value with same name `value`
 src/test/resources/e2e/failed-declarations.clara:31:18(–25): Unknown type `Unknown4`
+src/test/resources/e2e/failed-declarations.clara:34:12(–19): Unknown type `Unknown5`
+src/test/resources/e2e/failed-declarations.clara:36:11(–14): Unknown value `nope`

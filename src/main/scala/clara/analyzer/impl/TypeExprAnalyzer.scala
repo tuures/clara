@@ -12,7 +12,10 @@ case class TypeExprAnalyzerImpl(env: Env) {
       case (typeCon, args) => TypeInterpreter.instantiate(typeCon, args, pos)
     }
 
-  def typeExprType(typeExpr: Ast.TypeExpr): An[Types.Type] = typeExpr match {
+  // a type expression that fails is the error type, so that analysis can continue and report more errors
+  def typeExprType(typeExpr: Ast.TypeExpr): An[Types.Type] = An.deferErrors(resolvedType(typeExpr))(Types.ErrorType)
+
+  private def resolvedType(typeExpr: Ast.TypeExpr): An[Types.Type] = typeExpr match {
     case Ast.TopType(_) => An.valid(Types.Top)
     case Ast.BottomType(_) => An.valid(Types.Bottom)
     case Ast.UnitType(_) => An.valid(Types.Uni)
@@ -51,7 +54,7 @@ object TypeExprAnalyzer {
   def namedTypeCon(env: Env, n: Ast.NameWithPos): An[TypeCons.TypeCon] =
     NameResolver.typeCon(env, Nil, n.name, n.pos)
   def namedNullaryType(env: Env, name: String, pos: Pos): An[Types.Type] =
-    TypeExprAnalyzerImpl(env).namedType(Nil, Ast.NameWithPos(name, pos), Nil, pos)
+    An.deferErrors(TypeExprAnalyzerImpl(env).namedType(Nil, Ast.NameWithPos(name, pos), Nil, pos))(Types.ErrorType)
   def typeExprType(env: Env, typeExpr: Ast.TypeExpr): An[Types.Type] =
     TypeExprAnalyzerImpl(env).typeExprType(typeExpr)
 }

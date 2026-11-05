@@ -97,6 +97,7 @@ case class TypeInterpreterImpl(
   }
 
   def isAssignable(t1: Type, t2: Type): Boolean = (t1, t2) match {
+    case (ErrorType, _) | (_, ErrorType) => true
     // Check for equality before any decomposition or subtyping based rules
     case _ if t1 == t2 => true
     // Reached the same comparison again while comparing the wrapped types for it: assumed to hold, so the answer depends
@@ -149,6 +150,7 @@ case class TypeInterpreterImpl(
   // boxed values. Host types that genuinely overlap must not be declared as separate opaque types,
   // e.g. ::alias Number = Int | Float instead of ::opaque Number
   def disjoint(t1: Type, t2: Type): Boolean = (t1, t2) match {
+    case (ErrorType, _) | (_, ErrorType) => false
     case (Bottom, _) | (_, Bottom) => true
     // Reached the same comparison again while comparing the wrapped types for it: overlap can't be ruled out
     case _ if assumedOverlapping.contains((t1, t2)) => false
@@ -187,6 +189,7 @@ case class TypeInterpreterImpl(
   // Normalize type into tuple form. e.g. (Int, Bool) | (String, Bool) | Int gives (Int | String, Bool).
   // Types that can't be decomposed but could be such a tuple (e.g. Top or a type param) give Top.
   def tupleElementTypes(typ: Type, length: Int): Seq[Type] = typ match {
+    case ErrorType => Seq.fill(length)(ErrorType)
     case Tuple(ts) if ts.length == length => ts
     case t: Alias => tupleElementTypes(wrappedType(t), length)
     case t: Tagged => tupleElementTypes(wrappedType(t), length)
@@ -375,7 +378,7 @@ case class TypeInterpreterImpl(
         case Intersection(ts) => ts.exists(mentions)
         case t: Wrapper => t.typeArgs.exists(mentions)
         case Opaque(_, typeArgs) => typeArgs.exists(mentions)
-        case Top | Bottom | Uni | _: Singleton => false
+        case Top | Bottom | Uni | ErrorType | _: Singleton => false
       }
     }
   }
@@ -384,7 +387,7 @@ case class TypeInterpreterImpl(
     def isDisjointFromTuples(typ: Type): Boolean = typ match {
       case Bottom | Uni | _: Record | _: Func | _: Singleton | _: Boxed | _: Opaque => true
       // can hold tuples (Top, Param), is one (Tuple), or is decomposed by disjoint before this is reached
-      case Top | _: Tuple | _: Param | _: Union | _: Intersection | _: Alias | _: Tagged => false
+      case Top | ErrorType | _: Tuple | _: Param | _: Union | _: Intersection | _: Alias | _: Tagged => false
     }
   }
 
@@ -398,7 +401,7 @@ case class TypeInterpreterImpl(
     val unreachableCases = patterns.zip(piecewise.pieces).zipWithIndex.collect {
       // TODO: could this be expressed somehow as a reduce so that we accumulate the covered types
       // and check reachability in one pass, instead of using take(i) for each case, for better performance?
-      case ((pattern, (astPattern, _)), i) if isAssignable(pattern.typ, Types.Union(covered.take(i))) =>
+      case ((pattern, (astPattern, _)), i) if pattern.typ != ErrorType && isAssignable(pattern.typ, Types.Union(covered.take(i))) =>
         SourceMessage(astPattern.pos,
           safe"${PatternAnalyzer.quotedPattern(astPattern.pos)} is unreachable, earlier cases already match all its values"
         )

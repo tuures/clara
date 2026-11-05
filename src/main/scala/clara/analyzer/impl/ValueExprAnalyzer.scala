@@ -74,6 +74,7 @@ case class ValueExprAnalyzerImpl(env: Env) {
       // the callee's parameter type helps to infer types of literal lambdas and piecewise functions in the argument
       val expectedArgumentType = calleeTerm.typ match {
         case f: Types.Func => Some(f.parameter)
+        case Types.ErrorType => Some(Types.ErrorType)
         case _ => None
       }
 
@@ -89,6 +90,7 @@ case class ValueExprAnalyzerImpl(env: Env) {
       An.error(SourceMessage(calleePos, safe"Cannot call value of type `${Types.toSource(calleeTerm.typ)}`"))
 
     calleeTerm.typ match {
+      case Types.ErrorType => An.valid(Types.ErrorType)
       case f: Types.Func => funcCallResultType(f, argumentTerm, argumentPos)
       case Types.Intersection(ts) => ts.flatMap {
         // TODO: is it ok that we just discard the intersection type members that are polymorphic functions. Check if parser already rejects them, if not we should probably give an error here instead of just ignoring them.
@@ -142,8 +144,11 @@ case class ValueExprAnalyzerImpl(env: Env) {
     (valueExpr, expectedType) match {
       case (_, Some(alias: Types.Alias)) =>
         TypeInterpreter.wrappedType(alias).flatMap(wrappedType => valueExprTermExpecting(valueExpr, Some(wrappedType)))
+      case (l: Ast.Lambda, Some(Types.ErrorType)) => lambdaTerm(l, Some(Types.ErrorType))
       case (l: Ast.Lambda, Some(Types.Func(Nil, p, _))) => lambdaTerm(l, Some(p))
+      case (pw: Ast.Piecewise, Some(Types.ErrorType)) => piecewiseTerm(pw, Some(Types.ErrorType))
       case (pw: Ast.Piecewise, Some(Types.Func(Nil, p, _))) => piecewiseTerm(pw, Some(p))
+      case (Ast.Tuple(es, _), Some(Types.ErrorType)) => tupleTerm(es, es.map(_ => Some(Types.ErrorType)))
       case (Ast.Tuple(es, _), Some(Types.Tuple(expectedTypes))) if es.length == expectedTypes.length =>
         tupleTerm(es, expectedTypes.map(Some(_)))
       case (Ast.Record(fields, _), Some(Types.Record(expectedFieldTypes))) => recordTerm(fields, expectedFieldTypes)
