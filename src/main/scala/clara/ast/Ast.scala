@@ -81,6 +81,7 @@ object Ast {
   case class Call(callee: ValueExpr, argument: ValueExpr, pos: Pos = NoPos) extends ValueExpr
   case class Pipe(argument: ValueExpr, callee: ValueExpr, pos: Pos = NoPos) extends ValueExpr
 
+  case class RawConstructor(nsPath: Seq[NameWithPos], name: NameWithPos, pos: Pos = NoPos) extends ValueExpr
   case class ConstructPattern(name: NameWithPos, argumentPattern: Pattern, pos: Pos = NoPos) extends Pattern
 
   case class Attribute(key: String, value: Option[String], pos: Pos = NoPos) extends Node

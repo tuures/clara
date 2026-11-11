@@ -270,6 +270,11 @@ class JsEmitterSpec extends BaseSpec {
     assert(emitExpr(expr) === JsAst.BinaryOperation(JsAst.Named("a"), "+", JsAst.Named("b")))
   }
 
+  test("emitValueExpr: RawConstructor names the constructor its type def emits") {
+    val con = TypeCons.WrapperTypeCon(TypeDefKind.Boxed, "Some", Nil, Seq("Option"), NoPos)
+    assert(emitExpr(Terms.RawConstructor(con, dummyType)) === JsAst.Named("Option$Some$$new"))
+  }
+
   // emitModule / emitBlockContent
 
   test("emitModule: empty block") {
@@ -321,14 +326,14 @@ class JsEmitterSpec extends BaseSpec {
     )))
   }
 
-  test("emitModule: tagged and boxed type defs emit their constructors as the apply of their companion") {
+  test("emitModule: tagged and boxed type defs emit their raw constructors") {
     val program = Terms.Block(Seq(
       Terms.TypeDef(TypeCons.WrapperTypeCon(TypeDefKind.Tagged, "Id", Nil, Nil, NoPos)),
       Terms.TypeDef(TypeCons.WrapperTypeCon(TypeDefKind.Boxed, "Some", Nil, Seq("Option"), NoPos)),
       Terms.TypeDef(TypeCons.WrapperTypeCon(TypeDefKind.Alias, "Unit", Nil, Nil, NoPos)),
     ), dummyType)
     assert(modulePrinted(program) ===
-      "const Id$apply = $value =>\n  $value\n\nconst Option$Some$apply = $value =>\n  ({\n    $type: 'Option.Some',\n    $value: $value\n  })")
+      "const Id$$new = $value =>\n  $value\n\nconst Option$Some$$new = $value =>\n  ({\n    $type: 'Option.Some',\n    $value: $value\n  })")
   }
 
   test("emitModule: namespace members are top-level consts qualified with their namespaces") {

@@ -1343,16 +1343,17 @@ class BlockAnalyzerSpec extends BaseSpec {
     ))
   }
 
-  test("an apply in a later ::extend of a type is still its constructor") {
+  test("an apply in a later ::extend of a type replaces its generated apply") {
     val block = Block(Seq(
       TypeDef(TypeDefKind.Tagged, "Id", UnitType()),
       extend("Id"),
       extend("Id", ValueDef(CapturePattern("apply"), UnitLiteral())),
+      NamedValue("Id"),
     ))
 
-    val result = BlockAnalyzerImpl.analyzeDeclarations(Env.empty, IndexedBlock.of(block.bcs)).run
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
 
-    assert(result.value.left.value.map(_.message) === Seq("`apply` of `Id` is its constructor, it can't be redefined yet"))
+    assert(result.value.value.bcs.last === Terms.NamedValue("apply", Seq("Id"), Types.Uni))
   }
 
   test("an ::extend without its type doesn't extend a namespace of the same name") {
@@ -1428,19 +1429,64 @@ class BlockAnalyzerSpec extends BaseSpec {
     ))
   }
 
-  test("a tagged type's companion can't redefine its constructor apply yet, however it's defined") {
+  test("a tagged or boxed type's companion can define its own apply, however it's defined") {
     val block = Block(Seq(
       TypeDef(TypeDefKind.Tagged, "Id", UnitType()),
       extend("Id", ValueDef(CapturePattern("apply"), UnitLiteral())),
       TypeDef(TypeDefKind.Boxed, "Box", UnitType()),
       extend("Box", ValueDef(TuplePattern(Seq(CapturePattern("apply"), WildcardPattern())), Tuple(Seq(UnitLiteral(), UnitLiteral())))),
+      Tuple(Seq(NamedValue("Id"), NamedValue("Box"))),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    assert(result.value.value.bcs.last === Terms.Tuple(Seq(
+      Terms.NamedValue("apply", Seq("Id"), Types.Uni),
+      Terms.NamedValue("apply", Seq("Box"), Types.Uni),
+    ), Types.Tuple(Seq(Types.Uni, Types.Uni))))
+  }
+
+  test("::new is the raw constructor of a tagged or boxed type, also when its companion has its own apply") {
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Tagged, "Id", UnitType()),
+      extend("Id", ValueDef(CapturePattern("apply"), UnitLiteral())),
+      RawConstructor(Nil, NameWithPos("Id")),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    inside(result.value.value.bcs.last) {
+      case Terms.RawConstructor(con, Types.Func(_, Types.Uni, _: Types.Tagged)) => assert(con.name === "Id")
+    }
+  }
+
+  test("::new uses its type and each namespace of its nsPath") {
+    val block = Block(Seq(
+      NamespaceDef(false, NameWithPos("Space"), Seq(TypeDef(TypeDefKind.Boxed, "Box", UnitType()))),
+      RawConstructor(Seq(NameWithPos("Space")), NameWithPos("Box")),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    assert(result.log.warnings.map(_.message) === Nil)
+  }
+
+  test("::new of a type that isn't tagged or boxed is an error") {
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Alias, "Unit", UnitType()),
+      TypeDef(TypeDefKind.Opaque, "Token"),
+      TypeDef(TypeDefKind.Singleton, "None"),
+      ValueDef(CapturePattern("alias"), RawConstructor(Nil, NameWithPos("Unit"))),
+      ValueDef(CapturePattern("opaque"), RawConstructor(Nil, NameWithPos("Token"))),
+      ValueDef(CapturePattern("singleton"), RawConstructor(Nil, NameWithPos("None"))),
     ))
 
     val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
 
     assert(result.value.left.value.map(_.message) === Seq(
-      "`apply` of `Id` is its constructor, it can't be redefined yet",
-      "`apply` of `Box` is its constructor, it can't be redefined yet",
+      "`Unit` has no constructor, only tagged and boxed types have one",
+      "`Token` has no constructor, only tagged and boxed types have one",
+      "`None` has no constructor, only tagged and boxed types have one",
     ))
   }
 

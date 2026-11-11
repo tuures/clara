@@ -536,6 +536,12 @@ class ParserImplsSpec extends BaseSpec {
     Pipe(Pipe(foobar, Call(NamedValue("bas"), bazqux)), zotnoz)
   }
 
+  parseAst(p.simple(_))("::new Id")(RawConstructor(Nil, NameWithPos("Id")))
+  parseAst(p.simple(_))("::new Option.Some")(RawConstructor(Seq(NameWithPos("Option")), NameWithPos("Some")))
+  parseAst(p.spaceCallPart(_))("::new Id(a)")(Call(RawConstructor(Nil, NameWithPos("Id")), NamedValue("a")))
+  parseAst(p.spaceCall(_))("::new Id a")(Call(RawConstructor(Nil, NameWithPos("Id")), NamedValue("a")))
+  reject(p.simple(_))("::new id.")
+
   parseAst(p.constructPattern(_))("Bar b")(
     ConstructPattern(NameWithPos("Bar"), CapturePattern("b"))
   )

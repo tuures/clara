@@ -333,7 +333,7 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   // Simple
 
   def simple[X: P]: P[ValueExpr] =
-    P(unitLiteral | floatLiteral | integerLiteral | stringLiteral | tupleOrParensOrBlock | namedValue | record)
+    P(unitLiteral | floatLiteral | integerLiteral | stringLiteral | tupleOrParensOrBlock | namedValue | record | rawConstructor)
 
   def simpleType[X: P]: P[TypeExpr] =
     P(topType | bottomType | unitType | tupleOrParensType | namedType | recordType)
@@ -428,6 +428,8 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
 
   def pipePart[X: P]: P[ValueExpr] = P(piecewise | lambda | valueAsOrSpaceCall)
   def pipeSep[X: P] = P(nl.? ~ at ~ nl.rep)
+
+  def rawConstructor[X: P]: P[RawConstructor] = P(pp(keyword("new") ~ (nsPath ~~ nameWithPos))(RawConstructor.apply _))
 
   // TODO: should we allow also lowercase name here?
   def constructPattern[X: P] = P(pp(&(anyUpperCaseChar) ~~ nameWithPos ~ simplePattern)(ConstructPattern.apply _))

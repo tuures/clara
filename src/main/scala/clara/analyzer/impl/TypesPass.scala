@@ -1,9 +1,7 @@
 package clara.analyzer.impl
 
 import clara.asg.{TypeCons, Types}
-import clara.ast.{Ast, SourceMessage}
-
-import clara.util.Safe._
+import clara.ast.Ast
 
 // The second pass of a block, see BlockAnalyzer
 object TypesPass {
@@ -50,10 +48,8 @@ object TypesPass {
 
   def wrapperTypeCon(env: Env, typeDef: Ast.TypeDef, con: TypeCons.WrapperTypeCon): An[Env] =
     registerStructure(env, typeDef, con).flatMap { _ =>
-      if (!IndexedBlock.constructibleKind(typeDef)) An.valid(env)
-      else rejectOwnApply(env, con).flatMap(_ => TypeInterpreter.wrapperConstructorFunc(con)).map { constructorType =>
-        env.addConstructor(con.name, con, constructorType, typeDef.target.name.pos)
-      }
+      if (!IndexedBlock.constructibleKind(typeDef) || hasOwnApply(env, con)) An.valid(env)
+      else TypeInterpreter.wrapperConstructorFunc(con).map(env.addConstructor(con.name, con, _))
     }
 
   def registerStructure(env: Env, typeDef: Ast.TypeDef, con: TypeCons.WrapperTypeCon): An[Unit] =
@@ -63,17 +59,6 @@ object TypesPass {
       An.valid(()).tellStructure(con.tcId, typ)
     }
 
-  // TODO: the companion's `apply` is the type's constructor, a member of the same name is an error until `::new`
-  def rejectOwnApply(env: Env, con: TypeCons.WrapperTypeCon): An[Unit] =
-    env.localCompanionNamespace(con.name).flatMap(env.namespaceMembers(_).values.get(TypeCons.ConstructorName)) match {
-      case None => An.valid(())
-      case Some(member) =>
-        val pos = member match {
-          case EnvValue(_, _, _, definedAt) => definedAt
-          case EnvDeclaredValue(_, _, definedAt) => definedAt
-          case _: EnvNamespaceRef => con.definedAt
-        }
-
-        An.error(SourceMessage(pos, safe"`${TypeCons.ConstructorName}` of `${con.name}` is its constructor, it can't be redefined yet"))
-    }
+  def hasOwnApply(env: Env, con: TypeCons.WrapperTypeCon): Boolean =
+    env.localCompanionNamespace(con.name).exists(env.namespaceMembers(_).values.get(TypeCons.ConstructorName).isDefined)
 }

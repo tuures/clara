@@ -51,7 +51,7 @@ object ValuesPass {
       case _: Ast.Lambda | _: Ast.Piecewise => Some(target)
       case _: Ast.UnitLiteral | _: Ast.IntegerLiteral | _: Ast.FloatLiteral | _: Ast.StringLiteral | _: Ast.Tuple |
         _: Ast.Block | _: Ast.NamedValue | _: Ast.ValueAs | _: Ast.Record | _: Ast.MemberSelection | _: Ast.Call |
-        _: Ast.Pipe => None
+        _: Ast.Pipe | _: Ast.RawConstructor => None
     }
     case _: Ast.ValueExpr | _: Ast.ValueDecl | _: Ast.TypeDef | _: Ast.NamespaceDef | _: Ast.MethodSection => None
   }

@@ -49,6 +49,7 @@ object JsEmitter {
           emitCall(callee, argument)
       }
     case Terms.Call(callee, argument, _) => emitCall(callee, argument)
+    case Terms.RawConstructor(con, _) => JsAst.Named(NameMangler.rawConstructorName(con.name, con.definedInNs))
   }
 
   def emitIntegerLiteral(value: TermLiteral.Integer) = value match {
@@ -149,9 +150,9 @@ object JsEmitter {
         JsAst.ObjectLiteral(Seq(NameMangler.TypeTagField -> typeTag(name, definedInNs)))
       ))
       case TypeCons.WrapperTypeCon(TypeDefKind.Tagged, name, _, definedInNs, _, _) =>
-        Seq(JsAst.Const(JsAst.NamePattern(constructorName(name, definedInNs)), constructor(identity)))
+        Seq(JsAst.Const(JsAst.NamePattern(NameMangler.rawConstructorName(name, definedInNs)), constructor(identity)))
       case TypeCons.WrapperTypeCon(TypeDefKind.Boxed, name, _, definedInNs, _, _) =>
-        Seq(JsAst.Const(JsAst.NamePattern(constructorName(name, definedInNs)), constructor(value => JsAst.ObjectLiteral(Seq(
+        Seq(JsAst.Const(JsAst.NamePattern(NameMangler.rawConstructorName(name, definedInNs)), constructor(value => JsAst.ObjectLiteral(Seq(
           NameMangler.TypeTagField -> typeTag(name, definedInNs),
           NameMangler.BoxedValueField -> value,
         )))))
@@ -161,9 +162,6 @@ object JsEmitter {
     case Terms.MethodDefSection(targetCon, selfPattern, methodDefs) =>
       Seq(emitMethodDefSection(targetCon, selfPattern, methodDefs))
   }
-
-  def constructorName(name: String, definedInNs: Seq[String]): String =
-    NameMangler.valueName(TypeCons.ConstructorName, definedInNs :+ name)
 
   def typeTag(name: String, definedInNs: Seq[String]): JsAst.Expr = JsAst.StringLiteral((definedInNs :+ name).safeString("."))
 
@@ -250,6 +248,8 @@ object NameMangler {
     if (definedInNs.nonEmpty) (definedInNs :+ name).safeString("$")
     else if (EscapeNames.contains(name)) safe"$name$$"
     else name
+
+  def rawConstructorName(name: String, definedInNs: Seq[String]) = safe"${(definedInNs :+ name).safeString("$")}$$$$new"
 
   def methodsCompanionName(targetCon: TypeCons.TypeCon) = safe"${targetCon.name}$$Methods"
 }

@@ -46,7 +46,7 @@ object Terms {
 
   case class NamedValue(name: String, definedInNs: Seq[String], typ: Type) extends ValueExpr
 
-  case class NamedConstantPattern(term: NamedValue) extends Pattern {
+  case class NamedConstantPattern(term: ValueExpr) extends Pattern {
     def typ: Type = term.typ
   }
   case class CapturePattern(name: String, typ: Type) extends Pattern
@@ -71,6 +71,8 @@ object Terms {
   case class MemberSelection(obj: ValueExpr, memberName: String, selectedMember: SelectedMember, typ: Type) extends ValueExpr
 
   case class Call(callee: ValueExpr, argument: ValueExpr, typ: Type) extends ValueExpr
+
+  case class RawConstructor(con: TypeCons.WrapperTypeCon, typ: Type) extends ValueExpr
 
   // TODO case class ConstructPattern(con: TypeCon, args: Seq[Pattern], typ: Type) extends Pattern
 

@@ -14,6 +14,7 @@ sealed trait EnvValueEntry {
 }
 case class EnvDeclaredValue(defId: DefId, definedInNs: Seq[String], definedAt: Pos) extends EnvValueEntry
 case class EnvValue(typ: Type, defId: DefId, definedInNs: Seq[String], definedAt: Pos) extends EnvValueEntry
+case class EnvConstructor(con: TypeCons.WrapperTypeCon, typ: Type, defId: DefId) extends EnvValueEntry
 case class EnvNamespaceRef(namespace: NsId, defId: DefId) extends EnvValueEntry
 
 sealed trait EnvTypeEntry {
@@ -102,10 +103,10 @@ case class Env(
   }
   // the compiler generated `apply` of a tagged or boxed type's companion, its constructor
   // the use of the constructor is the use of the type
-  def addConstructor(name: String, con: TypeCons.WrapperTypeCon, constructorType: Type, pos: Pos): Env = local.types.get(name) match {
+  def addConstructor(name: String, con: TypeCons.WrapperTypeCon, constructorType: Type): Env = local.types.get(name) match {
     case Some(EnvCompanion(_, namespace, defId)) =>
       val members = namespaceMembers(namespace)
-      val constructor = EnvValue(constructorType, defId, con.definedInNs :+ con.name, pos)
+      val constructor = EnvConstructor(con, constructorType, defId)
 
       members.values.add((TypeCons.ConstructorName, constructor)) match {
         case Some(values) => updateNamespaceMembers(namespace, members.copy(values = values))

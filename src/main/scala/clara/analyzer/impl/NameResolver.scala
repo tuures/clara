@@ -33,12 +33,13 @@ case class NameResolverImpl(env: Env) {
     def enterNs(name: String, members: BlockScope): NamespaceLookup = NamespaceLookup(nsPath :+ name, members)
   }
 
-  def value(nsPath: Seq[Ast.NameWithPos], name: String, pos: Pos): An[Terms.NamedValue] =
+  def value(nsPath: Seq[Ast.NameWithPos], name: String, pos: Pos): An[Terms.ValueExpr] =
     lookupIn(nsPath, lookupNsValueSide).flatMap(valueIn(_, name, pos))
 
-  def valueIn(lookup: Lookup, name: String, pos: Pos): An[Terms.NamedValue] = lookup.valueEntry(name) match {
+  def valueIn(lookup: Lookup, name: String, pos: Pos): An[Terms.ValueExpr] = lookup.valueEntry(name) match {
     case Some(EnvValue(typ, defId, definedInNs, _)) =>
       An.valid(Terms.NamedValue(name, definedInNs, typ)).tellUsage(defId, pos)
+    case Some(EnvConstructor(con, typ, defId)) => An.valid(Terms.RawConstructor(con, typ)).tellUsage(defId, pos)
     // a bare namespace `Bar` is `Bar.apply`, a tagged or boxed type's companion has its constructor as `apply`
     case Some(EnvNamespaceRef(nsId, defId)) if hasApply(nsId) =>
       valueIn(lookup.enterNs(name, env.namespaceMembers(nsId)), TypeCons.ConstructorName, pos).tellUsage(defId, pos)
@@ -132,7 +133,7 @@ case class NameResolverImpl(env: Env) {
   def lookupNsValueSide(lookup: Lookup, name: Ast.NameWithPos): Either[NamespaceLookupFailure, PathNamespace] =
     lookup.valueEntry(name.name) match {
       case Some(EnvNamespaceRef(nsId, defId)) => Right(PathNamespace(nsId, defId))
-      case Some(_: EnvValue | _: EnvDeclaredValue) => Left(NotNamespace(lookup, name))
+      case Some(_: EnvValue | _: EnvConstructor | _: EnvDeclaredValue) => Left(NotNamespace(lookup, name))
       case None => Left(NoSuchName(lookup, name))
     }
 
@@ -158,7 +159,7 @@ case class NameResolverImpl(env: Env) {
 }
 
 object NameResolver {
-  def value(env: Env, nsPath: Seq[Ast.NameWithPos], name: String, pos: Pos): An[Terms.NamedValue] =
+  def value(env: Env, nsPath: Seq[Ast.NameWithPos], name: String, pos: Pos): An[Terms.ValueExpr] =
     NameResolverImpl(env).value(nsPath, name, pos)
   def typeCon(env: Env, nsPath: Seq[Ast.NameWithPos], name: String, pos: Pos): An[TypeCons.TypeCon] =
     NameResolverImpl(env).typeCon(nsPath, name, pos)

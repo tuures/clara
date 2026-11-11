@@ -1,131 +1,102 @@
 # Done
 
-- warn on unused value definitions
-- Fix isAssignable for polymorphic funcs — `<A>A => A` should be assignable to `<B>B => B`
-- union/intersection assignability: rule order (`A & B` wasn't assignable to itself), lazy head normalization (distribute over unions, unwrap aliases, merge records, disjoint members to Bottom), `disjoint`, expanding nested unions against union targets (tuples, records, tagged/boxed wrapped types; max 25 combinations), function intersections (`#()`) against functions, records/tuples with empty members, invariant phantom type params of tagged/boxed
-- constructors collapse single member unions/intersections (`#()` with one case is a plain function)
-- patterns: refutable `#()` cases (`walkCase`): must be able to match some value and narrow the matched type, assignments/parameters stay irrefutable (`walkAssignment`); tuple patterns on unions of tuples
-- matched type flows into `#()`/lambda callees (`x @ #(...)`) and into `#()`/lambdas nested in tuple/record arguments and annotated record fields
-- "can never match" errors quote the pattern's source (`Pos.sourceText`)
-- literal patterns (`1`, `1.5`, `"a"`) are errors in assignments and function parameters since they can fail to match (no literal types, revisit if added); a string pattern of a single capture stays allowed
-- `#()` exhaustiveness (error) and reachability (warning) using the type each pattern covers (`PatternAnalyzer.coveredType`: literals cover nothing, captures/wildcards/type patterns their type, singletons themselves, tuples only if every element covers); without an expected type the matched type is what the cases can match together
-- emitter: piecewise cases with capture and tuple patterns (each case compiles to conditions and bindings, `JsEmitter.emitCaseMatch`); type patterns are kept as `Terms.PatternAs`
-- emitter: Clara names colliding with JS reserved words or `undefined`/`globalThis`/`arguments`/`eval` get a `$` suffix (`class$`, `NameMangler.valueName`); compiler names start with `$` (Clara names can't contain `$`); emitted code reaches JS globals through `globalThis`
-- emitter: wildcards and named constants in assignments/parameters bind nothing (`JsAst.IgnoredPattern`: array hole, `()` parameter, bare expression for `_ = e`), so several wildcards no longer collide and `_ => ...` no longer crashes; one `emitBindingPattern` for assignments and parameters
-- groundwork (Roadmap 1): `Uniq` split into `TypeConId`/`DefId` (asg/Uniq.scala), `UniqInfo` keyed by id kind; Env entries `EnvValue`/`EnvTypeCon` share one `DefId` per declaration, usage tracked by `DefId`: a singleton used only as a type or only as a value is used, an unused one is reported once, a wrapper type used only as its constructor is used
-- block phases (Roadmap 2a): the type level declarations of a block are analyzed before its values (now `NamesPass` and `TypesPass`, see the architecture entry), so values and type defs can refer to types declared below them; a cycle is checked by `TypeRecursionCheck` (Roadmap 2, recursion step 5); type defs come first in the block term, in source order, so singleton and constructor consts are emitted before any value uses them
-- namespaces (Roadmap 3a): `::namespace Color { ... }` with type defs, value defs/decls and nested namespaces; qualified names `Color.Red` as value, type and named constant pattern; members unqualified inside the namespace; types and singletons registered with the block's type defs (usable before the namespace), values at its position; sealed `EnvTypeEntry` (`EnvTypeCon` or `EnvNamespace`, `EnvCompanion` to come with ::extend), `EnvNamespaceRef` on the value side (an inner value shadows an outer namespace in values, not in types); all name lookups in `NameResolver` (unqualified: the scope, qualified: the namespace's members); `definedInNs` on `Terms.NamedValue`, `EnvValue` and the cons; members emitted as top-level consts `Color$Red`; singletons are unique objects `{ $type: 'Color.Red' }`; unused members of a used namespace or companion are reported with their qualified names (`Unused value `Color.unused``), an unused namespace alone (with modules, the members of exported namespaces won't be reported)
-- companions (Roadmap 3b): `::extend X { ... }` is a namespace attached to the type `X` of the same scope (`Ast.NamespaceDef(isExtend = true, ...)`, `EnvCompanion`); a type and its companion are registered together in the names pass (the type first, its companion attached to it), so `::alias Option<A>: Option.Some<A> | Option.None` works; a bare namespace or companion `X` is `X.apply`; every tagged/boxed type has a companion whose generated `apply` is its constructor (emitted as `Id$apply = $value => $value`, boxed `Option$Some$apply = $value => ({ $type: 'Option.Some', $value })`), a value `apply` in such a companion is a duplicate of it until `::new`; aliases have no constructor; arrow functions returning an object literal are parenthesized (a lambda returning a record returned undefined)
-- type analysis architecture: `An` is a state monad (each analysis runs with the log of everything before it, `An.currentLog`, `AnResult` from `.run`); the structures of wrapper type cons (what they wrap) are in `AnLog.typeStructures` (`tellStructure`), types are `(con, typeArgs)` and expanded on demand (`TypeInterpreterImpl.wrappedType`); the relations that need structures (`isAssignable`, `disjoint`, ...) are in `TypeInterpreterImpl(typeStructures)`, `Types` keeps the structural operations; a scope is analyzed in passes, each its own object, see `BlockAnalyzer` (`NamesPass`: every con/namespace/companion; `TypesPass`: what each wrapper wraps, in any order; `ValuesPass`: in source order), no dependency order; only the first declaration of a name in a scope gets the name, the later passes act only on their declaration's own entry (`Block`); the types pass runs also after errors in the names pass; the scope registers and looks up every name (`NamesPass`, an `::extend` finds only a companion, a `::namespace` only a standalone namespace), a namespace body is walked within each pass of its scope (`Env.enterNamespace`/`leaveNamespace`); `An` logs every error in the order it happens and has no result when an analysis couldn't be completed; `An.stepDeferring` goes on from the last good result after an element without one (`An.deferErrors`), so a step nested in another keeps what succeeded, `An.step` is `stepDeferring` plus a boundary (`An.escalateErrors`: no result if errors were logged within) where a partial result can't be used
-- `NameResolverSpec`: unit tests resolving names directly in the env of a scope (qualified names, nested namespaces, usage of each namespace of a path, not-a-namespace/value/type, value vs type side, bare namespace `apply`, `valueNsPath`)
-- a namespace's values are the block's own `Terms.ValueDef`s carrying `definedInNs` (no `Terms.NamespaceDef`), the emitter qualifies bindings from it
-- expression `e: T` is a declaration like `x: T = e`: the value's type becomes `T` (`Terms.ValueAs`) and `T` is the expected type for `e` (e.g. `(n => n): Int => Int`)
-- each pass of a scope is its own object (`NamesPass`, `TypesPass`, `ValuesPass`) with a function per kind of declaration, `TypeDefAnalyzer` is split between them, the recursion check is `TypeRecursionCheck` next to `TypeInterpreter` and takes type cons, no AST
-- error type (`Types.ErrorType`): what failed is the error type, assignable both ways and overlapping everything, so each pass runs also after errors in the earlier ones and the errors of the whole block are reported at once without follow-ups: a type expression that fails, a value def that fails (by its signature if it has one); a type def with errors still defines its type con without what's wrong in it (type params of a singleton, a duplicate type param, a missing structure is the error type); `Block` (one per content of a scope, with the ids, `Block` finds a type's companion) is walked by all three passes, a pass acts only on the entries it owns; a signature is kept by its value def's `DefId` (`Env.signature`), so a duplicate is checked against its own annotation; a single typed value def's annotation is resolved once, by the types pass
-- messages of a program are in source order (`AnalyzedProgram.messages`, `Pos` orders by source name first), warnings and errors together
-- every declaration of a scope gets its ids once, before the passes (`Block.of`: a `DefId` per declared name, an `NsId` per namespace body and companion), a pass acts on an entry of the `Env` only if it's the declaration's own (`Env.ownsType`, `Env.ownsValue`); duplicates of types and values both come from `Env`; a type def with errors still defines its type con; a body is analyzed in its own namespace in every pass, also when its name failed to be registered or its type failed; a name taken on the value side keeps the type side of a namespace or a type
-- several `::extend X` in one scope are one companion: the names and types passes treat them as one body in source order at the type's position (`Block.companion`), duplicates across them come from `Env`, the values pass keeps each body at its own position; a function run doesn't span two of them; `::namespace X` stays one per scope
-- parser: the empty string `""` parses as a literal and as a pattern (`ProcessedStringLiteralImpl` allows zero parts)
-- parser: nested calls and parens no longer take exponential time, the value, type and pattern rules are left-factored so that nothing is parsed once per alternative (`startingWith`/`ppTail` and the `*Tail` rules, `tupleOrParensOrBlock`); a lambda needs parens as a call argument, and its input is a simple pattern like the input of a function type is a simple type (`(Foo a) => a`, `(a | b) => a`, `(a: T) => a`)
+- `::new Bar` is the raw constructor of a tagged or boxed type; a companion's own `apply` (a smart constructor) replaces the generated one
+- error type (`Types.ErrorType`): what fails to analyze is the error type, so each pass runs also after errors in the earlier ones and the errors of a whole block are reported at once, without follow-up errors
+- each pass of a scope is its own object (`NamesPass`, `TypesPass`, `ValuesPass`); every declaration of a scope gets its ids once, before the passes (`IndexedBlock.of`)
+- several `::extend X` in one scope are one companion
+- messages of a program are in source order, warnings and errors together
+- parser: nested calls and parens no longer take exponential time (left-factored rules)
+- parser: the empty string `""` parses as a literal and as a pattern
 - parser: a guard pattern always has a pattern on its left (`_ ? isValid`, not `? isValid`)
-- parser: a block can have just one item (`(foo;)`, `(;foo)`, `(foo = 1)`), it's a block when it's not plain parens
+- parser: a block can have just one item (`(foo;)`, `(;foo)`, `(foo = 1)`)
 
-# Roadmap (namespacing / enum / typeclasses)
+# Roadmap
 
 Each step is a vertical slice (parser -> analyzer -> emitter) validated by an e2e fixture; keep existing tests green.
 
-0. acceptance fixtures first: write the target `.clara` files (userland Option, Color, smart constructor) with expected `.messages`/`.output`; they fail until done
-   - consider a manually desugared Option fixture first (`::alias` + `::extend` with `::singleton`/`::tagged` members), the `::enum` sugar on top of it later (step 6)
-1. ~~groundwork~~ done (see Done); `InstanceId` with typeclasses in 8
-2. scope passes (a block or a namespace body, `BlockAnalyzer`), each over the whole scope before the next: names (every name of the scope, no expression analyzed), types (every type expression: what the types wrap, value signatures, `::declare` types), values (the value expressions, in source order)
-   - ~~2a. forward references between type declarations~~ done (see Done)
-   - recursion, types (2c) and values (2d) interleaved, in this order:
-     1. ~~value names in the names pass~~ done: `PatternAnalyzer.boundNames` (a total function over `Ast.Pattern`), `EnvDeclaredValue` until the values pass defines it (`Env.declareValue`/`defineValue`), value duplicates reported in the names pass, "`f` is used before its definition" (also qualified `N.f`); a value of a block shadows an outer one also before its definition
-     2. ~~2c termination in `TypeInterpreterImpl`~~ done: while comparing or expanding the wrapped type of a tagged or boxed type, the check remembers it, and reaching it again ends there: `isAssignable` assumes the pair holds (coinductive), `disjoint` can't rule out overlap (conservative, e.g. `Tree<Red>` and `Tree<Blue>` with `::boxed Tree<A>: A | (Tree<A>, Tree<A>)` aren't found disjoint), `expandUnions` leaves the wrapper unexpanded (keyed by con and type args, so an expanded wrapper counts as the same)
-     3. ~~value signatures in the types pass~~ done:
-        - `::declare`: the types pass defines a `::declare`d value by its type (`TypesPass.valueDecl`), so it can be used anywhere in its scope, also qualified before its namespace (nothing is evaluated for it, the emitter refers to the host's name)
-        - a value def whose target is a single annotated capture (`f: Int => Int = ...`, not the captures of a tuple pattern) gets its signature there (`Env.signature`, `Block.SingleTypedValueDef`); it's still used before its definition until step 4; the values pass analyzes the value expression expecting the signature (so e.g. a lambda's parameter gets its type from it) and checks it against it. An error in a signature is now a types pass error, so the scope's values aren't analyzed after it (e2e `error-positions` was split, the value errors are in `error-positions-values`)
-     4. ~~2d forward and self references inside lambdas~~ done: a run of consecutive function defs (value defs whose value is a lambda or `#()`, `ValuesPass.functionRuns`) can refer to themselves and each other before their definitions, also qualified; the value expression of a run member is analyzed with `Env.allowForwardReferences` for the run's DefIds, and such a reference needs a signature ("`g` needs a type annotation to be used before its definition"); `EnvDeclaredValue` has its `definedInNs` for the term; e2e `recursive-functions` (`isEven`/`isOdd` over singletons, no arithmetic yet). Follow-ups:
-        - anything else breaks a run, also a type def or a `::declare` in between, which evaluate nothing at their position (type defs come first in the block term): could be let through if it turns out to matter
-        - a function used only by itself isn't reported unused (its self-reference counts as a use)
-     5. ~~2c recursive types~~ done: `TypeRecursionCheck` checks each group of type defs in cycles with each other (a strongly connected component) and rejects a cycle of only aliases (unwrapping an alias isn't remembered by the termination of step 2), an uncontractive one (no tuple, record, function or boxed type on the cycle, the type refers to itself directly and its head unwraps forever, `::tagged T: T | Int`) and an irregular reference (type args other than type params of the referring type, `Nest<(A, A)>` inside `Nest<A>`); e2e `recursive-types` (a tagged `Words` list with a recursive `join`). Follow-ups:
-        - recursive aliases (`::alias L: () | (Int, L)`): the alias unwraps in `TypeInterpreterImpl` (`isAssignable`, `disjoint`, `expandUnions`) would need to be remembered like the tagged and boxed ones
-        - a generic recursive list: a constructor call's type args aren't inferred from a union parameter (`List(("a", rest))` with `::tagged List<A>: () | (A, List<A>)` infers `A` as `!`, `Types.findSubstitutions` doesn't look into unions)
-        - a boxed recursive type can't be taken apart yet (construct patterns, 5 in Pattern matching)
+0. acceptance fixtures first: write the target `.clara` files with expected `.messages`/`.output`; they fail until done
+   - userland Option is in `e2e-pending/`: `option-desugared` (`::alias` + `::extend` by hand) and `option` (the `::enum` sugar, step 6)
+   - still to write: Color
+1. ~~groundwork~~ done; `InstanceId` comes with typeclasses (9)
+2. ~~scope passes (names, types, values), forward references, recursive functions and types~~ done; the follow-ups are under Analyzer follow-ups
 3. namespaces, as vertical slices (parser -> analyzer -> emitter, each with an e2e fixture):
-   - ~~3a. `::namespace` and qualified names~~ done (see Done). Follow-ups:
+   - ~~3a. `::namespace` and qualified names~~ done. Follow-ups:
      - show type names qualified in messages (`Color.Red`, from the con's `definedInNs`), and both `definedAt`s when two names in one message display the same (`Red` vs `Red`, or the same qualified name from two modules); later DX: also the name as written (e.g. an import alias) when it differs from the con's
-     - union rule: two different types with the same qualified name can't be members of one union (`Red | Red` from two definitions); compares qualified names, which also makes `$type` unambiguous within a union. Not implemented yet; probably needs `isAssignable`-style checks to move to `TypeInterpreter`
-     - qualified construct patterns (`Option.Some s`) come with construct patterns (5)
+     - union rule: two different types with the same qualified name can't be members of one union (`Red | Red` from two definitions); compares qualified names, which also makes `$type` unambiguous within a union. Probably needs `isAssignable`-style checks to move to `TypeInterpreter`
      - a dotted name in a pattern is a constant whatever its case (`math.Pi`, plans/namespacing.md), today a lowercase head parses as a capture
      - `Foo = {}` should define a value `Foo` (binding context), today it parses as a named constant pattern ("Unknown value `Foo`"); decide nested cases like `(True, x) = pair`
-   - ~~3b. `::extend`~~ done (see Done). Follow-ups:
-     - `::new Bar` (the raw constructor, only inside the defining module), then a tagged/boxed type's companion may define its own `apply` (a smart constructor) instead of the generated one; the companion's own `apply` is declared before the types pass, which then generates the constructor only when it isn't there (today it's "`apply` of `Id` is its constructor, it can't be redefined yet", `TypesPass.rejectOwnApply`)
-     - emitter: a call of a tagged type's constructor (`Id$apply(x)`) can be just `x`; the const is still needed where the constructor is used as a function value (`xs.map(Id)`)
-     - extending a singleton: its value and its companion namespace share the name (plans/namespacing.md: one lookup tier for `Foo.x`)
-   - 3c. `::methods` inside `::extend`: type params mandatory for now (must match the target's), receiver is the target with them (`::methods<A> o` on `Option<A>`), fan-out from an alias to its members; removes the obsolete standalone `::methods` sections
-4. member lookup: tagged/boxed fallback to wrapped (emit `.value` for boxed), alias -> expansion, union per alternative
-5. patterns: construct pattern (`Some a`) + pattern validity (Check 1 in plans/enum2.md: the runtime test must tell constructors apart, a tag test like `$value.$type === 'Some'`)
+   - ~~3b. `::extend`~~ done. Follow-ups:
+     - emitter: a call of a tagged type's constructor (`Id$$new(x)`) can be just `x`; the const is still needed where the constructor is used as a function value (`xs.map(Id)`)
+     - extending a singleton: its value and its companion namespace share the name (see the `Foo.x` lookup tier under Open decisions)
+   - 3c. `::methods<A> o { ... }` inside `::extend` with the method lookup on tagged, boxed, opaque and singleton types (one slice: neither can be tested without the other, today selecting a member of such a value crashes in `MemberSelectionAnalyzer`): type params mandatory for now, matched to the target's by count like assigning a polymorphic function, receiver is the target with them (`::methods<A> o` on `Option<A>`); removes the obsolete standalone `::methods` sections, `::declare ::methods` moves into the `::extend` of its type too (an opaque type can be extended)
+4. member lookup: alias -> expansion, union per alternative (record fields and methods), fan-out of `::methods` from an alias to its members (one method, so no runtime dispatch; different methods of one name in the alternatives need a `$type` dispatch, isn't supported yet), tagged/boxed fallback to wrapped (emit `.value` for boxed); replaces the remaining `???` cases of `MemberSelectionAnalyzer` (unused variable warnings), `aliasWrappedMethodTargets` and the emitter's missing `SelectedMethod` case (non-exhaustive match warnings)
+5. patterns: construct pattern (`Some a`, the `???` in `PatternAnalyzer`) + pattern validity (Check 1 in plans/enum2.md: the runtime test must tell constructors apart, a tag test like `$value.$type === 'Some'`)
+   - `Y Z` in pattern position is always a construct pattern
+   - qualified construct patterns (`Option.Some s`)
+   - a boxed recursive type can't be taken apart until construct patterns exist
 6. ::enum as sugar (start with always boxed, disjointness-based tagged later) -> userland Option fixture passes
-7. modules and imports
-8. typeclasses: first-order with member fan-out, then constraints (dictionary passing), static members (`Int.empty`), HKT with re-sugaring
+   - an enum stays an alias of a union; generic calls need re-sugaring of unions to aliases (plans/namespacing.md)
+7. small real programs: what an everyday program needs, each with an e2e fixture
+   - Int, Float and String operations as methods on opaque types, with operator syntax (`a + b`); fix parsing negative numbers, revisit operator precedence (+/*)
+   - array literals and a sequence type with a few methods
+   - a minimal prelude (`Boolean`, `Option`, the opaque base types), so programs stop declaring `::opaque String` themselves
+   - structural equality
+   - JS interop: calling and exposing JS functions of several parameters (Clara functions take one)
+8. modules and imports: AST support for a module, import syntax in the parser
+   - `::new` only inside the defining module, today it's allowed wherever the type is visible
+9. typeclasses: first-order with member fan-out, then constraints (dictionary passing), static members (`Int.empty`), HKT with re-sugaring
 
-# Todo
+# Follow-ups
 
-## Pattern matching (current focus, in order)@
+## Pattern matching
 
-1. record patterns: record rules in `disjoint` (exhaustive `isDisjointFromRecords`); runtime test checks own properties (`Object.hasOwn`), plus object/array/`$type` checks only when the remaining matched type needs them
-2. or-patterns, guard patterns, `??` default patterns (`{foo: String ?? "x"}` accepts `{} | {foo: String}`)
-3. name missing cases in non-exhaustive errors: needs a union expansion whose results can be shown (`expandUnions` results must not be shown); alternatively compute the remaining type step by step (`matched -- covered1 -- covered2 ...`, needs `--` difference types): what remains after the last case is what's missing (e.g. `Some<Blue>`), and reachability becomes "case overlaps the remaining type", cheaper than checking against the growing union of earlier cases when the remaining type simplifies (unions of singletons/constructors)
+- record patterns: record rules in `disjoint` (exhaustive `isDisjointFromRecords`); runtime test checks own properties (`Object.hasOwn`), plus object/array/`$type` checks only when the remaining matched type needs them
+- or-patterns, guard patterns, `??` default patterns (`{foo: String ?? "x"}` accepts `{} | {foo: String}`)
+- name missing cases in non-exhaustive errors: needs a union expansion whose results can be shown (`expandUnions` results must not be shown); alternatively compute the remaining type step by step (`matched -- covered1 -- covered2 ...`, needs `--` difference types): what remains after the last case is what's missing (e.g. `Some<Blue>`), and reachability becomes "case overlaps the remaining type", cheaper than checking against the growing union of earlier cases when the remaining type simplifies (unions of singletons/constructors)
+- runtime type tests for type patterns in cases (`n: Int` on `Int | String`), only when the matched type isn't already a `T` and `T` is testable (not functions or type params); opaque types declare their test (`typeof`). Until then such cases are an error (`PatternAnalyzer.needsTypeTest`)
+- Option without boxing (JS interop): `None` as tagged host undefined/null, opaque types declare their runtime test, `A -- B` difference types for the `Some` payload
+- tuples vs arrays (with array literals): both are JS arrays, so a tuple pattern means "an array of length n" (matches `Array<T>` too) and `disjoint` mustn't separate them (`isDisjointFromTuples`); "testable at runtime" needs its own check, separate from `disjoint` (also records vs boxed); consider `(A, B) <: ReadonlyArray<A | B>`
+- duplicate literal cases (`#(1 => ..., 1 => ...)`) aren't reported as unreachable since literals cover nothing (would need literal types)
+- emitter: skip the `Array.isArray`/length checks of tuple cases when the matched type is known to be a tuple of that length (needs the matched type in `Terms.Piecewise`)
+- emitter: string patterns mixing captures and other parts (`"$(a)-$(b)"`) are `???` in `JsEmitter.emitCaseMatch`; need a runtime matcher where each capture takes the shortest text before the next literal part (not needed for Option/enums)
 
-## Analyzer follow-ups
+## Analyzer
 
-- performance (later): `TypeInterpreterImpl.wrappedType` substitutes the type args on every unwrap of an alias/tagged/boxed type (`isAssignable`, `disjoint`, `expandUnions`, ...) and `isAssignableWrapper` rescans with `mentionsParam` on each comparison; cache per `(con, typeArgs)` if it shows up, the expansion stays lazy (recursive types)
-- performance (later): `TypeRecursionCheck` is quadratic in a scope's wrapper type defs (`reachable` from each con, then `filter`/`distinct` for the groups, `findCycle`'s `path.exists`); Tarjan's strongly connected components (one depth-first walk) and a `Set` for the path would make it linear. Kept as is while it's simpler to read and scopes are small
 - error type follow-ups:
   - an unsupported recursive type stops the values of its block (`rejectUnsupportedRecursion`), as `TypeInterpreterImpl` wouldn't terminate on it: could be replaced with the error type in the structures
   - the values of an `::extend` without a type aren't analyzed, nothing in it has been declared
   - a lambda in a record field gets no parameter type from an expected error type (`x: Bad = {f: a => a}` is also "Could not infer type"), as the expected field types come from `Types.Record`
   - a value expression stops at its first error (`a(nope1)(nope2)` reports one), only value defs and block contents go on
+- recursion follow-ups:
+  - a run of function defs is broken by anything else, also a type def or a `::declare` in between, which evaluate nothing at their position (type defs come first in the block term): could be let through if it turns out to matter
+  - a function used only by itself isn't reported unused (its self-reference counts as a use)
+  - recursive aliases (`::alias L: () | (Int, L)`): the alias unwraps in `TypeInterpreterImpl` (`isAssignable`, `disjoint`, `expandUnions`) would need to be remembered like the tagged and boxed ones
+  - a generic recursive list: a constructor call's type args aren't inferred from a union parameter (`List(("a", rest))` with `::tagged List<A>: () | (A, List<A>)` infers `A` as `!`, `Types.findSubstitutions` doesn't look into unions)
+- a lambda with a tuple parameter doesn't get its type from the expected type (`g: (String, String) => String = (_, b) => b` is "Could not infer type")
+- polymorphic callee: the expected argument type contains the callee's type params, e.g. a lambda argument's parameter is typed `A` (see FIXME in Types.findSubstitutions)
+- phantom type params of tagged/boxed: error until variance annotations exist, then infer variance per type con (see TODO in Types.AssignableImpl)
+- merge identical alternatives in Types.Union (keeps alias nodes, e.g. `Option<Int> | Option<Int>`)
 
-## Pattern matching follow-ups
+## Emitter
 
-- not on the critical path (Option/enums don't need it): emitter: string patterns mixing captures and other parts (`"$(a)-$(b)"`) are still `???` in JsEmitter.emitCaseMatch; they need runtime matching, e.g. a helper (inline or a `$`-prefixed module-level helper emitted only when used, until the runtime module exists) where each capture takes the shortest text before the next literal part (first occurrence) and the last literal part has to end the string
-- runtime module: helpers like `isArray` and the string pattern matcher live in a separate runtime module with tree-shakeable exports (`import * as $clara from ...`, `$clara.isArray`), not duplicated per module. Ties in with modules (Roadmap 7): where the runtime file lives and how outputs import it (CLI `-o` and stdout), output becomes an ES module, E2eSpec runs `node -e` (a script, needs `--input-type=module` or a temp `.mjs` next to the runtime). Until then the emitted code reaches globals through `globalThis` (e.g. `globalThis.Array.isArray`)
-- analyzer: a lambda with a tuple parameter doesn't get its type from the expected type (`g: (String, String) => String = (_, b) => b` is "Could not infer type")
+- a block that needs an IIFE as a statement after another statement crashes at runtime (`console.log("a")` followed by `(_ = "x"; console.log("b"))` emits `console.log("a")\n(() => {...})()`, a call of the previous statement's result, as statements have no semicolons)
 - `::declare` inside a namespace keeps its `definedInNs` like any member, but the emitter then names it `Host$log`, which nothing defines (the host's name is `log`): the emitter should emit a declared value under its declared name, or an annotation overrides the emitted name (see the next item)
 - `::declare` of a reserved name (e.g. `::declare undefined: ...`) is broken: references get the `$` suffix but the JS global has none; later: an annotation declaring the JS name explicitly
-- tuples vs array types (when array literals land): both are JS arrays, so they can't be told apart at runtime. A tuple pattern means "an array of length n" structurally (matches `Array<T>` too and narrows to `(T, ..., T)`), and `disjoint` must not treat tuples and arrays as disjoint (`isDisjointFromTuples`). Type tests can't separate `(Int, Int)` from `Array<Int>`, so "can be tested at runtime" needs its own check, separate from `disjoint` (the same applies to records vs boxed). Consider `(A, B) <: ReadonlyArray<A | B>` like TypeScript
-- phantom type params of tagged/boxed: error until variance annotations exist, then infer variance per type con (see TODO in Types.AssignableImpl)
-- polymorphic callee: the expected argument type contains the callee's type params, e.g. a lambda argument's parameter is typed `A` (see FIXME in Types.findSubstitutions)
-- duplicate literal cases (`#(1 => ..., 1 => ...)`) aren't reported as unreachable since literals cover nothing (would need literal types)
-- emitter: skip the `Array.isArray`/length checks of tuple cases when the matched type is known to be a tuple of that length (needs the matched type in `Terms.Piecewise`)
-- later: `e :< T` checks that `e` is assignable to `T` but keeps `e`'s own type (like TypeScript's `satisfies`)
-- TypeInterpreter warnings: unused import, non-exhaustive match in aliasWrappedMethodTargets
-- runtime type tests for type patterns in cases (`n: Int` on `Int | String`): only needed when the matched type isn't already assignable to `T`, and `T` must be testable at runtime (not functions or type params); opaque types declare their runtime test (`typeof`, ties in with Option without boxing below). Until then cases needing one are an error (`PatternAnalyzer.needsTypeTest`, also single capture string patterns like `"$(s)"` on `Int | String`), remove that error then
-- Option without boxing (JS interop): `None` as tagged host undefined/null, opaque types declare their runtime test via target annotations, `A -- B` difference types for the `Some` payload
+- runtime module with tree-shakeable helpers (`import * as $clara from ...`), not duplicated per module; with modules (Roadmap 8): where it lives, output as ES modules, E2eSpec needs `--input-type=module`. Until then emitted code reaches globals through `globalThis`
 
 ## Other
 
-- emitter: a block that needs an IIFE as a statement after another statement crashes at runtime (`console.log("a")` followed by `(_ = "x"; console.log("b"))` emits `console.log("a")\n(() => {...})()`, a call of the previous statement's result, as statements have no semicolons)
-- figure out how to namespace enums (Color.Red)
-- revisit tagged/boxed and enum approach
-- tagged/boxed/enum, method syntax review, replace companion objects with static methods (to be used later in typeclasses)
-- ~~support recursion for functions and types~~ done (Roadmap 2, recursion steps 4 and 5)
-- implement basic module support
-  - add AST support for Module
-  - implement import syntax in parser
-- fix parsing negative numbers, revisit operator precedence (+/*)
-- array literals
-- ValueExprAnalyzerSpec
-- Record field and methods access for union types
-- patterns: dot-constant patterns (`X.Y`, `x.y`) need parser support; `Y Z` in pattern position is always a construct pattern
-- subtype Uniq into DefId/TypeConId/NsId/InstanceId before the Env refactor (plans/namespacing.md)
-- decide: singleton `Foo.x` merges companion members, inherent methods and instance members into one tier (duplicates within `::extend Foo` are definition-time errors, others lookup-time ambiguity)
-- merge identical alternatives in Types.Union (keeps alias nodes, e.g. `Option<Int> | Option<Int>`)
-- enum stays alias of union; generic calls need re-sugaring of unions to aliases (plans/namespacing.md)
-- decide: are instances imported only via companions or from the whole module top level
+- message levels (`Message` has a TODO for it): when a compile fails, the CLI prints its warnings as `ERROR:` too
+
+# Open decisions
+
+- singleton `Foo.x` merges companion members, inherent methods and instance members into one tier (duplicates within `::extend Foo` are definition-time errors, others lookup-time ambiguity)
+- are instances imported only via companions or from the whole module top level
 - revisit: instance derivation for records/tuples/unions (no explicit `::impl` for structural types)
 - revisit: intersection member lookup when several parts have the member
 
 # Laters
+
+- `e :< T` checks that `e` is assignable to `T` but keeps `e`'s own type (like TypeScript's `satisfies`)
+- performance: `TypeInterpreterImpl.wrappedType` substitutes the type args on every unwrap of an alias/tagged/boxed type (`isAssignable`, `disjoint`, `expandUnions`, ...) and `isAssignableWrapper` rescans with `mentionsParam` on each comparison; cache per `(con, typeArgs)` if it shows up, the expansion stays lazy (recursive types)
+- performance: `TypeRecursionCheck` is quadratic in a scope's wrapper type defs (`reachable` from each con, then `filter`/`distinct` for the groups, `findCycle`'s `path.exists`); Tarjan's strongly connected components (one depth-first walk) and a `Set` for the path would make it linear. Kept as is while it's simpler to read and scopes are small

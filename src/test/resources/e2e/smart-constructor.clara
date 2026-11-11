@@ -1,0 +1,22 @@
+::opaque String
+::declare console: { log: String => () }
+
+::singleton Invalid
+
+::boxed Email: String
+::extend Email {
+  apply = (address: String) => address @ #(
+    "" => Invalid,
+    _ => ::new Email(address),
+  )
+}
+
+check = (email: Invalid | Email) => email @ #(
+  Invalid => "invalid",
+  _ => "valid",
+)
+
+console.log(Email("") @ check)
+console.log(Email("clara@example.com") @ check)
+console.log(::new Email("") @ check)
+()

@@ -1,6 +1,6 @@
 package clara.analyzer.impl
 
-import clara.asg.{Namespace, TermLiteral, Terms, Types}
+import clara.asg.{Namespace, TermLiteral, Terms, TypeCons, Types}
 import clara.ast.{Ast, AstLiteral, Pos, SourceMessage}
 
 import clara.util.Safe._
@@ -10,7 +10,7 @@ case class ValueExprAnalyzerImpl(env: Env) {
   def namedNullaryType(name: String, pos: Pos): An[Types.Type] =
     TypeExprAnalyzer.namedNullaryType(env, name, pos)
 
-  def namedValue(name: String, pos: Pos): An[Terms.NamedValue] = NameResolver.value(env, Nil, name, pos)
+  def namedValue(name: String, pos: Pos): An[Terms.ValueExpr] = NameResolver.value(env, Nil, name, pos)
 
   def lambdaTerm(lambda: Ast.Lambda, expectedParameterType: Option[Types.Type]): An[Terms.Lambda] = {
     val Ast.Lambda(typeParams, parameter, body, _) = lambda
@@ -194,6 +194,15 @@ case class ValueExprAnalyzerImpl(env: Env) {
       }
     }
 
+  def rawConstructorTerm(nsPath: Seq[Ast.NameWithPos], name: String, pos: Pos): An[Terms.RawConstructor] =
+    NameResolver.typeCon(env, nsPath, name, pos).flatMap {
+      case con @ TypeCons.WrapperTypeCon(Ast.TypeDefKind.Tagged | Ast.TypeDefKind.Boxed, _, _, _, _, _) =>
+        TypeInterpreter.wrapperConstructorFunc(con).map(Terms.RawConstructor(con, _))
+      case _ =>
+        val qualified = (nsPath.map(_.name) :+ name).safeString(".")
+        An.error(SourceMessage(pos, safe"`$qualified` has no constructor, only tagged and boxed types have one"))
+    }
+
   def valueExprTerm(valueExpr: Ast.ValueExpr): An[Terms.ValueExpr] = valueExpr match {
     case Ast.UnitLiteral(_) => An.valid(Terms.UnitLiteral())
     case Ast.IntegerLiteral(value, pos) => namedNullaryType("Int", pos).map { typ =>
@@ -229,11 +238,12 @@ case class ValueExprAnalyzerImpl(env: Env) {
     case Ast.MemberSelection(obj, Ast.NamedValue(name, memberPos), _) => memberSelection(obj, name, memberPos)
     case Ast.Call(callee, argument, _) => callTerm(callee, argument)
     case Ast.Pipe(argument, callee, _) => callTerm(callee, argument)
+    case Ast.RawConstructor(nsPath, Ast.NameWithPos(name, namePos), _) => rawConstructorTerm(nsPath, name, namePos)
   }
 }
 
 object ValueExprAnalyzer {
-  def namedValue(env: Env, name: String, pos: Pos): An[Terms.NamedValue] =
+  def namedValue(env: Env, name: String, pos: Pos): An[Terms.ValueExpr] =
     ValueExprAnalyzerImpl(env).namedValue(name, pos)
   def valueExprTerm(env: Env, valueExpr: Ast.ValueExpr): An[Terms.ValueExpr] =
     ValueExprAnalyzerImpl(env).valueExprTerm(valueExpr)

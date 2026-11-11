@@ -120,13 +120,13 @@ class NameResolverSpec extends BaseSpec {
 
   // a bare namespace `X` is `X.apply`
 
-  test("a bare tagged type is its constructor, the generated apply of its companion") {
+  test("a bare tagged type is its raw constructor, the generated apply of its companion") {
     val withoutExtend = envOf(TypeDef(TypeDefKind.Tagged, "Id", UnitType()))
     val withExtend = envOf(extend("Id"), TypeDef(TypeDefKind.Tagged, "Id", UnitType()))
 
     for ((env, nsPathToId, name) <- Seq((withoutExtend, nsPath(), "Id"), (withExtend, nsPath("Id"), "apply"))) {
       inside(NameResolver.value(env, nsPathToId, name, NoPos).run.value.value) {
-        case Terms.NamedValue("apply", Seq("Id"), Types.Func(_, Types.Uni, _: Types.Tagged)) =>
+        case Terms.RawConstructor(con, Types.Func(_, Types.Uni, _: Types.Tagged)) => assert(con.name === "Id")
       }
     }
   }
