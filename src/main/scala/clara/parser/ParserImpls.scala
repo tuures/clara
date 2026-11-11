@@ -503,27 +503,32 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
     declTargetType ~ typed.?
   )(TypeDef.apply _))
 
-  def namespaceDef[X: P]: P[NamespaceDef] = P(pp(
-    (keyword("namespace").map(_ => false) | keyword("extend").map(_ => true)) ~
-    nameWithPos ~ recordSyntax(typeDef | namespaceDef | valueDecl | valueDef)
-  )(NamespaceDef.apply _))
+  def namespaceMember[X: P]: P[InBlockDecl] = P(typeDef | namespaceDef | valueDecl | valueDef)
 
-  def methodDef[X: P]: P[MethodDef] = P(pp(attributes ~ nameWithPos ~ typed.? ~ equalsSign ~ valueExpr)(MethodDef.apply _))
+  def extendMember[X: P]: P[InBlockDecl] = P(methodDeclSection | methodDefSection | namespaceMember)
+
+  def namespaceDef[X: P]: P[NamespaceDef] = P(pp(
+    keyword("namespace").map(_ => false) ~ nameWithPos ~ recordSyntax(namespaceMember) |
+    keyword("extend").map(_ => true) ~ nameWithPos ~ recordSyntax(extendMember)
+  )(NamespaceDef.apply _))
 
   def methodDecl[X: P]: P[MethodDecl] = P(pp(attributes ~ nameWithPos ~ typed)(MethodDecl.apply _))
 
-  def methodsBody[X: P]: P[Seq[Method]] = P(recordSyntax(methodDef | methodDecl))
+  def methodDef[X: P]: P[MethodDef] = P(pp(attributes ~ nameWithPos ~ typed.? ~ equalsSign ~ valueExpr)(MethodDef.apply _))
 
-  def methodSection[X: P]: P[MethodSection] = P(pp(
-    keyword("declare").!.?.map(_.isDefined) ~
-    keyword("methods") ~/ declTargetType ~ simplePattern.? ~ colon ~ nl.rep ~ methodsBody
-  )(MethodSection.apply _))
+  def methodDeclSection[X: P]: P[MethodDeclSection] = P(pp(
+    keyword("declare") ~ keyword("methods") ~/ maybeTypeParams ~ recordSyntax(methodDecl)
+  )(MethodDeclSection.apply _))
+
+  def methodDefSection[X: P]: P[MethodDefSection] = P(pp(
+    keyword("methods") ~/ maybeTypeParams ~ simplePattern ~ recordSyntax(methodDef)
+  )(MethodDefSection.apply _))
 
   def valueDecl[X: P]: P[ValueDecl] = P(pp(keyword("declare") ~ nameWithPos ~ typed)(ValueDecl.apply _))
 
   def valueDef[X: P]: P[ValueDef] = P(pp(pattern ~ equalsSign ~ nl.rep ~ valueExpr)(ValueDef.apply _))
 
-  def inBlockDecl[X: P]: P[InBlockDecl] = P(typeDef | namespaceDef | methodSection | valueDecl | valueDef)
+  def inBlockDecl[X: P]: P[InBlockDecl] = P(typeDef | namespaceDef | valueDecl | valueDef)
 
   //////
   // Top level rules

@@ -1,7 +1,7 @@
 package clara.analyzer.impl
 
 import clara.ast.{SourceMessage, Pos}
-import clara.asg.{Terms, Types}
+import clara.asg.{Terms, TypeCons, Types}
 
 import clara.util.Safe._
 
@@ -27,30 +27,22 @@ case class MemberSelectionAnalyzerImpl(env: Env, name: String, memberPos: Pos) {
   }
 
   def methodOfType(objectType: Types.Nominal): An[Option[(Terms.SelectedMethod, Types.Type)]] = objectType match {
-    case t: Types.Param => ???
+    case _: Types.Param | _: Types.Singleton => An.valid(None)
     case t: Types.Alias => ???
-    case t: Types.Tagged => ???
-    case t: Types.Boxed => ???
-    case t: Types.Opaque => ???
-    case t: Types.Singleton => ???
-
-    // case Types.Alias(_, wrappedType) => memberOfType(wrappedType)
-    // case u @ Types.Unique(_, wrappedType, _) => methodOfType(u).flatMap {
-    //   case m @ Some(_) => An.valid(m)
-    //   case None => memberOfType(wrappedType)
-    // }
-
-  //   val methodOpt = env.methods.get(objectType.uniq).flatMap(ns => ns.get(name))
-
-  //   methodOpt match {
-  //     case Some(EnvMethod(attributes, typ)) =>
-  //       val typeArgs = Nil // FIXME get from objectTerm.typ if it's Applied
-  //       TypeAnalyzer.instantiate(typ, typeArgs, memberPos).map { typeInst =>
-  //         Some((Terms.SelectedMethod(attributes), typeInst))
-  //       }
-  //     case None => An.valid(None)
-  //   }
+    case t: Types.Tagged => method(t.con, t.typeArgs)
+    case t: Types.Boxed => method(t.con, t.typeArgs)
+    case t: Types.Opaque => method(t.con, t.typeArgs)
   }
+
+  def method(con: TypeCons.TypeCon, typeArgs: Seq[Types.Type]): An[Option[(Terms.SelectedMethod, Types.Type)]] =
+    env.method(con, name) match {
+      case None => An.valid(None)
+      case Some(EnvMethod(attributes, typeParams, typ, defId, definedInNs)) =>
+        val term = Terms.SelectedMethod(definedInNs, attributes)
+        val typeInst = Types.substituteParams(typeParams.map(_.tcId).zip(typeArgs).toMap, typ)
+
+        An.valid(Some((term, typeInst))).tellUsage(defId, memberPos)
+    }
 }
 
 object MemberSelectionAnalyzer {

@@ -622,48 +622,48 @@ class ParserImplsSpec extends BaseSpec {
   reject(p.namespaceDef(_))("::namespace Color")
   reject(p.namespaceDef(_))("::namespace Color { 1 }")
 
-  parseAst(p.methodSection(_))("::declare ::methods Bar: {\n  foo: Bar\n}")(
-    MethodSection(true, DeclTargetType("Bar", Nil), None, Seq(
-      MethodDecl("foo", NamedType("Bar", Nil))
+  parseAst(p.namespaceDef(_))("::extend Option {\n  ::methods o { isDefined = o }\n  ::declare ::methods { raw: () }\n}")(
+    NamespaceDef(true, NameWithPos("Option"), Seq(
+      MethodDefSection(Nil, CapturePattern("o"), Seq(MethodDef("isDefined", None, NamedValue("o")))),
+      MethodDeclSection(Nil, Seq(Ast.MethodDecl(Nil, NameWithPos("raw"), UnitType()))),
     ))
   )
-  parseAst(p.methodSection(_))("::declare ::methods Bar<A>: {\n  foo: A\n}")(
-    MethodSection(true, DeclTargetType("Bar", Seq(TypeParam("A"))), None, Seq(
-      MethodDecl("foo", NamedType("A", Nil))
-    ))
+  reject(p.namespaceDef(_))("::namespace Color { ::methods c { red = c } }")
+  reject(p.inBlockDecl(_))("::methods c { red = c }")
+
+  parseAst(p.methodDeclSection(_))("::declare ::methods {\n  foo: Bar\n}")(
+    MethodDeclSection(Nil, Seq(MethodDecl("foo", NamedType("Bar", Nil))))
   )
-  parseAst(p.methodSection(_))("::declare ::methods Bar: { foo: Bar = sic }")(
-    MethodSection(true, DeclTargetType("Bar", Nil), None, Seq(
-      MethodDef("foo", Some(NamedType("Bar", Nil)), NamedValue("sic"))
-    ))
+  parseAst(p.methodDeclSection(_))("::declare ::methods<A> {\n  foo: A\n}")(
+    MethodDeclSection(Seq(TypeParam("A")), Seq(MethodDecl("foo", NamedType("A", Nil))))
   )
-  parseAst(p.methodSection(_))("::declare ::methods Bar: {\n@[a]\nfoo: Bar\nbaz: Baz\n}")(
-    MethodSection(true, DeclTargetType("Bar", Nil), None, Seq(
+  parseAst(p.methodDeclSection(_))("::declare ::methods {\n@[a]\nfoo: Bar\nbaz: Baz\n}")(
+    MethodDeclSection(Nil, Seq(
       MethodDecl(Seq(Attribute("a", None)), "foo", NamedType("Bar", Nil)),
       MethodDecl("baz", NamedType("Baz", Nil)),
     ))
   )
+  reject(p.methodDeclSection(_))("::declare ::methods { foo: Bar = sic }")
+  reject(p.methodDeclSection(_))("::declare ::methods b { foo: Bar }")
 
-  parseAst(p.methodSection(_))("::methods Bar b: { foo = b }")(
-    MethodSection(false, DeclTargetType("Bar", Nil), Some(CapturePattern("b")), Seq(
-      MethodDef("foo", None, NamedValue("b"))
-    ))
+  parseAst(p.methodDefSection(_))("::methods b { foo = b }")(
+    MethodDefSection(Nil, CapturePattern("b"), Seq(MethodDef("foo", None, NamedValue("b"))))
   )
-  parseAst(p.methodSection(_))("::methods Bar b:\n  {foo: Bar = b}")(
-    MethodSection(false, DeclTargetType("Bar", Nil), Some(CapturePattern("b")), Seq(
-      MethodDef("foo", Some(NamedType("Bar", Nil)), NamedValue("b"))
-    ))
+  parseAst(p.methodDefSection(_))("::methods b { foo: Bar = b }")(
+    MethodDefSection(Nil, CapturePattern("b"), Seq(MethodDef("foo", Some(NamedType("Bar", Nil)), NamedValue("b"))))
   )
-  parseAst(p.methodSection(_))("::methods Bar<A> b:\n  {foo: Bar<A> = b}")(
-    MethodSection(false, DeclTargetType("Bar", Seq(TypeParam("A"))), Some(CapturePattern("b")), Seq(
+  parseAst(p.methodDefSection(_))("::methods<A> b {\n  foo: Bar<A> = b\n}")(
+    MethodDefSection(Seq(TypeParam("A")), CapturePattern("b"), Seq(
       MethodDef("foo", Some(NamedType("Bar", Seq(NamedType("A")))), NamedValue("b"))
     ))
   )
-  parseAst(p.methodSection(_))("::methods Bar b: { foo: Sic }")(
-    MethodSection(false, DeclTargetType("Bar", Nil), Some(CapturePattern("b")), Seq(
-      MethodDecl("foo", NamedType("Sic", Nil))
+  parseAst(p.methodDefSection(_))("::methods<A> (a, _) { first = a }")(
+    MethodDefSection(Seq(TypeParam("A")), TuplePattern(Seq(CapturePattern("a"), WildcardPattern())), Seq(
+      MethodDef("first", None, NamedValue("a"))
     ))
   )
+  reject(p.methodDefSection(_))("::methods { foo = sic }")
+  reject(p.methodDefSection(_))("::methods b { foo: Sic }")
 
   parseAst(p.valueDecl(_))("::declare foo: ()")(ValueDecl("foo", UnitType()))
 

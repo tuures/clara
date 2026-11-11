@@ -22,7 +22,7 @@ object NamesPass {
         case Some(Ast.TypeDefKind.Singleton) => An.error(SourceMessage(pos, safe"Extending a singleton isn't supported yet"))
         case Some(_) => An.valid(())
       }).map(_ => (env, Nil))
-    case _: IndexedBlock.MethodSection => An.valid((env, Nil))
+    case _: IndexedBlock.MethodDeclSection | _: IndexedBlock.MethodDefSection => An.valid((env, Nil))
     case IndexedBlock.ValueDecl(ast, defId) => env.declareValue(ast.name.name, ast.name.pos, defId).map((_, Nil))
     case IndexedBlock.SingleTypedValueDef(_, name, _) => declareValues(env, Seq(name)).map((_, Nil))
     case IndexedBlock.ValueDef(_, names) => declareValues(env, names).map((_, Nil))

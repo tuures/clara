@@ -125,16 +125,20 @@ higherOrderFunc(s => s)
 //  or = ...
 //}
 
-::declare ::methods String: {
-  @[emitKind instanceProperty]
-  length: Int
+::extend String {
+  ::declare ::methods {
+    @[emitKind instanceProperty]
+    length: Int
+  }
 }
 
-::methods Boolean b: {
-  not = b @ #(
-    True => False
-    False => True
-  )
+::extend Boolean {
+  ::methods b {
+    not = b @ #(
+      True => False
+      False => True
+    )
+  }
 }
 
 // FIXME ERROR: smoketest.clara:126:20(–25): Type `(FooTagged<T>, FooTagged<T>)` is not assignable to type `(T, T)`

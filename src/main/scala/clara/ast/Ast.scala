@@ -9,7 +9,6 @@ object Ast {
   sealed trait BlockContent extends Node
   sealed trait TypeExpr extends Node
   sealed trait Pattern extends Node
-  sealed trait Method extends Node
   sealed trait ValueExpr extends BlockContent
   sealed trait InBlockDecl extends BlockContent
   sealed trait TypeLevelDecl extends InBlockDecl
@@ -105,11 +104,10 @@ object Ast {
   // isExtend: `::extend Name`, the namespace is the companion of the type `Name` defined in the same scope
   case class NamespaceDef(isExtend: Boolean, name: NameWithPos, body: Seq[InBlockDecl], pos: Pos = NoPos) extends TypeLevelDecl
 
-  // TODO: use ConstructPattern instead of targetType, selfPattern ?
-
-  case class MethodDecl(attributes: Seq[Attribute], name: NameWithPos, t: TypeExpr, pos: Pos = NoPos) extends Method
-  case class MethodDef(attributes: Seq[Attribute], name: NameWithPos, t: Option[TypeExpr], body: ValueExpr, pos: Pos = NoPos) extends Method
-  case class MethodSection(isDecl: Boolean, target: DeclTargetType, selfPattern: Option[Pattern], methods: Seq[Method], pos: Pos = NoPos) extends InBlockDecl
+  case class MethodDecl(attributes: Seq[Attribute], name: NameWithPos, t: TypeExpr, pos: Pos = NoPos) extends Node
+  case class MethodDef(attributes: Seq[Attribute], name: NameWithPos, t: Option[TypeExpr], body: ValueExpr, pos: Pos = NoPos) extends Node
+  case class MethodDeclSection(typeParams: Seq[TypeParam], methods: Seq[MethodDecl], pos: Pos = NoPos) extends InBlockDecl
+  case class MethodDefSection(typeParams: Seq[TypeParam], receiver: Pattern, methods: Seq[MethodDef], pos: Pos = NoPos) extends InBlockDecl
 
   // TODO: add attributes?
   case class ValueDecl(name: NameWithPos, t: TypeExpr, pos: Pos = NoPos) extends InBlockDecl

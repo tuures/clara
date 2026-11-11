@@ -18,7 +18,8 @@ object IndexedBlock {
   }
   case class Namespace(ast: Ast.NamespaceDef, defId: DefId, body: NamespaceBody) extends Content
   case class Extend(ast: Ast.NamespaceDef, contents: Vector[Content]) extends Content
-  case class MethodSection(ast: Ast.MethodSection) extends Content
+  case class MethodDeclSection(ast: Ast.MethodDeclSection) extends Content
+  case class MethodDefSection(ast: Ast.MethodDefSection) extends Content
   case class ValueDecl(ast: Ast.ValueDecl, defId: DefId) extends Content
   case class SingleTypedValueDef(ast: Ast.ValueDef, name: DeclaredName, signature: Ast.TypeExpr) extends Content
   case class ValueDef(ast: Ast.ValueDef, names: Seq[DeclaredName]) extends Content {
@@ -34,7 +35,8 @@ object IndexedBlock {
     case namespaceDef @ Ast.NamespaceDef(true, _, body, _) => Extend(namespaceDef, contentsOf(body))
     case namespaceDef @ Ast.NamespaceDef(false, name, body, _) =>
       Namespace(namespaceDef, DefId(), NamespaceBody(name.name, NsId(), of(body)))
-    case methodSection: Ast.MethodSection => MethodSection(methodSection)
+    case methodDeclSection: Ast.MethodDeclSection => MethodDeclSection(methodDeclSection)
+    case methodDefSection: Ast.MethodDefSection => MethodDefSection(methodDefSection)
     case valueDecl: Ast.ValueDecl => ValueDecl(valueDecl, DefId())
     case valueDef @ Ast.ValueDef(Ast.PatternAs(Ast.CapturePattern(name, pos), signature, _), _, _) =>
       SingleTypedValueDef(valueDef, DeclaredName(Ast.NameWithPos(name, pos), DefId()), signature)

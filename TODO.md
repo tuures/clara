@@ -1,5 +1,6 @@
 # Done
 
+- `::methods<A> receiver { ... }` and `::declare ::methods<A> { ... }` inside `::extend`, selected from values of tagged, boxed and opaque types; the receiver is any parameter pattern; each method is its own const (`Pair$$methods$left`); the standalone `::methods` sections are gone
 - `::new Bar` is the raw constructor of a tagged or boxed type; a companion's own `apply` (a smart constructor) replaces the generated one
 - error type (`Types.ErrorType`): what fails to analyze is the error type, so each pass runs also after errors in the earlier ones and the errors of a whole block are reported at once, without follow-up errors
 - each pass of a scope is its own object (`NamesPass`, `TypesPass`, `ValuesPass`); every declaration of a scope gets its ids once, before the passes (`IndexedBlock.of`)
@@ -28,8 +29,11 @@ Each step is a vertical slice (parser -> analyzer -> emitter) validated by an e2
    - ~~3b. `::extend`~~ done. Follow-ups:
      - emitter: a call of a tagged type's constructor (`Id$$new(x)`) can be just `x`; the const is still needed where the constructor is used as a function value (`xs.map(Id)`)
      - extending a singleton: its value and its companion namespace share the name (see the `Foo.x` lookup tier under Open decisions)
-   - 3c. `::methods<A> o { ... }` inside `::extend` with the method lookup on tagged, boxed, opaque and singleton types (one slice: neither can be tested without the other, today selecting a member of such a value crashes in `MemberSelectionAnalyzer`): type params mandatory for now, matched to the target's by count like assigning a polymorphic function, receiver is the target with them (`::methods<A> o` on `Option<A>`); removes the obsolete standalone `::methods` sections, `::declare ::methods` moves into the `::extend` of its type too (an opaque type can be extended)
-4. member lookup: alias -> expansion, union per alternative (record fields and methods), fan-out of `::methods` from an alias to its members (one method, so no runtime dispatch; different methods of one name in the alternatives need a `$type` dispatch, isn't supported yet), tagged/boxed fallback to wrapped (emit `.value` for boxed); replaces the remaining `???` cases of `MemberSelectionAnalyzer` (unused variable warnings), `aliasWrappedMethodTargets` and the emitter's missing `SelectedMethod` case (non-exhaustive match warnings)
+   - ~~3c. `::methods` inside `::extend` with the method lookup on tagged, boxed and opaque types~~ done. Follow-ups:
+     - a method is known from its definition on (a `::declare`d one in its whole scope): the methods of a section can't refer to each other before their definitions or to themselves; like a function run, needs their signatures in the types pass
+     - unused methods aren't reported
+     - the methods of a type defined in a nested block are lost outside it (they're in the `Env`), a value of the type can still get out of the block
+4. member lookup: alias -> expansion, union per alternative (record fields and methods), fan-out of `::methods` from an alias to its members (one method, so no runtime dispatch; different methods of one name in the alternatives need a `$type` dispatch, isn't supported yet; `smoketest.clara`'s `Boolean.not` waits for it), tagged/boxed fallback to wrapped (emit `.value` for boxed); replaces the remaining `???` cases of `MemberSelectionAnalyzer` (unused variable warnings) and `aliasWrappedMethodTargets` (non-exhaustive match warning)
 5. patterns: construct pattern (`Some a`, the `???` in `PatternAnalyzer`) + pattern validity (Check 1 in plans/enum2.md: the runtime test must tell constructors apart, a tag test like `$value.$type === 'Some'`)
    - `Y Z` in pattern position is always a construct pattern
    - qualified construct patterns (`Option.Some s`)
@@ -76,6 +80,8 @@ Each step is a vertical slice (parser -> analyzer -> emitter) validated by an e2
 - polymorphic callee: the expected argument type contains the callee's type params, e.g. a lambda argument's parameter is typed `A` (see FIXME in Types.findSubstitutions)
 - phantom type params of tagged/boxed: error until variance annotations exist, then infer variance per type con (see TODO in Types.AssignableImpl)
 - merge identical alternatives in Types.Union (keeps alias nodes, e.g. `Option<Int> | Option<Int>`)
+- a `::declare` has a term (`Terms.ValueDecl`) but a `::declare ::methods` section has none: align them, either drop `Terms.ValueDecl` (only its name, the emitter ignores it) or give declare sections a term too
+- `typeParams` as a member of `TypeCon` (`Nil` for singletons and params, until HKT params have an arity), so that `TypeInterpreter.instantiate`, `TypeCons.toSource` and `pseudoInstantiate` don't match on the con kind just to get them
 
 ## Emitter
 

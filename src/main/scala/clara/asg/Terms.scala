@@ -67,7 +67,7 @@ object Terms {
 
   sealed trait SelectedMember extends Node
   case object SelectedField extends SelectedMember
-  case class SelectedMethod(targetCon: TypeCon, attributes: MethodAttributes) extends SelectedMember
+  case class SelectedMethod(definedInNs: Seq[String], attributes: MethodAttributes) extends SelectedMember
   case class MemberSelection(obj: ValueExpr, memberName: String, selectedMember: SelectedMember, typ: Type) extends ValueExpr
 
   case class Call(callee: ValueExpr, argument: ValueExpr, typ: Type) extends ValueExpr
@@ -79,10 +79,7 @@ object Terms {
   // TODO con type could be narrowed to rule out ParamCon
   case class TypeDef(con: TypeCon) extends InBlockDecl
 
-  sealed trait MethodSection extends InBlockDecl
-  case class MethodDeclSection(targetCon: TypeCon, methodDecls: Namespace[MethodDecl]) extends MethodSection
-  case class MethodDecl(attributes: MethodAttributes, typ: Type) extends Member
-  case class MethodDefSection(targetCon: TypeCon, self: Pattern, methodDefs: Namespace[MethodDef]) extends MethodSection
+  case class MethodDefSection(definedInNs: Seq[String], receiver: Pattern, methodDefs: Namespace[MethodDef]) extends InBlockDecl
   case class MethodDef(attributes: MethodAttributes, body: ValueExpr) extends Member
 
   case class ValueDecl(name: String) extends InBlockDecl

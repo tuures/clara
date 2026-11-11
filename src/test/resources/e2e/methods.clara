@@ -1,0 +1,29 @@
+::opaque String
+::declare console: { log: String => () }
+
+::tagged Pair<A>: (A, A)
+::extend Pair {
+  ::methods<A> (first, second) {
+    left: A = first
+    swapped: Pair<A> = Pair(second, first)
+  }
+  ::methods<A> pair {
+    right: A = pair.swapped.left
+    withLeft = (newLeft: A) => Pair(newLeft, pair.right)
+  }
+}
+
+::extend String {
+  ::declare ::methods {
+    @[emitKind instanceProperty]
+    toUpperCase: () => String
+  }
+}
+
+pair = Pair("left", "right")
+console.log(pair.left)
+console.log(pair.swapped.left)
+console.log(pair.right)
+console.log(pair.withLeft("new").left)
+console.log(pair.left.toUpperCase())
+()

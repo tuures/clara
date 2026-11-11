@@ -207,12 +207,11 @@ class JsEmitterSpec extends BaseSpec {
   }
 
   test("emitValueExpr: MemberSelection on method with BinaryOperator emitKind") {
-    val con = TypeCons.OpaqueTypeCon("Int", Nil, Nil, NoPos)
     val attrs = Attributes.MethodAttributes(emitKind = Some(Attributes.BinaryOperator), emitName = Some("+"))
     val expr = Terms.MemberSelection(
       Terms.NamedValue("a", Nil, dummyType),
       "plus",
-      Terms.SelectedMethod(con, attrs),
+      Terms.SelectedMethod(Seq("Int"), attrs),
       dummyType
     )
     val result = emitExpr(expr)
@@ -222,30 +221,25 @@ class JsEmitterSpec extends BaseSpec {
   }
 
   test("emitValueExpr: MemberSelection on method with InstanceProperty emitKind") {
-    val con = TypeCons.OpaqueTypeCon("String", Nil, Nil, NoPos)
     val attrs = Attributes.MethodAttributes(emitKind = Some(Attributes.InstanceProperty), emitName = Some("length"))
     val expr = Terms.MemberSelection(
       Terms.NamedValue("s", Nil, dummyType),
       "length",
-      Terms.SelectedMethod(con, attrs),
+      Terms.SelectedMethod(Seq("String"), attrs),
       dummyType
     )
     assert(emitExpr(expr) === JsAst.Member(JsAst.Named("s"), "length"))
   }
 
-  test("emitValueExpr: MemberSelection on method with no emitKind") {
-    val con = TypeCons.OpaqueTypeCon("Foo", Nil, Nil, NoPos)
+  test("emitValueExpr: MemberSelection on method with no emitKind calls the method's const with the object") {
     val attrs = Attributes.MethodAttributes()
     val expr = Terms.MemberSelection(
       Terms.NamedValue("obj", Nil, dummyType),
       "bar",
-      Terms.SelectedMethod(con, attrs),
+      Terms.SelectedMethod(Seq("Outer", "Foo"), attrs),
       dummyType
     )
-    assert(emitExpr(expr) === JsAst.UnaryCall(
-      JsAst.Member(JsAst.Named("Foo$Methods"), "bar"),
-      JsAst.Named("obj")
-    ))
+    assert(emitExpr(expr) === JsAst.UnaryCall(JsAst.Named("Outer$Foo$$methods$bar"), JsAst.Named("obj")))
   }
 
   test("emitValueExpr: Call") {
@@ -258,12 +252,11 @@ class JsEmitterSpec extends BaseSpec {
   }
 
   test("emitValueExpr: Call with binary operator optimization") {
-    val con = TypeCons.OpaqueTypeCon("Int", Nil, Nil, NoPos)
     val attrs = Attributes.MethodAttributes(emitKind = Some(Attributes.BinaryOperator), emitName = Some("+"))
     val callee = Terms.MemberSelection(
       Terms.NamedValue("a", Nil, dummyType),
       "plus",
-      Terms.SelectedMethod(con, attrs),
+      Terms.SelectedMethod(Seq("Int"), attrs),
       dummyType
     )
     val expr = Terms.Call(callee, Terms.NamedValue("b", Nil, dummyType), dummyType)
@@ -351,19 +344,14 @@ class JsEmitterSpec extends BaseSpec {
     assert(module === JsAst.Module(Seq.empty))
   }
 
-  test("emitModule: method def section") {
-    val con = TypeCons.OpaqueTypeCon("Foo", Nil, Nil, NoPos)
+  test("emitModule: a method def section emits each method as a function of the receiver") {
     val program = Terms.Block(Seq(
-      Terms.MethodDefSection(con, Terms.CapturePattern("self", dummyType), Namespace(
+      Terms.MethodDefSection(Seq("Foo"), Terms.CapturePattern("self", dummyType), Namespace(
         "bar" -> Terms.MethodDef(Attributes.MethodAttributes(), Terms.NamedValue("self", Nil, dummyType)),
+        "baz" -> Terms.MethodDef(Attributes.MethodAttributes(), Terms.UnitLiteral()),
       )),
     ), dummyType)
-    val module = JsEmitter.emitModule(program)
-    assert(module === JsAst.Module(Seq(
-      JsAst.Const(JsAst.NamePattern("Foo$Methods"), JsAst.ObjectLiteral(Seq(
-        "bar" -> JsAst.UnaryArrowFunc(JsAst.NamePattern("self"), Seq(JsAst.Return(JsAst.Named("self"))))
-      )))
-    )))
+    assert(modulePrinted(program) === "const Foo$$methods$bar = self =>\n  self\n\nconst Foo$$methods$baz = self =>\n  undefined")
   }
 
   // emitBindingPattern
@@ -416,9 +404,8 @@ class JsEmitterSpec extends BaseSpec {
 
   // NameMangler
 
-  test("NameMangler: methodsCompanionName") {
-    val con = TypeCons.OpaqueTypeCon("Foo", Nil, Nil, NoPos)
-    assert(NameMangler.methodsCompanionName(con) === "Foo$Methods")
+  test("NameMangler: methodName") {
+    assert(NameMangler.methodName("bar", Seq("Outer", "Foo")) === "Outer$Foo$$methods$bar")
   }
 
   test("NameMangler: valueName suffixes only reserved names") {

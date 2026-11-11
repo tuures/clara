@@ -53,7 +53,8 @@ object ValuesPass {
         _: Ast.Block | _: Ast.NamedValue | _: Ast.ValueAs | _: Ast.Record | _: Ast.MemberSelection | _: Ast.Call |
         _: Ast.Pipe | _: Ast.RawConstructor => None
     }
-    case _: Ast.ValueExpr | _: Ast.ValueDecl | _: Ast.TypeDef | _: Ast.NamespaceDef | _: Ast.MethodSection => None
+    case _: Ast.ValueExpr | _: Ast.ValueDecl | _: Ast.TypeDef | _: Ast.NamespaceDef | _: Ast.MethodDeclSection |
+      _: Ast.MethodDefSection => None
   }
 
   // functionRun: the names of the run of function defs the content is in (see functionRuns)
@@ -71,9 +72,10 @@ object ValuesPass {
       case Some(companion) => namespaceBody(currentEnv, companion, contents)
       case None => An.valid(Step(currentEnv, Nil, None))
     }
-    case IndexedBlock.MethodSection(methodSection) =>
-      MethodSectionAnalyzer.methodSectionTerm(currentEnv, methodSection).
-        map { case (nextEnv, term) => Step(nextEnv, Seq(term), None) }
+    case _: IndexedBlock.MethodDeclSection => An.valid(Step(currentEnv, Nil, None))
+    case IndexedBlock.MethodDefSection(section) =>
+      MethodSectionAnalyzer.methodDefSection(currentEnv, section).
+        map { case (nextEnv, term) => Step(nextEnv, term.toSeq, None) }
     case IndexedBlock.ValueDecl(Ast.ValueDecl(Ast.NameWithPos(name, _), _, _), _) =>
       An.valid(Step(currentEnv, Seq(Terms.ValueDecl(name)), None))
     case vd: IndexedBlock.SingleTypedValueDef => singleTypedValueDef(currentEnv, vd, functionRun)

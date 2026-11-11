@@ -5,7 +5,7 @@ import clara.asg.{Terms, Types, TypeCons}
 import clara.testutil.{AstTestHelpers, BaseSpec}
 
 class BlockAnalyzerSpec extends BaseSpec {
-  import Ast.{Lambda => _, TypeDef => _, NamedType => _, ValueDecl => _, _}
+  import Ast.{Lambda => _, TypeDef => _, NamedType => _, ValueDecl => _, MethodDef => _, _}
   import AstTestHelpers._
 
   // the env after the names and types passes, also after their errors
@@ -1526,6 +1526,147 @@ class BlockAnalyzerSpec extends BaseSpec {
     assert(result.log.warnings.map(_.message) === Seq("Unused value `Id.helper`"))
   }
 
+  // methods: `::methods` in an `::extend`, selected from the values of the type
+
+  private def box(sections: InBlockDecl*) = Seq(
+    TypeDef(TypeDefKind.Tagged, "Box", Seq(TypeParam("A")), NamedType("A")),
+    extend("Box", sections: _*),
+  )
+  private def itselfSection = MethodDefSection(Seq(TypeParam("A")), CapturePattern("b"), Seq(MethodDef("itself", None, NamedValue("b"))))
+  private def unitBox = ValueDecl("unitBox", NamedType("Box", Seq(UnitType())))
+  private def unitBoxMember(name: String) = MemberSelection(NamedValue("unitBox"), NamedValue(name))
+
+  test("a method is selected from a value of its type, with the value's type args") {
+    val block = Block(box(itselfSection) ++ Seq(unitBox, unitBoxMember("itself")))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    inside(result.value.value.bcs.last) {
+      case Terms.MemberSelection(_, "itself", Terms.SelectedMethod(Seq("Box"), _), Types.Tagged(con, Seq(Types.Uni), _)) =>
+        assert(con.name === "Box")
+    }
+  }
+
+  test("the receiver of a method can be any pattern a parameter can be") {
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Tagged, "Pair", TupleType(Seq(UnitType(), TupleType(Nil)))),
+      extend("Pair", MethodDefSection(Nil, TuplePattern(Seq(CapturePattern("first"), WildcardPattern())), Seq(
+        MethodDef("left", None, NamedValue("first")),
+      ))),
+      ValueDecl("pair", NamedType("Pair")),
+      MemberSelection(NamedValue("pair"), NamedValue("left")),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    assert(result.value.value.typ === Types.Uni)
+  }
+
+  test("a method can use the methods defined before it, also in another section") {
+    val block = Block(box(
+      itselfSection,
+      MethodDefSection(Seq(TypeParam("B")), CapturePattern("b"), Seq(
+        MethodDef("again", None, MemberSelection(NamedValue("b"), NamedValue("itself"))),
+      )),
+    ) ++ Seq(unitBox, unitBoxMember("again")))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    inside(result.value.value.typ) { case Types.Tagged(_, Seq(Types.Uni), _) => }
+  }
+
+  test("a method can't be used before its definition yet") {
+    val block = Block(Seq(unitBox, ValueDef(CapturePattern("early"), unitBoxMember("itself"))) ++ box(itselfSection))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq("`itself` is not a member of type `Box<()>`"))
+  }
+
+  test("a `::declare`d method can be used anywhere in its scope") {
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Opaque, "Token"),
+      ValueDecl("token", NamedType("Token")),
+      ValueDef(CapturePattern("raw"), MemberSelection(NamedValue("token"), NamedValue("raw"))),
+      extend("Token", MethodDeclSection(Nil, Seq(Ast.MethodDecl(Nil, NameWithPos("raw"), UnitType())))),
+      NamedValue("raw"),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    assert(result.value.value.typ === Types.Uni)
+  }
+
+  test("selecting a method uses it") {
+    val block = Block(box(itselfSection) ++ Seq(unitBox, unitBoxMember("itself")))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+    val env = result.value.value.env
+    val method = env.getTypeEntry("Box").collect { case EnvCompanion(con, _, _) => env.method(con, "itself") }.flatten
+
+    assert(method.exists(method => result.log.usageTrace.defs.contains(method.defId)))
+  }
+
+  test("the type parameters of `::methods` are the type arguments of its type, a wrong number of them is an error") {
+    val block = Block(box(MethodDefSection(Nil, CapturePattern("b"), Seq(MethodDef("itself", None, NamedValue("b"))))) ++
+      Seq(unitBox, unitBoxMember("itself")))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq("Type `Box<A>` expects 1 type arguments, but 0 given"))
+  }
+
+  test("`::methods` of an alias isn't supported yet") {
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Alias, "Unit", UnitType()),
+      extend("Unit", MethodDefSection(Nil, CapturePattern("u"), Seq(MethodDef("itself", None, NamedValue("u"))))),
+    ))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq("`::methods` of an alias isn't supported yet"))
+  }
+
+  test("a method defined twice is a duplicate, also in another section") {
+    val block = Block(box(
+      MethodDefSection(Seq(TypeParam("A")), CapturePattern("b"), Seq(
+        MethodDef("itself", None, NamedValue("b")),
+        MethodDef("itself", None, NamedValue("b")),
+      )),
+      itselfSection,
+    ))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq.fill(2)("Method with name `itself` already exists for type `Box<A>`"))
+  }
+
+  test("a method that fails to analyze is the error type") {
+    val block = Block(box(MethodDefSection(Seq(TypeParam("A")), CapturePattern("b"), Seq(MethodDef("broken", None, NamedValue("nope"))))) ++
+      Seq(unitBox, Call(unitBoxMember("broken"), UnitLiteral())))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq("Unknown value `nope`"))
+  }
+
+  test("a value of a singleton or a type parameter has no methods") {
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Singleton, "True"),
+      ValueDef(CapturePattern("ofSingleton"), MemberSelection(NamedValue("True"), NamedValue("not"))),
+      ValueDef(CapturePattern("ofParam"), Lambda(Seq(TypeParam("A")), PatternAs(CapturePattern("a"), NamedType("A")),
+        MemberSelection(NamedValue("a"), NamedValue("not"))
+      )),
+    ))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq(
+      "`not` is not a member of type `True`",
+      "`not` is not a member of type `A`",
+    ))
+  }
+
   test("block warns about unused local values") {
     val block = Block(Seq(
       ValueDecl("unused", UnitType()),
@@ -1640,13 +1781,4 @@ class BlockAnalyzerSpec extends BaseSpec {
 
     assert(blockTermAn.log.warnings.map(_.message) === Seq.fill(3)("Non-unit value discarded in block"))
   }
-
-  // TODO
-  // test("methods: ???") {
-  //   ???
-  // }
-
-  // test("methods: ???") {
-  //   ???
-  // }
 }

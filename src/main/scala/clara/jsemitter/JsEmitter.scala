@@ -40,14 +40,10 @@ object JsEmitter {
     case Terms.Piecewise(pieces, _) => emitPiecewise(pieces)
     case Terms.MemberSelection(obj, memberName, selectedMember, _) =>
       emitMemberSelection(obj, memberName, selectedMember)
-    case Terms.Call(callee @ Terms.MemberSelection(obj, memberName, selectedMember, _), argument, _) =>
-      selectedMember match {
-        // TODO: is this branch needed or could be optimized on JsAst level after emit?
-        case Terms.SelectedMethod(_, attributes) if attributes.emitKind.exists(_ === Attributes.BinaryOperator) =>
-          emitBinaryOperation(obj, memberName, selectedMember, argument)
-        case Terms.SelectedField =>
-          emitCall(callee, argument)
-      }
+    // TODO: is this branch needed or could be optimized on JsAst level after emit?
+    case Terms.Call(Terms.MemberSelection(obj, memberName, selectedMember @ Terms.SelectedMethod(_, attributes), _), argument, _)
+      if attributes.emitKind.exists(_ === Attributes.BinaryOperator) =>
+      emitBinaryOperation(obj, memberName, selectedMember, argument)
     case Terms.Call(callee, argument, _) => emitCall(callee, argument)
     case Terms.RawConstructor(con, _) => JsAst.Named(NameMangler.rawConstructorName(con.name, con.definedInNs))
   }
@@ -158,9 +154,7 @@ object JsEmitter {
         )))))
       case _ => Nil
     }
-    case _: Terms.MethodDeclSection => Nil
-    case Terms.MethodDefSection(targetCon, selfPattern, methodDefs) =>
-      Seq(emitMethodDefSection(targetCon, selfPattern, methodDefs))
+    case Terms.MethodDefSection(definedInNs, receiver, methodDefs) => emitMethodDefSection(definedInNs, receiver, methodDefs)
   }
 
   def typeTag(name: String, definedInNs: Seq[String]): JsAst.Expr = JsAst.StringLiteral((definedInNs :+ name).safeString("."))
@@ -170,16 +164,13 @@ object JsEmitter {
     JsAst.UnaryArrowFunc(JsAst.NamePattern(ParamName), Seq(JsAst.Return(construct(JsAst.Named(ParamName)))))
   }
 
-  def emitMethodDefSection(targetCon: TypeCons.TypeCon, selfPattern: Terms.Pattern, methodDefs: Namespace[Terms.MethodDef]) = {
-    val entries = methodDefs.mapValues { case Terms.MethodDef(attributes, body) =>
-      JsAst.UnaryArrowFunc(emitBindingPattern(selfPattern, Nil), Seq(JsAst.Return(emitValueExpr(body))))
-    }.entries
-
-    JsAst.Const(
-      JsAst.NamePattern(NameMangler.methodsCompanionName(targetCon)),
-      JsAst.ObjectLiteral(entries)
-    )
-  }
+  def emitMethodDefSection(definedInNs: Seq[String], receiver: Terms.Pattern, methodDefs: Namespace[Terms.MethodDef]) =
+    methodDefs.entries.map { case (name, Terms.MethodDef(_, body)) =>
+      JsAst.Const(
+        JsAst.NamePattern(NameMangler.methodName(name, definedInNs)),
+        JsAst.UnaryArrowFunc(emitBindingPattern(receiver, Nil), Seq(JsAst.Return(emitValueExpr(body)))),
+      )
+    }
 
   def emitMemberName(memberName: String, selectedMember: Terms.SelectedMember): String = {
     val nameOverride = selectedMember match {
@@ -196,11 +187,11 @@ object JsEmitter {
     def selectInstanceProperty = JsAst.Member(emitValueExpr(obj), name)
 
     selectedMember match {
-      case Terms.SelectedMethod(targetCon, attributes) => attributes.emitKind match {
+      case Terms.SelectedMethod(definedInNs, attributes) => attributes.emitKind match {
         case Some(Attributes.InstanceProperty) => selectInstanceProperty
         case Some(Attributes.BinaryOperator) =>
           JsAst.UnaryArrowFunc(JsAst.NamePattern("_"), Seq(JsAst.Return(JsAst.BinaryOperation(emitValueExpr(obj), name, JsAst.Named("_")))))
-        case None => JsAst.UnaryCall(JsAst.Member(JsAst.Named(NameMangler.methodsCompanionName(targetCon)), name), emitValueExpr(obj))
+        case None => JsAst.UnaryCall(JsAst.Named(NameMangler.methodName(name, definedInNs)), emitValueExpr(obj))
       }
       case Terms.SelectedField => selectInstanceProperty
     }
@@ -251,5 +242,5 @@ object NameMangler {
 
   def rawConstructorName(name: String, definedInNs: Seq[String]) = safe"${(definedInNs :+ name).safeString("$")}$$$$new"
 
-  def methodsCompanionName(targetCon: TypeCons.TypeCon) = safe"${targetCon.name}$$Methods"
+  def methodName(name: String, definedInNs: Seq[String]) = safe"${definedInNs.safeString("$")}$$$$methods$$$name"
 }

@@ -9,8 +9,9 @@ object TypesPass {
     case (env, td: IndexedBlock.TypeDef) => typeDef(env, block, td)
     case (env, IndexedBlock.Namespace(_, _, body)) => namespaceBody(env, body)
     case (env, vd: IndexedBlock.ValueDecl) => valueDecl(env, vd)
+    case (env, IndexedBlock.MethodDeclSection(section)) => MethodSectionAnalyzer.methodDeclSection(env, section)
     case (env, vd: IndexedBlock.SingleTypedValueDef) => signature(env, vd)
-    case (env, _: IndexedBlock.Extend | _: IndexedBlock.MethodSection | _: IndexedBlock.ValueDef | _: IndexedBlock.ValueExpr) =>
+    case (env, _: IndexedBlock.Extend | _: IndexedBlock.MethodDefSection | _: IndexedBlock.ValueDef | _: IndexedBlock.ValueExpr) =>
       An.valid(env)
   }
 

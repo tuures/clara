@@ -23,8 +23,7 @@ sealed trait EnvTypeEntry {
 case class EnvTypeCon(con: TypeCon, defId: DefId) extends EnvTypeEntry
 case class EnvNamespace(namespace: NsId, defId: DefId, definedAt: Pos) extends EnvTypeEntry
 case class EnvCompanion(con: TypeCon, namespace: NsId, defId: DefId) extends EnvTypeEntry
-// TODO: is attributes actually used/needed here?
-case class EnvMethod(attributes: MethodAttributes, typ: Type)
+case class EnvMethod(attributes: MethodAttributes, typeParams: Seq[TypeCons.ParamCon], typ: Type, defId: DefId, definedInNs: Seq[String])
 
 case class BlockScope(values: Namespace[EnvValueEntry], types: Namespace[EnvTypeEntry])
 
@@ -32,7 +31,7 @@ object BlockScope {
   def empty: BlockScope = BlockScope(Namespace.empty, Namespace.empty)
 }
 
-case class InNamespace(nsPath: Seq[String], nsId: NsId)
+case class InNamespace(nsPath: Seq[String], nsId: NsId, companionOf: Option[TypeCon])
 
 case class Env(
   parent: BlockScope,
@@ -57,11 +56,16 @@ case class Env(
   )
   // the body of a namespace, entered in each pass of its scope: its members so far (none in the names pass) are the
   // local scope, so they're reachable unqualified and the pass adds to them
-  def enterNamespace(name: String, nsId: NsId): Env =
-    startNestedScope.copy(local = namespaceMembers(nsId), inNs = Some(InNamespace(nsPath :+ name, nsId)))
+  def enterNamespace(name: String, nsId: NsId): Env = {
+    val companionOf = local.types.get(name).collect { case EnvCompanion(con, `nsId`, _) => con }
+
+    startNestedScope.copy(local = namespaceMembers(nsId), inNs = Some(InNamespace(nsPath :+ name, nsId, companionOf)))
+  }
   // back from the body of a namespace entered from this env: keeps the members the pass added and the namespaces the
   // pass added or updated (e.g. nested ones), the namespaces of the body env are the newer version of this env's
-  def leaveNamespace(bodyEnv: Env): Env = this.copy(namespaces = bodyEnv.namespaces, signatures = bodyEnv.signatures)
+  def leaveNamespace(bodyEnv: Env): Env =
+    this.copy(namespaces = bodyEnv.namespaces, signatures = bodyEnv.signatures, methods = bodyEnv.methods)
+  def leaveMethodSection(sectionEnv: Env): Env = this.copy(methods = sectionEnv.methods)
   // the declared values that the value expressions analyzed with this env can refer to before their definitions
   def allowForwardReferences(defIds: Set[DefId]): Env = this.copy(forwardReferable = forwardReferable ++ defIds)
   def isForwardReferable(defId: DefId): Boolean = forwardReferable(defId)
@@ -129,8 +133,9 @@ case class Env(
     case EnvCompanion(_, namespace, _) => namespace
   }
   def namespaceMembers(namespace: NsId): BlockScope = namespaces.get(namespace).getOrElse(BlockScope.empty)
+  def companionTypeCon: Option[TypeCon] = inNs.flatMap(_.companionOf)
 
-  // methods of the standalone ::methods sections (obsolete, see Roadmap 3c)
+  def method(con: TypeCon, name: String): Option[EnvMethod] = methods.get(con.tcId).flatMap(_.get(name))
   def addMethod(con: TypeCon, name: String, m: EnvMethod, pos: Pos): An[Env] = {
     lazy val error =
       SourceMessage(pos, safe"Method with name `${name}` already exists for type `${TypeCons.toSource(con)}`")
