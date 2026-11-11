@@ -1542,7 +1542,7 @@ class BlockAnalyzerSpec extends BaseSpec {
     val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
 
     inside(result.value.value.bcs.last) {
-      case Terms.MemberSelection(_, "itself", Terms.SelectedMethod(Seq("Box"), _), Types.Tagged(con, Seq(Types.Uni), _)) =>
+      case Terms.MemberSelection(_, "itself", Terms.SelectedMethod(_, Seq("Box"), _), Types.Tagged(con, Seq(Types.Uni), _)) =>
         assert(con.name === "Box")
     }
   }
@@ -1664,6 +1664,122 @@ class BlockAnalyzerSpec extends BaseSpec {
     assert(result.value.left.value.map(_.message) === Seq(
       "`not` is not a member of type `True`",
       "`not` is not a member of type `A`",
+    ))
+  }
+
+  // member selection: the fields of records and the methods of nominal types, also through aliases, unions and
+  // intersections
+
+  private def recordType(fields: (String, TypeExpr)*) = RecordType(fields.map { case (name, t) => FieldDecl(name, t) })
+  private def pairType = TupleType(Seq(UnitType(), UnitType()))
+  private def member(value: String, name: String) = MemberSelection(NamedValue(value), NamedValue(name))
+
+  test("a field is selected from a record") {
+    val block = Block(Seq(ValueDecl("named", recordType("name" -> UnitType())), member("named", "name")))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    assert(result.value.value.bcs.last ===
+      Terms.MemberSelection(Terms.NamedValue("named", Nil, Types.Record("name" -> Types.Uni)), "name", Terms.SelectedField, Types.Uni)
+    )
+  }
+
+  test("a member is selected from what an alias expands to") {
+    val block = Block(box(itselfSection) ++ Seq(
+      TypeDef(TypeDefKind.Alias, "Named", recordType("name" -> UnitType())),
+      TypeDef(TypeDefKind.Alias, "UnitBox", NamedType("Box", Seq(UnitType()))),
+      ValueDecl("named", NamedType("Named")),
+      ValueDecl("boxed", NamedType("UnitBox")),
+      Tuple(Seq(member("named", "name"), member("boxed", "itself"))),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    inside(result.value.value.typ) { case Types.Tuple(Seq(Types.Uni, Types.Tagged(con, Seq(Types.Uni), _))) =>
+      assert(con.name === "Box")
+    }
+  }
+
+  test("a member of every alternative of a union has the union of their types") {
+    val block = Block(Seq(
+      ValueDecl("either", UnionType(Seq(recordType("a" -> UnitType()), recordType("a" -> pairType)))),
+      member("either", "a"),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    assert(result.value.value.typ === Types.Union(Seq(Types.Uni, Types.Tuple(Seq(Types.Uni, Types.Uni)))))
+  }
+
+  test("a method of every alternative of a union is selected when it's the same method") {
+    val block = Block(box(itselfSection) ++ Seq(
+      ValueDecl("either", UnionType(Seq(NamedType("Box", Seq(UnitType())), NamedType("Box", Seq(pairType))))),
+      member("either", "itself"),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    inside(result.value.value.bcs.last) { case Terms.MemberSelection(_, _, Terms.SelectedMethod(_, Seq("Box"), _), Types.Union(boxes)) =>
+      assert(boxes.length === 2)
+    }
+  }
+
+  test("a member missing from an alternative of a union isn't a member of the union") {
+    val block = Block(Seq(
+      ValueDecl("either", UnionType(Seq(recordType("a" -> UnitType()), recordType("b" -> UnitType())))),
+      member("either", "a"),
+    ))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq("`a` is not a member of type `{a: ()} | {b: ()}`"))
+  }
+
+  test("different members of the alternatives of a union aren't supported yet") {
+    val block = Block(box(itselfSection) ++ Seq(
+      ValueDecl("either", UnionType(Seq(recordType("itself" -> UnitType()), NamedType("Box", Seq(UnitType()))))),
+      member("either", "itself"),
+    ))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq(
+      "`itself` is a different member in the alternatives of `{itself: ()} | Box<()>`, which isn't supported yet"
+    ))
+  }
+
+  test("an alternative of a union that failed has every member") {
+    val block = Block(Seq(
+      ValueDecl("either", UnionType(Seq(NamedType("Bad"), recordType("a" -> UnitType())))),
+      member("either", "a"),
+    ))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq("Unknown type `Bad`"))
+  }
+
+  test("a member of one part of an intersection is selected from it") {
+    val block = Block(Seq(
+      ValueDecl("both", IntersectionType(Seq(recordType("a" -> UnitType()), recordType("b" -> pairType)))),
+      member("both", "b"),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    assert(result.value.value.typ === Types.Tuple(Seq(Types.Uni, Types.Uni)))
+  }
+
+  test("a member of several parts of an intersection isn't supported yet") {
+    val block = Block(Seq(
+      ValueDecl("both", IntersectionType(Seq(recordType("a" -> UnitType()), recordType("a" -> pairType)))),
+      member("both", "a"),
+    ))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq(
+      "`a` is a member of several parts of `{a: ()} & {a: ((), ())}`, which isn't supported yet"
     ))
   }
 

@@ -2,7 +2,7 @@ package clara.jsemitter
 
 import clara.testutil.BaseSpec
 
-import clara.asg.{Attributes, Namespace, TermLiteral, Terms, TypeCons, Types}
+import clara.asg.{Attributes, DefId, Namespace, TermLiteral, Terms, TypeCons, Types}
 import clara.ast.NoPos
 import clara.ast.Ast.TypeDefKind
 import clara.jsemitter.impl.{JsAst, JsPrinter}
@@ -211,7 +211,7 @@ class JsEmitterSpec extends BaseSpec {
     val expr = Terms.MemberSelection(
       Terms.NamedValue("a", Nil, dummyType),
       "plus",
-      Terms.SelectedMethod(Seq("Int"), attrs),
+      Terms.SelectedMethod(DefId(), Seq("Int"), attrs),
       dummyType
     )
     val result = emitExpr(expr)
@@ -225,7 +225,7 @@ class JsEmitterSpec extends BaseSpec {
     val expr = Terms.MemberSelection(
       Terms.NamedValue("s", Nil, dummyType),
       "length",
-      Terms.SelectedMethod(Seq("String"), attrs),
+      Terms.SelectedMethod(DefId(), Seq("String"), attrs),
       dummyType
     )
     assert(emitExpr(expr) === JsAst.Member(JsAst.Named("s"), "length"))
@@ -236,7 +236,7 @@ class JsEmitterSpec extends BaseSpec {
     val expr = Terms.MemberSelection(
       Terms.NamedValue("obj", Nil, dummyType),
       "bar",
-      Terms.SelectedMethod(Seq("Outer", "Foo"), attrs),
+      Terms.SelectedMethod(DefId(), Seq("Outer", "Foo"), attrs),
       dummyType
     )
     assert(emitExpr(expr) === JsAst.UnaryCall(JsAst.Named("Outer$Foo$$methods$bar"), JsAst.Named("obj")))
@@ -256,7 +256,7 @@ class JsEmitterSpec extends BaseSpec {
     val callee = Terms.MemberSelection(
       Terms.NamedValue("a", Nil, dummyType),
       "plus",
-      Terms.SelectedMethod(Seq("Int"), attrs),
+      Terms.SelectedMethod(DefId(), Seq("Int"), attrs),
       dummyType
     )
     val expr = Terms.Call(callee, Terms.NamedValue("b", Nil, dummyType), dummyType)

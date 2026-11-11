@@ -1,0 +1,23 @@
+::opaque String
+::declare console: { log: String => () }
+
+::tagged Pair<A>: (A, A)
+::extend Pair {
+  ::methods<A> (first, _) {
+    left: A = first
+  }
+}
+
+::alias Named: { name: String }
+::alias Words: Pair<String>
+
+named: Named = { name = "alias field" }
+words: Words = Pair("alias method", "unused")
+pet: { name: String, sound: String } | { name: String, legs: String } = { name = "union field", legs = "four" }
+tagged: { name: String } & { id: String } = { name = "unused", id = "intersection field" }
+
+console.log(named.name)
+console.log(words.left)
+console.log(pet.name)
+console.log(tagged.id)
+()

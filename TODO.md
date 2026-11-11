@@ -1,5 +1,6 @@
 # Done
 
+- member lookup through an alias (on its expansion), a union (the same member in every alternative, typed with the union of their types) and an intersection (the member of one part)
 - `::methods<A> receiver { ... }` and `::declare ::methods<A> { ... }` inside `::extend`, selected from values of tagged, boxed and opaque types; the receiver is any parameter pattern; each method is its own const (`Pair$$methods$left`); the standalone `::methods` sections are gone
 - `::new Bar` is the raw constructor of a tagged or boxed type; a companion's own `apply` (a smart constructor) replaces the generated one
 - error type (`Types.ErrorType`): what fails to analyze is the error type, so each pass runs also after errors in the earlier ones and the errors of a whole block are reported at once, without follow-up errors
@@ -33,7 +34,12 @@ Each step is a vertical slice (parser -> analyzer -> emitter) validated by an e2
      - a method is known from its definition on (a `::declare`d one in its whole scope): the methods of a section can't refer to each other before their definitions or to themselves; like a function run, needs their signatures in the types pass
      - unused methods aren't reported
      - the methods of a type defined in a nested block are lost outside it (they're in the `Env`), a value of the type can still get out of the block
-4. member lookup: alias -> expansion, union per alternative (record fields and methods), fan-out of `::methods` from an alias to its members (one method, so no runtime dispatch; different methods of one name in the alternatives need a `$type` dispatch, isn't supported yet; `smoketest.clara`'s `Boolean.not` waits for it), tagged/boxed fallback to wrapped (emit `.value` for boxed); replaces the remaining `???` cases of `MemberSelectionAnalyzer` (unused variable warnings) and `aliasWrappedMethodTargets` (non-exhaustive match warning)
+4. member lookup, as vertical slices:
+   - ~~4a. alias -> expansion, union per alternative (record fields and methods), intersection~~ done. Follow-ups:
+     - different members of one name in the alternatives of a union (e.g. a field and a method, or two types' own methods) need a `$type` dispatch, isn't supported yet
+     - a member of several parts of an intersection isn't supported yet (see the open decision)
+   - 4b. fan-out of `::methods` from an alias to its members (one method, so no runtime dispatch; `smoketest.clara`'s `Boolean.not` waits for it); removes `aliasWrappedMethodTargets` (non-exhaustive match warning)
+   - 4c. tagged/boxed fallback to wrapped (emit `.value` for boxed)
 5. patterns: construct pattern (`Some a`, the `???` in `PatternAnalyzer`) + pattern validity (Check 1 in plans/enum2.md: the runtime test must tell constructors apart, a tag test like `$value.$type === 'Some'`)
    - `Y Z` in pattern position is always a construct pattern
    - qualified construct patterns (`Option.Some s`)
@@ -81,6 +87,7 @@ Each step is a vertical slice (parser -> analyzer -> emitter) validated by an e2
 - phantom type params of tagged/boxed: error until variance annotations exist, then infer variance per type con (see TODO in Types.AssignableImpl)
 - merge identical alternatives in Types.Union (keeps alias nodes, e.g. `Option<Int> | Option<Int>`)
 - a `::declare` has a term (`Terms.ValueDecl`) but a `::declare ::methods` section has none: align them, either drop `Terms.ValueDecl` (only its name, the emitter ignores it) or give declare sections a term too
+- `An.traverse(as)(f)` for the `An.seq(as.map(f))` of the analyzer (about ten places)
 - `typeParams` as a member of `TypeCon` (`Nil` for singletons and params, until HKT params have an arity), so that `TypeInterpreter.instantiate`, `TypeCons.toSource` and `pseudoInstantiate` don't match on the con kind just to get them
 
 ## Emitter

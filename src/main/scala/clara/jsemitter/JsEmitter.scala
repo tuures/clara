@@ -41,7 +41,7 @@ object JsEmitter {
     case Terms.MemberSelection(obj, memberName, selectedMember, _) =>
       emitMemberSelection(obj, memberName, selectedMember)
     // TODO: is this branch needed or could be optimized on JsAst level after emit?
-    case Terms.Call(Terms.MemberSelection(obj, memberName, selectedMember @ Terms.SelectedMethod(_, attributes), _), argument, _)
+    case Terms.Call(Terms.MemberSelection(obj, memberName, selectedMember @ Terms.SelectedMethod(_, _, attributes), _), argument, _)
       if attributes.emitKind.exists(_ === Attributes.BinaryOperator) =>
       emitBinaryOperation(obj, memberName, selectedMember, argument)
     case Terms.Call(callee, argument, _) => emitCall(callee, argument)
@@ -174,7 +174,7 @@ object JsEmitter {
 
   def emitMemberName(memberName: String, selectedMember: Terms.SelectedMember): String = {
     val nameOverride = selectedMember match {
-      case Terms.SelectedMethod(_, attributes) => attributes.emitName
+      case Terms.SelectedMethod(_, _, attributes) => attributes.emitName
       case Terms.SelectedField => None
     }
 
@@ -187,7 +187,7 @@ object JsEmitter {
     def selectInstanceProperty = JsAst.Member(emitValueExpr(obj), name)
 
     selectedMember match {
-      case Terms.SelectedMethod(definedInNs, attributes) => attributes.emitKind match {
+      case Terms.SelectedMethod(_, definedInNs, attributes) => attributes.emitKind match {
         case Some(Attributes.InstanceProperty) => selectInstanceProperty
         case Some(Attributes.BinaryOperator) =>
           JsAst.UnaryArrowFunc(JsAst.NamePattern("_"), Seq(JsAst.Return(JsAst.BinaryOperation(emitValueExpr(obj), name, JsAst.Named("_")))))
