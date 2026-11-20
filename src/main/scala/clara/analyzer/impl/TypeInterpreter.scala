@@ -4,7 +4,6 @@ import clara.asg.{Namespace, Terms, TermLiteral, TypeConId, Types}
 import clara.asg.Types._
 import clara.asg.TypeCons.{TypeCon, WrapperTypeCon, OpaqueTypeCon, SingletonTypeCon, ParamCon}
 import clara.ast.{Ast, SourceMessage, Pos}
-import clara.ast.Ast.TypeDefKind
 
 import clara.util.Safe._
 import clara.asg.TypeCons
@@ -28,10 +27,13 @@ object TypeInterpreter {
     )
   }
 
+  def isAssignable(t1: Type, t2: Type): An[Boolean] = withTypeStructures(impl => An.valid(impl.isAssignable(t1, t2)))
   def disjoint(t1: Type, t2: Type): An[Boolean] = withTypeStructures(impl => An.valid(impl.disjoint(t1, t2)))
   def narrow(t1: Type, t2: Type): An[Type] = withTypeStructures(impl => An.valid(impl.narrow(t1, t2)))
   def tupleElementTypes(typ: Type, length: Int): An[Seq[Type]] = withTypeStructures(impl => An.valid(impl.tupleElementTypes(typ, length)))
   def wrappedType(t: Wrapper): An[Type] = withTypeStructures(impl => An.valid(impl.wrappedType(t)))
+  def findSubstitutions(params: Set[TypeConId], parameterType: Type, argumentType: Type): An[Map[TypeConId, Type]] =
+    withTypeStructures(impl => An.valid(impl.findSubstitutions(params, parameterType, argumentType)))
   def wrapperConstructorFunc(con: WrapperTypeCon): An[Func] = withTypeStructures(impl => An.valid(impl.wrapperConstructorFunc(con)))
   def casesCheck(piecewise: Ast.Piecewise, patterns: Seq[Terms.Pattern], matchedType: Option[Type]): An[Unit] =
     withTypeStructures(_.casesCheck(piecewise, patterns, matchedType))
@@ -39,27 +41,6 @@ object TypeInterpreter {
     withTypeStructures(impl => TypeRecursionCheck.rejectUnsupported(impl.typeStructures, cons))
 
   private def withTypeStructures[A](f: TypeInterpreterImpl => An[A]): An[A] = An.currentLog.flatMap(log => f(TypeInterpreterImpl(log.typeStructures)))
-
-  def expandMethodTargets(topLevelTypeCon: TypeCon, pos: Pos): An[Set[TypeCon]] = {
-
-    def methodTargets(con: TypeCon): An[Set[TypeCon]] = con match {
-      case con @ WrapperTypeCon(TypeDefKind.Alias, _, _, _, _, _) => An.currentLog.flatMap { log =>
-        aliasWrappedMethodTargets(log.typeStructures.structure(con)).map { wrappedTargets => Set(con) ++ wrappedTargets }
-      }
-      case con => An.valid(Set(con))
-    }
-
-    def aliasWrappedMethodTargets(wrappedType: Type): An[Set[TypeCons.TypeCon]] = wrappedType match {
-      case typ: Nominal => methodTargets(typ.con)
-      case Union(types) => An.seq(types.map {
-        case t: Nominal => An.valid(t.con)
-        case t => An.error(SourceMessage(pos, safe"Cannot have methods for type `${TypeCons.toSource(topLevelTypeCon)}` because it expands into a union type with non-nominal member type `${Types.toSource(t)}`"))
-      }).map(_.toSet)
-      // FIXME exhaustive
-    }
-
-    methodTargets(topLevelTypeCon)
-  }
 }
 
 // A recursive type unwraps into itself, so each check that unwraps a tagged or boxed type remembers what it's doing
@@ -86,6 +67,45 @@ case class TypeInterpreterImpl(
   def wrappedType(t: Wrapper): Type = t.expandedWrappedType.getOrElse(
     substituteParams(t.con.typeParams.map(_.tcId).zip(t.typeArgs).toMap, typeStructures.structure(t.con))
   )
+
+  def findSubstitutions(params: Set[TypeConId], parameterType: Type, argumentType: Type): Map[TypeConId, Type] = {
+    case class Candidate(param: TypeConId, typ: Type, covariant: Boolean)
+
+    def isParam(t: Type): Boolean = t match {
+      case p: Param => params(p.con.tcId)
+      case _ => false
+    }
+
+    def candidates(t1: Type, t2: Type, covariant: Boolean): Seq[Candidate] = (t1, t2) match {
+      case (p: Param, t2) if params(p.con.tcId) => Seq(Candidate(p.con.tcId, t2, covariant))
+      case (Func(Nil, p1, r1), Func(Nil, p2, r2)) => candidates(p1, p2, !covariant) ++ candidates(r1, r2, covariant)
+      case (r1: Record, r2: Record) => r2.fields.entries.flatMap { case (name, t2) =>
+        r1.fields.get(name).map(candidates(_, t2, covariant)).getOrElse(Nil)
+      }
+      case (Tuple(ts1), Tuple(ts2)) => ts1.zip(ts2).flatMap { case (t1, t2) => candidates(t1, t2, covariant) }
+      case (w1: Wrapper, w2: Wrapper) if w1.con.tcId === w2.con.tcId =>
+        w1.typeArgs.zip(w2.typeArgs).flatMap { case (t1, t2) => candidates(t1, t2, covariant) }
+      case (Opaque(con1, typeArgs1), Opaque(con2, typeArgs2)) if con1.tcId === con2.tcId =>
+        typeArgs1.zip(typeArgs2).flatMap { case (t1, t2) => candidates(t1, t2, covariant) }
+      case (t1: Alias, t2) => candidates(wrappedType(t1), t2, covariant)
+      case (t1, t2: Alias) => candidates(t1, wrappedType(t2), covariant)
+      case (t1, Union(ts2)) => ts2.flatMap(candidates(t1, _, covariant))
+      case (Union(ts1), t2) =>
+        val (bareParams, others) = ts1.partition(isParam)
+
+        others.flatMap(candidates(_, t2, covariant)) match {
+          case Nil => bareParams.flatMap(candidates(_, t2, covariant))
+          case found => found
+        }
+      case _ => Nil
+    }
+
+    candidates(parameterType, argumentType, covariant = true).groupBy(_.param).map { case (param, found) =>
+      val covariantTypes = found.filter(_.covariant).map(_.typ)
+
+      param -> (if (covariantTypes.nonEmpty) Union(covariantTypes) else Intersection(found.map(_.typ)))
+    }
+  }
 
   // Normal form used by the checking logic. Intersections become unions of intersections
   // ((A | B) & C becomes (A & C) | (B & C)), aliases unwrap, records merge and disjoint members reduce to Bottom.

@@ -38,12 +38,15 @@ object JsEmitter {
     case Terms.Lambda(parameter, body, _) =>
       JsAst.UnaryArrowFunc(emitBindingPattern(parameter, Nil), Seq(JsAst.Return(emitValueExpr(body))))
     case Terms.Piecewise(pieces, _) => emitPiecewise(pieces)
-    case Terms.MemberSelection(obj, memberName, selectedMember, _) =>
-      emitMemberSelection(obj, memberName, selectedMember)
+    case Terms.MemberSelection(obj, unboxCount, memberName, selectedMember, _) =>
+      emitMemberSelection(emitUnboxed(obj, unboxCount), memberName, selectedMember)
     // TODO: is this branch needed or could be optimized on JsAst level after emit?
-    case Terms.Call(Terms.MemberSelection(obj, memberName, selectedMember @ Terms.SelectedMethod(_, _, attributes), _), argument, _)
-      if attributes.emitKind.exists(_ === Attributes.BinaryOperator) =>
-      emitBinaryOperation(obj, memberName, selectedMember, argument)
+    case Terms.Call(
+      Terms.MemberSelection(obj, unboxCount, memberName, selectedMember @ Terms.SelectedMethod(_, _, attributes), _),
+      argument,
+      _,
+    ) if attributes.emitKind.exists(_ === Attributes.BinaryOperator) =>
+      emitBinaryOperation(emitUnboxed(obj, unboxCount), memberName, selectedMember, argument)
     case Terms.Call(callee, argument, _) => emitCall(callee, argument)
     case Terms.RawConstructor(con, _) => JsAst.Named(NameMangler.rawConstructorName(con.name, con.definedInNs))
   }
@@ -181,24 +184,27 @@ object JsEmitter {
     nameOverride.getOrElse(memberName)
   }
 
-  def emitMemberSelection(obj: Terms.ValueExpr, memberName: String, selectedMember: Terms.SelectedMember) = {
+  def emitUnboxed(obj: Terms.ValueExpr, unboxCount: Int): JsAst.Expr =
+    (1 to unboxCount).foldLeft(emitValueExpr(obj))((boxed, _) => JsAst.Member(boxed, NameMangler.BoxedValueField))
+
+  def emitMemberSelection(obj: JsAst.Expr, memberName: String, selectedMember: Terms.SelectedMember) = {
     val name = emitMemberName(memberName, selectedMember)
 
-    def selectInstanceProperty = JsAst.Member(emitValueExpr(obj), name)
+    def selectInstanceProperty = JsAst.Member(obj, name)
 
     selectedMember match {
       case Terms.SelectedMethod(_, definedInNs, attributes) => attributes.emitKind match {
         case Some(Attributes.InstanceProperty) => selectInstanceProperty
         case Some(Attributes.BinaryOperator) =>
-          JsAst.UnaryArrowFunc(JsAst.NamePattern("_"), Seq(JsAst.Return(JsAst.BinaryOperation(emitValueExpr(obj), name, JsAst.Named("_")))))
-        case None => JsAst.UnaryCall(JsAst.Named(NameMangler.methodName(name, definedInNs)), emitValueExpr(obj))
+          JsAst.UnaryArrowFunc(JsAst.NamePattern("_"), Seq(JsAst.Return(JsAst.BinaryOperation(obj, name, JsAst.Named("_")))))
+        case None => JsAst.UnaryCall(JsAst.Named(NameMangler.methodName(name, definedInNs)), obj)
       }
       case Terms.SelectedField => selectInstanceProperty
     }
   }
 
-  def emitBinaryOperation(obj: Terms.ValueExpr, memberName: String, selectedMember: Terms.SelectedMember, argument: Terms.ValueExpr) =
-    JsAst.BinaryOperation(emitValueExpr(obj), emitMemberName(memberName, selectedMember), emitValueExpr(argument))
+  def emitBinaryOperation(obj: JsAst.Expr, memberName: String, selectedMember: Terms.SelectedMember, argument: Terms.ValueExpr) =
+    JsAst.BinaryOperation(obj, emitMemberName(memberName, selectedMember), emitValueExpr(argument))
 
   def emitCall(callee: Terms.ValueExpr, argument: Terms.ValueExpr) =
     JsAst.UnaryCall(emitValueExpr(callee), emitValueExpr(argument))

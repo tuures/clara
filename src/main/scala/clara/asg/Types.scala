@@ -206,28 +206,6 @@ object Types {
   //   case _  => Top // &
   // }
 
-  def findSubstitutions(params: Set[TypeConId], parameterType: Type, argumentType: Type): Map[TypeConId, Type] = {
-    def candidates(t1: Type, t2: Type): Seq[(TypeConId, Type)] = (t1, t2) match {
-      case (p: Param, t2) if params(p.con.tcId) => Seq(p.con.tcId -> t2)
-      case (Func(Nil, p1, r1), Func(Nil, p2, r2)) => candidates(p1, p2) ++ candidates(r1, r2)
-      case (r1: Record, r2: Record) =>
-        r2.fields.entries.flatMap { case (name, t2) =>
-          r1.fields.get(name).map(t1 => candidates(t1, t2)).getOrElse(Nil) // FIXME or should be error?
-        }
-      case (Tuple(ts1), Tuple(ts2)) => ts1.zip(ts2).flatMap { case (t1, t2) =>
-        candidates(t1, t2)
-      }
-      case _ => Nil
-    }
-
-    candidates(parameterType, argumentType).groupMap(_._1)(_._2).map { case(param, candidates) =>
-      // FIXME something like <A> (A, A) => A called with (Uni, Top) will find A -> Seq(Uni, Top) but the head
-      // turns that into <A = Uni> (Uni, Uni) => Uni which is completely wrong.
-      // Proper solution is to use a least common supertype for covariant occurrences and a greatest common subtype for contravariant occurrences
-      (param, candidates.head)
-    }
-  }
-
   def substituteParams(substitutions: Map[TypeConId, Type], typ: Type) = {
     def substitute(typ: Type): Type = typ match {
       case t @ (Top | Bottom | Uni | ErrorType) => t

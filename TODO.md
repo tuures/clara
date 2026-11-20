@@ -1,5 +1,9 @@
 # Done
 
+- methods are typed exactly (PLAN.md): a method's type args are matched from the value's type, once for all alternatives of a union (`Some<String> | None` gives `A = String`), `!` where nothing gives them; the alias is transparent, its methods are only on the types it expands to
+- member lookup falls back to what a tagged or boxed type wraps (`.$value` of a boxed one, `Terms.MemberSelection.unboxCount`), after its own methods
+- type args of a call are inferred through aliases (their expansion), unions (alternative by alternative) and tagged, boxed and opaque types (their type args); a param found as several types gets their union, or their intersection where it's a function's parameter (`TypeInterpreterImpl.findSubstitutions`)
+- `::methods` of an alias are methods of each type it expands to (`Option`'s on `Some` and `None`)
 - member lookup through an alias (on its expansion), a union (the same member in every alternative, typed with the union of their types) and an intersection (the member of one part)
 - `::methods<A> receiver { ... }` and `::declare ::methods<A> { ... }` inside `::extend`, selected from values of tagged, boxed and opaque types; the receiver is any parameter pattern; each method is its own const (`Pair$$methods$left`); the standalone `::methods` sections are gone
 - `::new Bar` is the raw constructor of a tagged or boxed type; a companion's own `apply` (a smart constructor) replaces the generated one
@@ -31,15 +35,19 @@ Each step is a vertical slice (parser -> analyzer -> emitter) validated by an e2
      - emitter: a call of a tagged type's constructor (`Id$$new(x)`) can be just `x`; the const is still needed where the constructor is used as a function value (`xs.map(Id)`)
      - extending a singleton: its value and its companion namespace share the name (see the `Foo.x` lookup tier under Open decisions)
    - ~~3c. `::methods` inside `::extend` with the method lookup on tagged, boxed and opaque types~~ done. Follow-ups:
-     - a method is known from its definition on (a `::declare`d one in its whole scope): the methods of a section can't refer to each other before their definitions or to themselves; like a function run, needs their signatures in the types pass
+     - a method is known from its definition on (a `::declare`d one in its whole scope): methods can't refer to each other before their definitions or to themselves. A method body is only evaluated when the method is called, so inside method bodies any method of the scope (all its sections) with a signature can be used, like a function run; needs the names pass to declare methods ("needs a type annotation to be used before its definition") and their signatures in the types pass. Outside method bodies a method stays usable only after its section (its const isn't initialized before)
      - unused methods aren't reported
      - the methods of a type defined in a nested block are lost outside it (they're in the `Env`), a value of the type can still get out of the block
 4. member lookup, as vertical slices:
    - ~~4a. alias -> expansion, union per alternative (record fields and methods), intersection~~ done. Follow-ups:
      - different members of one name in the alternatives of a union (e.g. a field and a method, or two types' own methods) need a `$type` dispatch, isn't supported yet
      - a member of several parts of an intersection isn't supported yet (see the open decision)
-   - 4b. fan-out of `::methods` from an alias to its members (one method, so no runtime dispatch; `smoketest.clara`'s `Boolean.not` waits for it); removes `aliasWrappedMethodTargets` (non-exhaustive match warning)
-   - 4c. tagged/boxed fallback to wrapped (emit `.value` for boxed)
+   - ~~4b. fan-out of `::methods` from an alias to its members~~ done. Follow-ups:
+     - the types an alias expands to don't need to be defined in the same scope as it yet (no ad-hoc extension of foreign types, plans/namespacing.md), comes with modules
+     - `::methods` of an alias that applies only to some instantiations of a type (`::alias UnitBox: Box<()>`, `::alias Twin<A>: Pair<A, A>`) isn't supported yet, methods apply to every instantiation of a type; behaviour for some instantiations is expected from typeclass instances (9), a separate mechanism (Rust's `impl Point<f32>`, Swift's constrained extensions) would overlap with them
+     - `::declare ::methods` of an alias isn't supported yet: fanning out in the types pass would expand aliases whose structures aren't registered yet, or alias cycles not rejected yet. Fan out in a step after the types pass and `rejectUnsupportedRecursion` (a list of pending fan-outs collected in the `Env`), so every `::declare` stays usable anywhere in its scope
+   - ~~4b+. methods typed exactly, a union's type args found once, the alias transparent~~ done
+   - ~~4c. tagged/boxed fallback to wrapped~~ done
 5. patterns: construct pattern (`Some a`, the `???` in `PatternAnalyzer`) + pattern validity (Check 1 in plans/enum2.md: the runtime test must tell constructors apart, a tag test like `$value.$type === 'Some'`)
    - `Y Z` in pattern position is always a construct pattern
    - qualified construct patterns (`Option.Some s`)
@@ -55,6 +63,7 @@ Each step is a vertical slice (parser -> analyzer -> emitter) validated by an e2
 8. modules and imports: AST support for a module, import syntax in the parser
    - `::new` only inside the defining module, today it's allowed wherever the type is visible
 9. typeclasses: first-order with member fan-out, then constraints (dictionary passing), static members (`Int.empty`), HKT with re-sugaring
+   - question: should inference place an argument type in a union parameter type by checking which alternatives it fits (`isAssignable` with the solved type params as the error type), like TypeScript? Today `findSubstitutions` uses the alternatives that find candidates and falls back to the bare params, so `A | Int` against `Int` gives `A = Int` instead of leaving `A` free. Instance resolution will lean on inference more, decide with it
 
 # Follow-ups
 
@@ -81,11 +90,23 @@ Each step is a vertical slice (parser -> analyzer -> emitter) validated by an e2
   - a run of function defs is broken by anything else, also a type def or a `::declare` in between, which evaluate nothing at their position (type defs come first in the block term): could be let through if it turns out to matter
   - a function used only by itself isn't reported unused (its self-reference counts as a use)
   - recursive aliases (`::alias L: () | (Int, L)`): the alias unwraps in `TypeInterpreterImpl` (`isAssignable`, `disjoint`, `expandUnions`) would need to be remembered like the tagged and boxed ones
-  - a generic recursive list: a constructor call's type args aren't inferred from a union parameter (`List(("a", rest))` with `::tagged List<A>: () | (A, List<A>)` infers `A` as `!`, `Types.findSubstitutions` doesn't look into unions)
 - a lambda with a tuple parameter doesn't get its type from the expected type (`g: (String, String) => String = (_, b) => b` is "Could not infer type")
-- polymorphic callee: the expected argument type contains the callee's type params, e.g. a lambda argument's parameter is typed `A` (see FIXME in Types.findSubstitutions)
+- bidirectional checking, steps in this order (Dunfield-Krishnaswami's rules without their inference variables):
+  1. a lambda's body doesn't get the expected result type, only its parameter gets the expected parameter type (`lambdaTerm`), so `add: Int => Int => Int = a => b => a` is "Could not infer type" at `b`: check the body against the result type of the expected `Func`, also the case bodies of `#()`; then a block passes its expected type to its last expression
+  2. a polymorphic function isn't assignable to a monomorphic one (`f: Int => Int = id` with `id = <A>(a: A) => a` is "Type `<A>A => A` is not assignable to type `Int => Int`"), as `isAssignable` compares functions only with the same number of type params: instantiate the type params of the source with `findSubstitutions` before comparing; also lets an intersection callee keep its polymorphic members (`callResultType` drops them)
+  3. polymorphic callee: the expected argument type contains the callee's type params, e.g. a lambda argument's parameter is typed `A` (`map(xs, p => p.name)` is "`name` is not a member of type `A`"): type the argument in two phases, like TypeScript:
+     - synthesize the parts of the argument that aren't literal lambdas or `#()`, and find the type args they give
+     - check the lambdas against the parameter type with those type args substituted
+     - infer the type args from the whole argument, as today
+
+     a lambda whose parameter type comes only from another lambda's result (`pipe(x => 1, y => y)`) needs a round per lambda
+  4. `valueExprTermExpecting` treats the expected type as a hint and each caller runs `expectAssignable`, so an error points at the whole expression (`p: (Int, Int) = (1, "x")` quotes the tuple, not `"x"`): split it into checking, which ends in `expectAssignable` at the position of the part that doesn't fit, and synthesis. Needs step 3 first, as a polymorphic callee's parameter type and the matched type that `argumentFirstCallTerm` passes to `#()` are hints, not types to check against
+- type arg inference treats every type arg of a tagged, boxed or opaque type as covariant (`TypeInterpreterImpl.findSubstitutions`), so `Sink<()> | Sink<((), ())>` with `::tagged Sink<A>: A => ()` is "no type arguments fit" where Scala infers `A = () & ((), ())`; needs each con's variance, probed from its structure (like TypeScript) or from variance annotations
+- type args aren't inferred from the expected type (`xs: List<String> = List(())`), only from the argument; a param the argument doesn't give is `!`, which fits only where the con is covariant in it
+- "`m` can't be selected from `X`, no type arguments of `::methods<A>` fit all of its alternatives" doesn't name the types that conflict
 - phantom type params of tagged/boxed: error until variance annotations exist, then infer variance per type con (see TODO in Types.AssignableImpl)
 - merge identical alternatives in Types.Union (keeps alias nodes, e.g. `Option<Int> | Option<Int>`)
+- a boxed type of an empty type (`Some<!>`) has no values but isn't treated as empty, so `Option<!>` isn't assignable to `None` (the other direction is): drop the empty alternatives of a union before checking it (like `!` in `Types.Union`, but it needs the structures, so in `TypeInterpreterImpl`'s normalizing), and treat a boxed type of an empty type as empty like `hasEmptyMember` does for records and tuples; only when the wrapped type itself is empty, so recursive boxed types aren't unwrapped
 - a `::declare` has a term (`Terms.ValueDecl`) but a `::declare ::methods` section has none: align them, either drop `Terms.ValueDecl` (only its name, the emitter ignores it) or give declare sections a term too
 - `An.traverse(as)(f)` for the `An.seq(as.map(f))` of the analyzer (about ten places)
 - `typeParams` as a member of `TypeCon` (`Nil` for singletons and params, until HKT params have an arity), so that `TypeInterpreter.instantiate`, `TypeCons.toSource` and `pseudoInstantiate` don't match on the con kind just to get them

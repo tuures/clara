@@ -72,6 +72,18 @@
   - methods can only be defined for nominal types
   - helps to avoid recursion in definitions
   - ??? offer extension ad-hoc methods/operators (on arbitrary types)?
+  - methods belong to type constructors: they apply to every instantiation of a type (`::methods` of an alias of
+    `Box<()>` isn't allowed), behaviour for some instantiations comes from typeclass instances
+  - methods are typed exactly: a section's type params get what the value's type has, the compiler never widens them
+    - `Some(1).contains("a")` is an error, unlike Scala's `List(1).contains("a")`
+    - a method that widens says so with its own type param and a union result: `orElse = <B>(other: Option<B>) => ...`
+      returns `Option<A | B>`, Scala's `[B >: A]` without bounds
+    - a type that doesn't use a type param of its alias gets `!` for it: a value typed `None` has the methods of
+      `Option<!>`, a method taking an `A` can't be called on it
+      - so a method that should work on `None` widens: `getOrElse = <B>(default: B) => ...` returns `A | B`, which is
+        `B` on `None`; an exact `getOrElse = (default: A) => ...` can't be called on a value typed `None`
+    - a union finds the type args once from all its alternatives (`Some<String> | None` gives `A = String`), so an
+      alias and its expansion have the same methods
 
 
 - provide module system

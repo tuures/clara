@@ -1542,7 +1542,7 @@ class BlockAnalyzerSpec extends BaseSpec {
     val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
 
     inside(result.value.value.bcs.last) {
-      case Terms.MemberSelection(_, "itself", Terms.SelectedMethod(_, Seq("Box"), _), Types.Tagged(con, Seq(Types.Uni), _)) =>
+      case Terms.MemberSelection(_, 0, "itself", Terms.SelectedMethod(_, Seq("Box"), _), Types.Tagged(con, Seq(Types.Uni), _)) =>
         assert(con.name === "Box")
     }
   }
@@ -1616,7 +1616,92 @@ class BlockAnalyzerSpec extends BaseSpec {
     assert(result.value.left.value.map(_.message) === Seq("Type `Box<A>` expects 1 type arguments, but 0 given"))
   }
 
-  test("`::methods` of an alias isn't supported yet") {
+  private def option(members: InBlockDecl*) = Seq(
+    TypeDef(TypeDefKind.Alias, "Option", Seq(TypeParam("A")), UnionType(Seq(
+      Ast.NamedType(Seq(NameWithPos("Option")), NameWithPos("Some"), Seq(NamedType("A"))),
+      qualifiedType("Option", "None"),
+    ))),
+    extend("Option", Seq(
+      TypeDef(TypeDefKind.Boxed, "Some", Seq(TypeParam("A")), NamedType("A")),
+      TypeDef(TypeDefKind.Singleton, "None"),
+    ) ++ members: _*),
+  )
+  private def optionItselfSection = MethodDefSection(Seq(TypeParam("A")), CapturePattern("o"), Seq(MethodDef("itself", None, NamedValue("o"))))
+
+  test("the `::methods` of the alias `Option` are methods of `Some` and `None`, and so of `Option<()>`") {
+    val block = Block(option(optionItselfSection) ++ Seq(
+      ValueDecl("option", NamedType("Option", Seq(UnitType()))),
+      ValueDecl("some", Ast.NamedType(Seq(NameWithPos("Option")), NameWithPos("Some"), Seq(UnitType()))),
+      Tuple(Seq(member("option", "itself"), member("some", "itself"))),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    inside(result.value.value.bcs.last) { case Terms.Tuple(selections, Types.Tuple(Seq(Types.Alias(_, Seq(Types.Uni)), Types.Alias(_, Seq(Types.Uni))))) =>
+      val methods = selections.collect { case Terms.MemberSelection(_, _, _, method @ Terms.SelectedMethod(_, Seq("Option"), _), _) => method }
+
+      assert(methods.length === 2)
+      assert(methods.map(_.defId).distinct.forall(result.log.usageTrace.defs.contains))
+    }
+  }
+
+  test("a method of `Option` on `Some<()> | None` gets `A = ()` from `Some<()>`") {
+    val block = Block(option(optionItselfSection) ++ Seq(
+      ValueDecl("either", UnionType(Seq(
+        Ast.NamedType(Seq(NameWithPos("Option")), NameWithPos("Some"), Seq(UnitType())),
+        qualifiedType("Option", "None"),
+      ))),
+      member("either", "itself"),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    inside(result.value.value.typ) { case Types.Alias(con, Seq(Types.Uni)) => assert(con.name === "Option") }
+  }
+
+  test("a method of `Option` on `None` gets `A = !`, as `None` doesn't use `A`") {
+    val block = Block(option(optionItselfSection) ++ Seq(
+      ValueDecl("none", qualifiedType("Option", "None")),
+      member("none", "itself"),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    inside(result.value.value.typ) { case Types.Alias(con, Seq(Types.Bottom)) => assert(con.name === "Option") }
+  }
+
+  test("`::methods` of an alias that applies only to some instantiations of a type, like `Box<()>`, isn't supported yet") {
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Tagged, "Box", Seq(TypeParam("A")), NamedType("A")),
+      TypeDef(TypeDefKind.Alias, "UnitBox", NamedType("Box", Seq(UnitType()))),
+      extend("UnitBox", MethodDefSection(Nil, CapturePattern("b"), Seq(MethodDef("itself", None, NamedValue("b"))))),
+      TypeDef(TypeDefKind.Tagged, "Pair", Seq(TypeParam("A"), TypeParam("B")), TupleType(Seq(NamedType("A"), NamedType("B")))),
+      TypeDef(TypeDefKind.Alias, "Twin", Seq(TypeParam("A")), NamedType("Pair", Seq(NamedType("A"), NamedType("A")))),
+      extend("Twin", MethodDefSection(Seq(TypeParam("A")), CapturePattern("t"), Seq(MethodDef("same", None, NamedValue("t"))))),
+      ValueDecl("unitBox", NamedType("Box", Seq(UnitType()))),
+      ValueDef(CapturePattern("fromUnitBox"), member("unitBox", "itself")),
+    ))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq(
+      "`::methods` of `UnitBox` would only apply to `Box<()>`, not to every `Box<A>`, which isn't supported yet",
+      "`::methods` of `Twin<A>` would only apply to `Pair<A, A>`, not to every `Pair<A, B>`, which isn't supported yet",
+    ))
+  }
+
+  test("`::methods o` of `Option<A>`, a wrong number of type parameters, still defines its methods on `Some` and `None`") {
+    val block = Block(option(MethodDefSection(Nil, CapturePattern("o"), Seq(MethodDef("itself", None, NamedValue("o"))))) ++ Seq(
+      ValueDecl("some", Ast.NamedType(Seq(NameWithPos("Option")), NameWithPos("Some"), Seq(UnitType()))),
+      member("some", "itself"),
+    ))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq("Type `Option<A>` expects 1 type arguments, but 0 given"))
+  }
+
+  test("`::methods` of `::alias Unit: ()` is an error, `()` can't have methods") {
     val block = Block(Seq(
       TypeDef(TypeDefKind.Alias, "Unit", UnitType()),
       extend("Unit", MethodDefSection(Nil, CapturePattern("u"), Seq(MethodDef("itself", None, NamedValue("u"))))),
@@ -1624,7 +1709,20 @@ class BlockAnalyzerSpec extends BaseSpec {
 
     val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
 
-    assert(result.value.left.value.map(_.message) === Seq("`::methods` of an alias isn't supported yet"))
+    assert(result.value.left.value.map(_.message) === Seq(
+      "`::methods` of `Unit` would add methods to `()`, only tagged, boxed, opaque and singleton types can have methods"
+    ))
+  }
+
+  test("`::declare ::methods` of an alias isn't supported yet") {
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Alias, "Unit", UnitType()),
+      extend("Unit", MethodDeclSection(Nil, Seq(Ast.MethodDecl(Nil, NameWithPos("raw"), UnitType())))),
+    ))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq("`::declare ::methods` of an alias isn't supported yet"))
   }
 
   test("a method defined twice is a duplicate, also in another section") {
@@ -1641,6 +1739,17 @@ class BlockAnalyzerSpec extends BaseSpec {
     assert(result.value.left.value.map(_.message) === Seq.fill(2)("Method with name `itself` already exists for type `Box<A>`"))
   }
 
+  test("a method of `Option` and an own method of `Some` with the same name are duplicates") {
+    val block = Block(option(
+      optionItselfSection,
+      extend("Some", MethodDefSection(Seq(TypeParam("A")), CapturePattern("s"), Seq(MethodDef("itself", None, NamedValue("s"))))),
+    ))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq("Method with name `itself` already exists for type `Some<A>`"))
+  }
+
   test("a method that fails to analyze is the error type") {
     val block = Block(box(MethodDefSection(Seq(TypeParam("A")), CapturePattern("b"), Seq(MethodDef("broken", None, NamedValue("nope"))))) ++
       Seq(unitBox, Call(unitBoxMember("broken"), UnitLiteral())))
@@ -1650,7 +1759,20 @@ class BlockAnalyzerSpec extends BaseSpec {
     assert(result.value.left.value.map(_.message) === Seq("Unknown value `nope`"))
   }
 
-  test("a value of a singleton or a type parameter has no methods") {
+  test("methods are typed exactly: a method taking an `A` of a `Box<()>` doesn't take a `((), ())`") {
+    val block = Block(box(MethodDefSection(Seq(TypeParam("A")), CapturePattern("b"), Seq(
+      MethodDef("put", None, Lambda(PatternAs(CapturePattern("a"), NamedType("A")), NamedValue("b"))),
+    ))) ++ Seq(
+      unitBox,
+      Call(unitBoxMember("put"), Tuple(Seq(UnitLiteral(), UnitLiteral()))),
+    ))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq("Type `((), ())` is not assignable to type `()`"))
+  }
+
+  test("a singleton without methods and a type parameter have no methods") {
     val block = Block(Seq(
       TypeDef(TypeDefKind.Singleton, "True"),
       ValueDef(CapturePattern("ofSingleton"), MemberSelection(NamedValue("True"), NamedValue("not"))),
@@ -1680,7 +1802,7 @@ class BlockAnalyzerSpec extends BaseSpec {
     val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
 
     assert(result.value.value.bcs.last ===
-      Terms.MemberSelection(Terms.NamedValue("named", Nil, Types.Record("name" -> Types.Uni)), "name", Terms.SelectedField, Types.Uni)
+      Terms.MemberSelection(Terms.NamedValue("named", Nil, Types.Record("name" -> Types.Uni)), 0, "name", Terms.SelectedField, Types.Uni)
     )
   }
 
@@ -1711,7 +1833,7 @@ class BlockAnalyzerSpec extends BaseSpec {
     assert(result.value.value.typ === Types.Union(Seq(Types.Uni, Types.Tuple(Seq(Types.Uni, Types.Uni)))))
   }
 
-  test("a method of every alternative of a union is selected when it's the same method") {
+  test("the same method of `Box<()> | Box<((), ())>` is selected with `A = () | ((), ())`") {
     val block = Block(box(itselfSection) ++ Seq(
       ValueDecl("either", UnionType(Seq(NamedType("Box", Seq(UnitType())), NamedType("Box", Seq(pairType))))),
       member("either", "itself"),
@@ -1719,9 +1841,25 @@ class BlockAnalyzerSpec extends BaseSpec {
 
     val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
 
-    inside(result.value.value.bcs.last) { case Terms.MemberSelection(_, _, Terms.SelectedMethod(_, Seq("Box"), _), Types.Union(boxes)) =>
-      assert(boxes.length === 2)
+    inside(result.value.value.bcs.last) {
+      case Terms.MemberSelection(_, _, _, Terms.SelectedMethod(_, Seq("Box"), _), Types.Tagged(_, Seq(typeArg), _)) =>
+        assert(typeArg === Types.Union(Seq(Types.Uni, Types.Tuple(Seq(Types.Uni, Types.Uni)))))
     }
+  }
+
+  test("a method of `Sink<()> | Sink<((), ())>` is an error, no `A` fits both") {
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Tagged, "Sink", Seq(TypeParam("A")), Ast.FuncType(Nil, NamedType("A"), UnitType())),
+      extend("Sink", MethodDefSection(Seq(TypeParam("A")), CapturePattern("s"), Seq(MethodDef("itself", None, NamedValue("s"))))),
+      ValueDecl("either", UnionType(Seq(NamedType("Sink", Seq(UnitType())), NamedType("Sink", Seq(pairType))))),
+      member("either", "itself"),
+    ))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq(
+      "`itself` can't be selected from `Sink<()> | Sink<((), ())>`, no type arguments of `::methods<A>` fit all of its alternatives"
+    ))
   }
 
   test("a member missing from an alternative of a union isn't a member of the union") {
@@ -1781,6 +1919,87 @@ class BlockAnalyzerSpec extends BaseSpec {
     assert(result.value.left.value.map(_.message) === Seq(
       "`a` is a member of several parts of `{a: ()} & {a: ((), ())}`, which isn't supported yet"
     ))
+  }
+
+  test("a member of what a tagged type wraps is a member of the tagged type") {
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Tagged, "Named", recordType("name" -> UnitType())),
+      ValueDecl("named", NamedType("Named")),
+      member("named", "name"),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    inside(result.value.value.bcs.last) { case Terms.MemberSelection(_: Terms.NamedValue, 0, "name", Terms.SelectedField, Types.Uni) => }
+  }
+
+  test("a member of what a boxed type wraps is selected from its unboxed value") {
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Boxed, "Named", recordType("name" -> UnitType())),
+      ValueDecl("named", NamedType("Named")),
+      member("named", "name"),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    inside(result.value.value.bcs.last) {
+      case Terms.MemberSelection(_: Terms.NamedValue, 1, "name", Terms.SelectedField, Types.Uni) =>
+    }
+  }
+
+  test("a method of what a boxed type wraps is selected from its unboxed value") {
+    val block = Block(box(itselfSection) ++ Seq(
+      TypeDef(TypeDefKind.Boxed, "Outer", NamedType("Box", Seq(UnitType()))),
+      ValueDecl("outer", NamedType("Outer")),
+      member("outer", "itself"),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    inside(result.value.value.bcs.last) {
+      case Terms.MemberSelection(_: Terms.NamedValue, 1, "itself", _: Terms.SelectedMethod, Types.Tagged(_, Seq(Types.Uni), _)) =>
+    }
+  }
+
+  test("a method of a tagged or boxed type comes before a member of what it wraps") {
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Boxed, "Named", recordType("name" -> UnitType())),
+      extend("Named", MethodDefSection(Nil, CapturePattern("n"), Seq(
+        MethodDef("name", None, Tuple(Seq(UnitLiteral(), UnitLiteral()))),
+      ))),
+      ValueDecl("named", NamedType("Named")),
+      member("named", "name"),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    inside(result.value.value.bcs.last) { case Terms.MemberSelection(_: Terms.NamedValue, 0, "name", _: Terms.SelectedMethod, _: Types.Tuple) => }
+  }
+
+  test("a member of a boxed and an unboxed alternative of a union is a different member") {
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Boxed, "Named", recordType("name" -> UnitType())),
+      ValueDecl("either", UnionType(Seq(NamedType("Named"), recordType("name" -> UnitType())))),
+      member("either", "name"),
+    ))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq(
+      "`name` is a different member in the alternatives of `Named | {name: ()}`, which isn't supported yet"
+    ))
+  }
+
+  test("looking up a member of a boxed type that wraps itself ends") {
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Boxed, "Loop", NamedType("Loop")),
+      ValueDecl("loop", NamedType("Loop")),
+      member("loop", "name"),
+    ))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq("`name` is not a member of type `Loop`"))
   }
 
   test("block warns about unused local values") {

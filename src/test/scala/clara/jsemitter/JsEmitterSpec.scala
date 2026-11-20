@@ -199,6 +199,7 @@ class JsEmitterSpec extends BaseSpec {
   test("emitValueExpr: MemberSelection on field") {
     val expr = Terms.MemberSelection(
       Terms.NamedValue("obj", Nil, dummyType),
+      0,
       "x",
       Terms.SelectedField,
       dummyType
@@ -206,10 +207,18 @@ class JsEmitterSpec extends BaseSpec {
     assert(emitExpr(expr) === JsAst.Member(JsAst.Named("obj"), "x"))
   }
 
+  test("emitValueExpr: MemberSelection reads the value of each boxed type before selecting the member") {
+    val expr = Terms.MemberSelection(Terms.NamedValue("boxed", Nil, dummyType), 2, "name", Terms.SelectedField, dummyType)
+    val unboxed = JsAst.Member(JsAst.Member(JsAst.Named("boxed"), "$value"), "$value")
+
+    assert(emitExpr(expr) === JsAst.Member(unboxed, "name"))
+  }
+
   test("emitValueExpr: MemberSelection on method with BinaryOperator emitKind") {
     val attrs = Attributes.MethodAttributes(emitKind = Some(Attributes.BinaryOperator), emitName = Some("+"))
     val expr = Terms.MemberSelection(
       Terms.NamedValue("a", Nil, dummyType),
+      0,
       "plus",
       Terms.SelectedMethod(DefId(), Seq("Int"), attrs),
       dummyType
@@ -224,6 +233,7 @@ class JsEmitterSpec extends BaseSpec {
     val attrs = Attributes.MethodAttributes(emitKind = Some(Attributes.InstanceProperty), emitName = Some("length"))
     val expr = Terms.MemberSelection(
       Terms.NamedValue("s", Nil, dummyType),
+      0,
       "length",
       Terms.SelectedMethod(DefId(), Seq("String"), attrs),
       dummyType
@@ -235,6 +245,7 @@ class JsEmitterSpec extends BaseSpec {
     val attrs = Attributes.MethodAttributes()
     val expr = Terms.MemberSelection(
       Terms.NamedValue("obj", Nil, dummyType),
+      0,
       "bar",
       Terms.SelectedMethod(DefId(), Seq("Outer", "Foo"), attrs),
       dummyType
@@ -255,6 +266,7 @@ class JsEmitterSpec extends BaseSpec {
     val attrs = Attributes.MethodAttributes(emitKind = Some(Attributes.BinaryOperator), emitName = Some("+"))
     val callee = Terms.MemberSelection(
       Terms.NamedValue("a", Nil, dummyType),
+      0,
       "plus",
       Terms.SelectedMethod(DefId(), Seq("Int"), attrs),
       dummyType

@@ -68,7 +68,13 @@ object Terms {
   sealed trait SelectedMember extends Node
   case object SelectedField extends SelectedMember
   case class SelectedMethod(defId: DefId, definedInNs: Seq[String], attributes: MethodAttributes) extends SelectedMember
-  case class MemberSelection(obj: ValueExpr, memberName: String, selectedMember: SelectedMember, typ: Type) extends ValueExpr
+  case class MemberSelection(
+    obj: ValueExpr,
+    unboxCount: Int,
+    memberName: String,
+    selectedMember: SelectedMember,
+    typ: Type,
+  ) extends ValueExpr
 
   case class Call(callee: ValueExpr, argument: ValueExpr, typ: Type) extends ValueExpr
 

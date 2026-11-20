@@ -106,13 +106,15 @@ case class ValueExprAnalyzerImpl(env: Env) {
   }
 
   def funcCallResultType(calleeFunc: Types.Func, argumentTerm: Terms.ValueExpr, argumentPos: Pos): An[Types.Type] = {
-    val Types.Func(_, inferredParameterType, inferredResultType) = calleeFunc.typeParams match {
-      case Nil => calleeFunc
+    val inferredFuncAn = calleeFunc.typeParams match {
+      case Nil => An.valid(calleeFunc)
       case _ => inferFuncTypeArgs(calleeFunc, argumentTerm.typ)
     }
 
-    TypeInterpreter.expectAssignable(argumentTerm.typ, inferredParameterType, argumentPos).map { case () =>
-      inferredResultType
+    inferredFuncAn.flatMap { case Types.Func(_, inferredParameterType, inferredResultType) =>
+      TypeInterpreter.expectAssignable(argumentTerm.typ, inferredParameterType, argumentPos).map { case () =>
+        inferredResultType
+      }
     }
   }
 
@@ -125,19 +127,20 @@ case class ValueExprAnalyzerImpl(env: Env) {
     }
   }
 
-  def inferFuncTypeArgs(polyFunc: Types.Func, argumentType: Types.Type): Types.Func = {
+  def inferFuncTypeArgs(polyFunc: Types.Func, argumentType: Types.Type): An[Types.Func] = {
     val Types.Func(typeParams, parameterType, resultType) = polyFunc
+    val typeParamIds = typeParams.map(_.tcId).toSet
 
-    val foundSubstitutions = Types.findSubstitutions(typeParams.map(_.tcId).toSet, parameterType, argumentType)
+    TypeInterpreter.findSubstitutions(typeParamIds, parameterType, argumentType).map { foundSubstitutions =>
+      val inferredTypeArgs = typeParams.map { paramCon =>
+        // FIXME are there any "valid" cases where param cannot be resolved other than unused type parameter?
+        (paramCon.tcId, foundSubstitutions.getOrElse(paramCon.tcId, Types.Bottom))
+      }.toMap
 
-    val inferredTypeArgs = typeParams.map { paramCon =>
-      // FIXME are there any "valid" cases where param cannot be resolved other than unused type parameter?
-      (paramCon.tcId, foundSubstitutions.getOrElse(paramCon.tcId, Types.Bottom))
-    }.toMap
+      val substituteParams = Types.substituteParams(inferredTypeArgs, _)
 
-    val substituteParams = Types.substituteParams(inferredTypeArgs, _)
-
-    Types.Func(Nil, substituteParams(parameterType), substituteParams(resultType))
+      Types.Func(Nil, substituteParams(parameterType), substituteParams(resultType))
+    }
   }
 
   def valueExprTermExpecting(valueExpr: Ast.ValueExpr, expectedType: Option[Types.Type]): An[Terms.ValueExpr] =
@@ -187,11 +190,7 @@ case class ValueExprAnalyzerImpl(env: Env) {
       // obj is a named namespace, resolve name there
       case Some(nsPath) => NameResolver.value(env, nsPath, name, memberPos)
       // otherwise obj must be a value, try to resolve the member from it
-      case None => valueExprTerm(obj).flatMap { objectTerm =>
-        MemberSelectionAnalyzer.memberSelection(env, objectTerm, name, memberPos).map { case (selectedMember, typ) =>
-          Terms.MemberSelection(objectTerm, name, selectedMember, typ)
-        }
-      }
+      case None => valueExprTerm(obj).flatMap(MemberSelectionAnalyzer.memberSelection(env, _, name, memberPos))
     }
 
   def rawConstructorTerm(nsPath: Seq[Ast.NameWithPos], name: String, pos: Pos): An[Terms.RawConstructor] =

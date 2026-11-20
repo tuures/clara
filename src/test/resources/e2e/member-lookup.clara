@@ -16,8 +16,15 @@ words: Words = Pair("alias method", "unused")
 pet: { name: String, sound: String } | { name: String, legs: String } = { name = "union field", legs = "four" }
 tagged: { name: String } & { id: String } = { name = "unused", id = "intersection field" }
 
+::tagged Id: { name: String }
+::boxed Account: { name: String }
+id = Id { name = "tagged field" }
+account = Account { name = "boxed field" }
+
 console.log(named.name)
 console.log(words.left)
 console.log(pet.name)
 console.log(tagged.id)
+console.log(id.name)
+console.log(account.name)
 ()

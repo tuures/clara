@@ -68,36 +68,6 @@ class TypesSpec extends BaseSpec {
     "construction keeps unions inside intersections as written, only normalizeHead distributes them"
   )
 
-  test("findSubstitutions finds parameters in nested structural types") {
-    val parameterType = Tuple(Seq(
-      aParam,
-      Record("value" -> bParam),
-      Func(aParam, bParam),
-    ))
-    val argumentType = Tuple(Seq(
-      Uni,
-      Record("value" -> Top),
-      Func(Uni, Top),
-    ))
-
-    assert(findSubstitutions(Set(aParamCon.tcId, bParamCon.tcId), parameterType, argumentType) === Map(
-      aParamCon.tcId -> Uni,
-      bParamCon.tcId -> Top,
-    ))
-  }
-
-  test("findSubstitutions groups repeated occurrences of a parameter") {
-    assert(findSubstitutions(Set(aParamCon.tcId), Tuple(Seq(aParam, aParam)), Tuple(Seq(Uni, Uni))) === Map(
-      aParamCon.tcId -> Uni,
-    ))
-  }
-
-  test("findSubstitutions does not infer parameters outside the requested set") {
-    assert(findSubstitutions(Set(aParamCon.tcId), Tuple(Seq(aParam, bParam)), Tuple(Seq(Uni, Top))) === Map(
-      aParamCon.tcId -> Uni,
-    ))
-  }
-
   test("substituteParams recursively substitutes structural and nominal types") {
     val substitutions = Map[TypeConId, Type](
       aParamCon.tcId -> Uni,

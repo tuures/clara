@@ -63,7 +63,7 @@ class ValueExprAnalyzerSpec extends BaseSpec {
     assert(result.value.isLeft)
     assert(result.value.left.value.length === 1)
     // FIXME the error message is not very good, it should be more specific about the type parameter and the constraints that are incompatible
-    assert(result.value.left.value.head.message === "Type `(! => (), ())` is not assignable to type `(! => (), !)`")
+    assert(result.value.left.value.head.message === "Type `(! => (), ())` is not assignable to type `(() => (), ())`")
   }
 
 

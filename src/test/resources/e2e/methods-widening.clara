@@ -1,0 +1,31 @@
+::opaque String
+::declare console: { log: String => () }
+
+::singleton True
+::singleton False
+::alias Boolean: True | False
+
+describe = #(True => "yes", False => "no")
+
+::alias Option<A>: Option.Some<A> | Option.None
+
+::extend Option {
+  ::boxed Some<A>: A
+  ::singleton None
+
+  ::methods<A> o {
+    isDefined: Boolean = o @ #(None => False, _ => True)
+    orElse = <B>(other: Option<B>) => o @ #(None => other, _ => o)
+  }
+}
+
+isSome = <A>(option: Option<A>) => option.isDefined
+
+name = Option.Some("clara")
+nothing = Option.None
+
+console.log(isSome(name) @ describe)
+console.log(nothing.orElse(name).isDefined @ describe)
+console.log(name.orElse(Option.Some(())).isDefined @ describe)
+console.log(nothing.orElse(nothing).isDefined @ describe)
+()

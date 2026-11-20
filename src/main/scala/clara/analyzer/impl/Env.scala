@@ -23,7 +23,14 @@ sealed trait EnvTypeEntry {
 case class EnvTypeCon(con: TypeCon, defId: DefId) extends EnvTypeEntry
 case class EnvNamespace(namespace: NsId, defId: DefId, definedAt: Pos) extends EnvTypeEntry
 case class EnvCompanion(con: TypeCon, namespace: NsId, defId: DefId) extends EnvTypeEntry
-case class EnvMethod(attributes: MethodAttributes, typeParams: Seq[TypeCons.ParamCon], typ: Type, defId: DefId, definedInNs: Seq[String])
+case class EnvMethod(
+  attributes: MethodAttributes,
+  sectionTypeParams: Seq[TypeCons.ParamCon],
+  targetType: Type,
+  typ: Type,
+  defId: DefId,
+  definedInNs: Seq[String],
+)
 
 case class BlockScope(values: Namespace[EnvValueEntry], types: Namespace[EnvTypeEntry])
 

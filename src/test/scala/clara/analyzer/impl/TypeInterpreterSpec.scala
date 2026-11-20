@@ -2,7 +2,7 @@ package clara.analyzer.impl
 
 import clara.ast.NoPos
 import clara.ast.Ast.TypeDefKind
-import clara.asg.{Types, TypeCons}
+import clara.asg.{TypeConId, Types, TypeCons}
 import clara.testutil.BaseSpec
 import clara.util.Safe.{SafeStringContext, StringsSafeString}
 
@@ -620,6 +620,90 @@ class TypeInterpreterSpec extends BaseSpec {
     Func(Tuple(Seq(redOrBlue, Uni)), Uni),
     "((Red, ()) => ()) & ((Blue, ()) => ()), (Red | Blue, ()) => ()"
   )
+
+  // type args of a call: where the params are in the parameter type, found in the argument type
+
+  def findSubstitutions(params: Set[TypeConId], parameterType: Type, argumentType: Type, typeStructures: TypeStructures = TypeStructures.empty) =
+    TypeInterpreterImpl(typeStructures).findSubstitutions(params, parameterType, argumentType)
+
+  test("findSubstitutions finds parameters in nested structural types") {
+    val parameterType = Tuple(Seq(
+      aParam,
+      Record("value" -> bParam),
+      Func(aParam, bParam),
+    ))
+    val argumentType = Tuple(Seq(
+      Uni,
+      Record("value" -> Top),
+      Func(Uni, Top),
+    ))
+
+    assert(findSubstitutions(Set(aParamCon.tcId, bParamCon.tcId), parameterType, argumentType) === Map(
+      aParamCon.tcId -> Uni,
+      bParamCon.tcId -> Top,
+    ))
+  }
+
+  test("findSubstitutions groups repeated occurrences of a parameter") {
+    assert(findSubstitutions(Set(aParamCon.tcId), Tuple(Seq(aParam, aParam)), Tuple(Seq(Uni, Uni))) === Map(
+      aParamCon.tcId -> Uni,
+    ))
+  }
+
+  test("findSubstitutions does not infer parameters outside the requested set") {
+    assert(findSubstitutions(Set(aParamCon.tcId), Tuple(Seq(aParam, bParam)), Tuple(Seq(Uni, Top))) === Map(
+      aParamCon.tcId -> Uni,
+    ))
+  }
+
+  test("findSubstitutions unions the types found for a parameter") {
+    assert(findSubstitutions(Set(aParamCon.tcId), Tuple(Seq(aParam, aParam)), Tuple(Seq(redSingleton, blueSingleton))) === Map(
+      aParamCon.tcId -> Union(Seq(redSingleton, blueSingleton)),
+    ))
+  }
+
+  test("findSubstitutions intersects the types found for a parameter in function parameters") {
+    val parameterType = Tuple(Seq(Func(aParam, Uni), Func(aParam, Uni)))
+    val argumentType = Tuple(Seq(Func(redSingleton, Uni), Func(blueSingleton, Uni)))
+
+    assert(findSubstitutions(Set(aParamCon.tcId), parameterType, argumentType) === Map(
+      aParamCon.tcId -> Intersection(Seq(redSingleton, blueSingleton)),
+    ))
+  }
+
+  // ::alias Maybe<A>: Just<A> | Nothing, ::boxed Just<A>: A
+  val justCon = WrapperTypeCon(TypeDefKind.Boxed, "Just", Seq(aParamCon), Nil, NoPos)
+  val nothingSingleton = Singleton(SingletonTypeCon("Nothing", Nil, NoPos))
+  val maybeCon = WrapperTypeCon(TypeDefKind.Alias, "Maybe", Seq(aParamCon), Nil, NoPos)
+  val maybeStructures = TypeStructures(Map(
+    justCon.tcId -> aParam,
+    maybeCon.tcId -> Union(Seq(Boxed(justCon, Seq(aParam)), nothingSingleton)),
+  ))
+
+  test("findSubstitutions matches a tagged, boxed or opaque type by its type args") {
+    assert(findSubstitutions(Set(bParamCon.tcId), Boxed(justCon, Seq(bParam)), Boxed(justCon, Seq(redSingleton))) === Map(
+      bParamCon.tcId -> redSingleton,
+    ))
+  }
+
+  test("findSubstitutions matches an alias parameter through its expansion, an alternative of a union by its con") {
+    val maybeB = Alias(maybeCon, Seq(bParam))
+
+    assert(findSubstitutions(Set(bParamCon.tcId), maybeB, Boxed(justCon, Seq(redSingleton)), maybeStructures) === Map(
+      bParamCon.tcId -> redSingleton,
+    ))
+    assert(findSubstitutions(Set(bParamCon.tcId), maybeB, Union(Seq(Boxed(justCon, Seq(redSingleton)), nothingSingleton)), maybeStructures) === Map(
+      bParamCon.tcId -> redSingleton,
+    ))
+    assert(findSubstitutions(Set(bParamCon.tcId), maybeB, nothingSingleton, maybeStructures) === Map())
+  }
+
+  test("findSubstitutions matches a bare parameter alternative of a union only when the other alternatives find nothing") {
+    val parameterType = Union(Seq(aParam, Tuple(Seq(aParam, Uni))))
+
+    assert(findSubstitutions(Set(aParamCon.tcId), parameterType, Tuple(Seq(redSingleton, Uni))) === Map(aParamCon.tcId -> redSingleton))
+    assert(findSubstitutions(Set(aParamCon.tcId), parameterType, blueSingleton) === Map(aParamCon.tcId -> blueSingleton))
+  }
 
   // recursive types: a check that reaches the same comparison or expansion again ends there. A boxed type is unwrapped
   // only against the same con, a tagged one also against other types, so both are covered
