@@ -1,6 +1,6 @@
 package clara.analyzer.impl
 
-import clara.asg.{DefId, TermLiteral, Terms, Types}
+import clara.asg.{DefId, TermLiteral, Terms, TypeCons, Types}
 import clara.ast.{Ast, AstLiteral, Pos, SourceMessage}
 
 import clara.util.Safe._
@@ -66,8 +66,48 @@ case class PatternAnalyzerImpl(env: Env, refutable: Boolean, declaredIds: Option
       }
     case Ast.RecordPattern(fields, pos) => ???
     case Ast.OrPattern(ps, pos) => ???
-    case Ast.ConstructPattern(name, selfPattern, pos) => ???
+    case Ast.ConstructPattern(nsPath, name, argumentPattern, pos) =>
+      construct(nsPath, name, argumentPattern, fromType, pos)
   }
+
+  def construct(
+    nsPath: Seq[Ast.NameWithPos],
+    name: Ast.NameWithPos,
+    argumentPattern: Ast.Pattern,
+    fromType: Option[Types.Type],
+    pos: Pos,
+  ): An[(Env, Terms.ConstructPattern)] = NameResolver.typeCon(env, nsPath, name.name, name.pos).flatMap {
+    case con @ TypeCons.WrapperTypeCon(Ast.TypeDefKind.Tagged | Ast.TypeDefKind.Boxed, _, _, _, _, _) =>
+      constructType(con, fromType, pos).flatMap { constructType =>
+        matchType(fromType, constructType, pos).flatMap { typ =>
+          TypeInterpreter.wrappedType(constructType).flatMap { wrappedType =>
+            walk(argumentPattern, Some(wrappedType)).map { case (nextEnv, argumentTerm) =>
+              (nextEnv, Terms.ConstructPattern(con, argumentTerm, typ))
+            }
+          }
+        }
+      }
+    case _ =>
+      val qualified = (nsPath.map(_.name) :+ name.name).safeString(".")
+      An.error(SourceMessage(name.pos,
+        safe"`$qualified` has no constructor to match, only tagged and boxed types have one"
+      ))
+  }
+
+  def constructType(con: TypeCons.WrapperTypeCon, fromType: Option[Types.Type], pos: Pos): An[Types.Wrapper] =
+    fromType match {
+      case Some(Types.ErrorType) => An.valid(TypeCons.wrapper(con, con.typeParams.map(_ => Types.ErrorType)))
+      case Some(fromType) =>
+        val paramIds = con.typeParams.map(_.tcId).toSet
+
+        TypeInterpreter.findSubstitutions(paramIds, TypeCons.pseudoInstantiate(con), fromType).map { found =>
+          TypeCons.wrapper(con, con.typeParams.map { param =>
+            found.getOrElse(param.tcId, Types.Param(TypeCons.ParamCon(param.name, pos)))
+          })
+        }
+      case None if con.typeParams.isEmpty => An.valid(TypeCons.wrapper(con, Nil))
+      case None => An.error(SourceMessage(pos, "Could not infer type"))
+    }
 
   def string(
     parts: Seq[AstLiteral.StringPatternPart],
@@ -181,6 +221,12 @@ object PatternAnalyzer {
     }
     case Terms.CapturePattern(_, typ) => typ
     case Terms.PatternAs(p, _) => coveredType(p)
+    case Terms.ConstructPattern(_, p, typ) => (coveredType(p), typ) match {
+      case (Types.Bottom, _) => Types.Bottom
+      case (covered, t: Types.Tagged) => t.copy(expandedWrappedType = Some(covered))
+      case (covered, t: Types.Boxed) => t.copy(expandedWrappedType = Some(covered))
+      case (_, typ) => typ
+    }
   }
 
   def boundNames(pattern: Ast.Pattern): Seq[Ast.NameWithPos] = pattern match {
@@ -199,7 +245,7 @@ object PatternAnalyzer {
     }
     // TODO: every alternative binds the same names?
     case Ast.OrPattern(ps, _) => ??? // ps.headOption.toSeq.flatMap(boundNames)
-    case Ast.ConstructPattern(_, argumentPattern, _) => boundNames(argumentPattern)
+    case Ast.ConstructPattern(_, _, argumentPattern, _) => boundNames(argumentPattern)
   }
 
   def quotedPattern(pos: Pos): String = pos.sourceText.fold("Pattern")(text => safe"Pattern `$text`")

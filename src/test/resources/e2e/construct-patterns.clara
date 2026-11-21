@@ -1,0 +1,29 @@
+::opaque String
+::declare console: { log: String => () }
+
+::singleton True
+::singleton False
+::alias Boolean: True | False
+
+::boxed Flag: Boolean
+::tagged Name: (String, String)
+::tagged Id: ()
+
+describeFlag = #(
+  Flag True => "on",
+  Flag False => "off",
+)
+
+describe = (nameOrId: Name | Id) => nameOrId @ #(
+  Name (first, _) => first,
+  Id _ => "anonymous",
+)
+
+last = (Name (_, last)) => last
+
+console.log(Flag(True) @ describeFlag)
+console.log(Flag(False) @ describeFlag)
+console.log(describe(Name(("clara", "lang"))))
+console.log(describe(Id(())))
+console.log(last(Name(("clara", "lang"))))
+()

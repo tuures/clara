@@ -135,6 +135,15 @@ object JsEmitter {
       case Terms.CapturePattern(name, _) => CaseMatch(Nil, Seq(name -> value))
       // the analyzer rejects type patterns in cases where they would need a runtime type test
       case Terms.PatternAs(p, _) => emitCaseMatch(p, value)
+      case Terms.ConstructPattern(con, p, _) => con.typeDefKind match {
+        case TypeDefKind.Boxed =>
+          val tag = JsAst.OptionalMember(value, NameMangler.TypeTagField)
+          val isCon = JsAst.BinaryOperation(tag, "===", typeTag(con.name, con.definedInNs))
+          val argument = emitCaseMatch(p, JsAst.Member(value, NameMangler.BoxedValueField))
+
+          CaseMatch(isCon +: argument.conditions, argument.bindings)
+        case _ => emitCaseMatch(p, value)
+      }
     }
   }
 
@@ -222,6 +231,11 @@ object JsEmitter {
     case Terms.CapturePattern(name, _) => JsAst.NamePattern(NameMangler.valueName(name, definedInNs))
     case Terms.NamedConstantPattern(_) => JsAst.IgnoredPattern
     case Terms.PatternAs(p, _) => emitBindingPattern(p, definedInNs)
+    case Terms.ConstructPattern(con, p, _) => (con.typeDefKind, emitBindingPattern(p, definedInNs)) match {
+      case (_, JsAst.IgnoredPattern) => JsAst.IgnoredPattern
+      case (TypeDefKind.Boxed, argument) => JsAst.ObjectPattern(Seq(NameMangler.BoxedValueField -> argument))
+      case (_, argument) => argument
+    }
   }
 
 }

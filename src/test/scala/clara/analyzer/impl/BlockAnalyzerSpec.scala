@@ -2002,6 +2002,196 @@ class BlockAnalyzerSpec extends BaseSpec {
     assert(result.value.left.value.map(_.message) === Seq("`name` is not a member of type `Loop`"))
   }
 
+  // construct patterns: `Some a` takes a value of a tagged or boxed type apart
+
+  private def constructPattern(namePath: String*)(argumentPattern: Pattern) =
+    ConstructPattern(namePath.init.map(NameWithPos(_)), NameWithPos(namePath.last), argumentPattern)
+  private def optionType(typeArg: TypeExpr) = NamedType("Option", Seq(typeArg))
+  private def matchUnitOption(cases: (Pattern, ValueExpr)*) = option() ++ Seq(
+    ValueDecl("unitOption", optionType(UnitType())),
+    Pipe(NamedValue("unitOption"), Piecewise(cases)),
+  )
+
+  test("`Option.Some a` on an `Option<()>` takes the `Some` apart, `a` is a `()`") {
+    val block = Block(matchUnitOption(
+      constructPattern("Option", "Some")(CapturePattern("a")) -> NamedValue("a"),
+      Ast.NamedConstantPattern(Seq(NameWithPos("Option")), NameWithPos("None")) -> UnitLiteral(),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    inside(result.value.value.bcs.last) { case Terms.Call(Terms.Piecewise(Seq((pattern, _), _), _), _, Types.Uni) =>
+      inside(pattern) { case Terms.ConstructPattern(con, Terms.CapturePattern("a", Types.Uni), Types.Boxed(_, Seq(Types.Uni), _)) =>
+        assert(con.name === "Some")
+      }
+    }
+  }
+
+  test("`#(Option.Some a => ...)` alone doesn't match every `Option<()>`, `None` is missing") {
+    val block = Block(matchUnitOption(constructPattern("Option", "Some")(CapturePattern("a")) -> NamedValue("a")))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq(
+      "Cases of the piecewise function don't match every value of type `Option<()>`, e.g. add a last case `_ => ...`"
+    ))
+  }
+
+  test("`Flag True` and `Flag False` together match every `Flag`") {
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Singleton, "True"),
+      TypeDef(TypeDefKind.Singleton, "False"),
+      TypeDef(TypeDefKind.Boxed, "Flag", UnionType(Seq(NamedType("True"), NamedType("False")))),
+      ValueDecl("flag", NamedType("Flag")),
+      Pipe(NamedValue("flag"), Piecewise(Seq(
+        constructPattern("Flag")(Ast.NamedConstantPattern(Nil, NameWithPos("True"))) -> UnitLiteral(),
+        constructPattern("Flag")(Ast.NamedConstantPattern(Nil, NameWithPos("False"))) -> UnitLiteral(),
+      ))),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    assert(result.value.value.typ === Types.Uni)
+  }
+
+  test("`(Name n) => n` unwraps its `Name` parameter") {
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Boxed, "Name", UnitType()),
+      Lambda(constructPattern("Name")(CapturePattern("n")), NamedValue("n")),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    inside(result.value.value.typ) { case Types.Func(Nil, Types.Boxed(_, Nil, _), Types.Uni) => }
+  }
+
+  test("`(Option.Some a) => a` alone can't infer the `A` of `Some`") {
+    val block = Block(option() :+ Lambda(constructPattern("Option", "Some")(CapturePattern("a")), NamedValue("a")))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq("Could not infer type"))
+  }
+
+  test("`Space.Name _` uses `Space` and `Name`") {
+    val block = Block(Seq(
+      NamespaceDef(false, NameWithPos("Space"), Seq(TypeDef(TypeDefKind.Boxed, "Name", UnitType()))),
+      Lambda(constructPattern("Space", "Name")(WildcardPattern()), UnitLiteral()),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    assert(result.log.warnings.map(_.message) === Nil)
+  }
+
+  private def matchTop(typeDef: Ast.TypeDef, pattern: Pattern, body: ValueExpr) = Block(Seq(
+    typeDef,
+    ValueDecl("x", TopType()),
+    ValueDef(CapturePattern("y"), Pipe(NamedValue("x"), Piecewise(Seq(pattern -> body, WildcardPattern() -> UnitLiteral())))),
+  ))
+
+  test("`Some a` on a `Top` value gives `a` an unknown type, so it isn't a `()`") {
+    val block = matchTop(
+      TypeDef(TypeDefKind.Boxed, "Some", Seq(TypeParam("A")), NamedType("A")),
+      constructPattern("Some")(CapturePattern("a")),
+      ValueAs(NamedValue("a"), UnitType()),
+    )
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq("Type `A` is not assignable to type `()`"))
+  }
+
+  test("`Sink f` on a `Top` value gives `f` an unknown parameter type, so it doesn't take a `()`") {
+    val block = matchTop(
+      TypeDef(TypeDefKind.Boxed, "Sink", Seq(TypeParam("A")), Ast.FuncType(Nil, NamedType("A"), UnitType())),
+      constructPattern("Sink")(CapturePattern("f")),
+      Call(NamedValue("f"), UnitLiteral()),
+    )
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq("Type `()` is not assignable to type `A`"))
+  }
+
+  test("`Cell (get, set)` on a `Top` value: `set` takes what `get` gives, not a `()`") {
+    def cellTop(body: ValueExpr) = matchTop(
+      TypeDef(TypeDefKind.Boxed, "Cell", Seq(TypeParam("A")), TupleType(Seq(
+        NamedType("A"),
+        Ast.FuncType(Nil, NamedType("A"), UnitType()),
+      ))),
+      constructPattern("Cell")(TuplePattern(Seq(CapturePattern("get"), CapturePattern("set")))),
+      body,
+    )
+
+    val putBack = BlockAnalyzerImpl.walkBlockContents(Env.empty, cellTop(Call(NamedValue("set"), NamedValue("get"))).bcs).run
+    val putUnit = BlockAnalyzerImpl.walkBlockContents(Env.empty, cellTop(Call(NamedValue("set"), UnitLiteral())).bcs).run
+
+    assert(putBack.value.isRight)
+    assert(putUnit.value.left.value.map(_.message) === Seq("Type `()` is not assignable to type `A`"))
+  }
+
+  test("`Unit _` of `::alias Unit: ()` is an error, an alias has no constructor to match") {
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Alias, "Unit", UnitType()),
+      Lambda(constructPattern("Unit")(WildcardPattern()), UnitLiteral()),
+    ))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq("`Unit` has no constructor to match, only tagged and boxed types have one"))
+  }
+
+  private def nameOrId(cases: (Pattern, ValueExpr)*) = Seq(
+    TypeDef(TypeDefKind.Tagged, "Name", pairType),
+    TypeDef(TypeDefKind.Tagged, "Id", UnitType()),
+    ValueDecl("nameOrId", UnionType(Seq(NamedType("Name"), NamedType("Id")))),
+    Pipe(NamedValue("nameOrId"), Piecewise(cases)),
+  )
+
+  test("`Name (first, _)` before `Id id` on `Name | Id`: the tuple test tells the tagged `Name` from an `Id`") {
+    val block = Block(nameOrId(
+      constructPattern("Name")(TuplePattern(Seq(CapturePattern("first"), WildcardPattern()))) -> NamedValue("first"),
+      constructPattern("Id")(CapturePattern("id")) -> NamedValue("id"),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    assert(result.value.value.typ === Types.Uni)
+  }
+
+  test("`Wrap (Option.Some s)` can't tell a `Wrap` from an `Other` when both wrap a `Some`, the tag test ignores type args") {
+    def someOf(typeArg: TypeExpr) = Ast.NamedType(Seq(NameWithPos("Option")), NameWithPos("Some"), Seq(typeArg))
+    val block = Block(option() ++ Seq(
+      TypeDef(TypeDefKind.Tagged, "Wrap", someOf(UnitType())),
+      TypeDef(TypeDefKind.Tagged, "Other", someOf(pairType)),
+      ValueDecl("x", UnionType(Seq(NamedType("Wrap"), NamedType("Other")))),
+      Pipe(NamedValue("x"), Piecewise(Seq(
+        constructPattern("Wrap")(constructPattern("Option", "Some")(CapturePattern("s"))) -> UnitLiteral(),
+        constructPattern("Other")(WildcardPattern()) -> UnitLiteral(),
+      ))),
+    ))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq(
+      "Pattern needs to test the type of the value at runtime, which isn't supported yet"
+    ))
+  }
+
+  test("`Id id` first on `Name | Id` would need a runtime type test, a capture can't tell the tagged types apart") {
+    val block = Block(nameOrId(
+      constructPattern("Id")(CapturePattern("id")) -> NamedValue("id"),
+      constructPattern("Name")(TuplePattern(Seq(CapturePattern("first"), WildcardPattern()))) -> NamedValue("first"),
+    ))
+
+    val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).run
+
+    assert(result.value.left.value.map(_.message) === Seq(
+      "Pattern needs to test the type of the value at runtime, which isn't supported yet"
+    ))
+  }
+
   test("block warns about unused local values") {
     val block = Block(Seq(
       ValueDecl("unused", UnitType()),

@@ -1,0 +1,40 @@
+::opaque String
+::singleton True
+::singleton False
+::alias Boolean: True | False
+
+::declare console: { log: String => () }
+
+// refers to the companion's members declared below
+::alias Option<A>: Option.Some<A> | Option.None
+
+::extend Option {
+  // members are unqualified inside the companion
+  ::boxed Some<A>: A
+  ::singleton None
+
+  empty: Option<!> = None
+
+  ::methods<A> o {
+    isDefined: Boolean = o @ #(Some _ => True, None => False)
+    getOrElse = (default: A) => o @ #(Some a => a, None => default)
+  }
+}
+
+yesNo = #(True => "yes", False => "no")
+
+describe = (o: Option<String>) => o @ #(
+  Option.Some s => "some $(s)",
+  Option.None => "none",
+)
+
+name = Option.Some("clara")             // Some<String>: methods fanned out from Option
+missing: Option<String> = Option.empty  // alias-typed: lookup on the expansion
+
+console.log(name.getOrElse("nobody"))
+console.log(missing.getOrElse("nobody"))
+console.log(name.isDefined @ yesNo)
+console.log(missing.isDefined @ yesNo)
+console.log(describe(name))
+console.log(describe(missing))
+()

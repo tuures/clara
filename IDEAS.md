@@ -153,6 +153,27 @@ because if the logic is bound to call, then it would not simply work in somethin
 but the apply rule is also useful (points 1, 2, but not 3)
 
 
+## Members of the expected type: `.Red`
+
+Where the expected type is known, `.Red` means its member `Red`, without importing or qualifying:
+
+```clara
+interpolate(.Red, .Blue)        // instead of interpolate(Color.Red, Color.Blue)
+paint(.Some(.Red))              // constructors too: Option.Some
+color @ #(.Red => "warm", .Blue => "cold")
+```
+
+- the namespace comes from the expected type: an alias with a companion (`Color`), or a union whose members all are in
+  the same namespace (`Color.Red | Color.Blue`); nothing is flattened into the scope
+- in patterns the matched type is always known, so `#(.Red => ...)` is the easy first step; arguments need the callee's
+  parameter type (`calleeFirstCallTerm` already passes it down), other places need inference from the expected type
+- like Swift's implicit member expressions, Zig's enum literals and Dart's dot shorthands
+
+Syntax conflict: a space call already uses a leading dot for member selection, `foo .bar baz` selects `bar` from `foo`.
+So `interpolate .Red` would select `Red` from `interpolate`. After `(`, `,`, `=>` or `=` it's unambiguous
+(`interpolate(.Red, .Blue)`), a space call argument would need parens (`interpolate (.Red)`) or another marker.
+
+
 ## Defining types
 
 replace ::declare ::type / ::declare ::methods with ::trait (determines how methods should be implement elsewhere)

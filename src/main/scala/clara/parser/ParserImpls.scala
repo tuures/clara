@@ -13,7 +13,7 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
 
   val space = " "
 
-  def lineComment[X: P] = P("//" ~~ CharsWhile(c => !nlPred(c)).? ~~ (End | CharPred(nlPred)))
+  def lineComment[X: P] = P("//" ~~ CharsWhile(c => !nlPred(c)).? ~~ &(End | CharPred(nlPred)))
 
   def blockComment[X: P] = P {
     val (start, end) = ("/*", "*/")
@@ -432,7 +432,8 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   def rawConstructor[X: P]: P[RawConstructor] = P(pp(keyword("new") ~ (nsPath ~~ nameWithPos))(RawConstructor.apply _))
 
   // TODO: should we allow also lowercase name here?
-  def constructPattern[X: P] = P(pp(&(anyUpperCaseChar) ~~ nameWithPos ~ simplePattern)(ConstructPattern.apply _))
+  def constructPattern[X: P] =
+    P(pp(&(anyUpperCaseChar) ~~ nsPath ~~ nameWithPos ~ simplePattern)(ConstructPattern.apply _))
 
   val questionMark = "?"
   val doubleQuestionMark = "??"

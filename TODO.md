@@ -1,5 +1,9 @@
 # Done
 
+- construct patterns (`Some a`, `Option.Some s`) on boxed types (a tag test, `$value?.$type === 'Option.Some'`) and tagged types (no tag: in a case the argument pattern's runtime test has to tell the type apart from what the earlier cases left, Check 1 of plans/enum2.md); in parameters and value defs they unwrap (`(Name n) => ...`); the userland Option fixture (`option-desugared`) passes
+- a case is checked for runtime type tests against what the earlier cases left, not the whole matched type
+- a type arg a construct pattern's matched type doesn't give is an unknown type (a fresh type param), not `!`; a constructor's type has type params of its own, not its con's
+- parser: a line comment no longer consumes its newline, which made the next line a space call argument
 - methods are typed exactly (PLAN.md): a method's type args are matched from the value's type, once for all alternatives of a union (`Some<String> | None` gives `A = String`), `!` where nothing gives them; the alias is transparent, its methods are only on the types it expands to
 - member lookup falls back to what a tagged or boxed type wraps (`.$value` of a boxed one, `Terms.MemberSelection.unboxCount`), after its own methods
 - type args of a call are inferred through aliases (their expansion), unions (alternative by alternative) and tagged, boxed and opaque types (their type args); a param found as several types gets their union, or their intersection where it's a function's parameter (`TypeInterpreterImpl.findSubstitutions`)
@@ -21,9 +25,9 @@
 Each step is a vertical slice (parser -> analyzer -> emitter) validated by an e2e fixture; keep existing tests green.
 
 0. acceptance fixtures first: write the target `.clara` files with expected `.messages`/`.output`; they fail until done
-   - userland Option is in `e2e-pending/`: `option-desugared` (`::alias` + `::extend` by hand) and `option` (the `::enum` sugar, step 6)
+   - userland Option: `option-desugared` (`::alias` + `::extend` by hand) is in `e2e/`, `option` (the `::enum` sugar, step 12) in `e2e-pending/`
    - still to write: Color
-1. ~~groundwork~~ done; `InstanceId` comes with typeclasses (9)
+1. ~~groundwork~~ done; `InstanceId` comes with typeclasses (14)
 2. ~~scope passes (names, types, values), forward references, recursive functions and types~~ done; the follow-ups are under Analyzer follow-ups
 3. namespaces, as vertical slices (parser -> analyzer -> emitter, each with an e2e fixture):
    - ~~3a. `::namespace` and qualified names~~ done. Follow-ups:
@@ -44,25 +48,33 @@ Each step is a vertical slice (parser -> analyzer -> emitter) validated by an e2
      - a member of several parts of an intersection isn't supported yet (see the open decision)
    - ~~4b. fan-out of `::methods` from an alias to its members~~ done. Follow-ups:
      - the types an alias expands to don't need to be defined in the same scope as it yet (no ad-hoc extension of foreign types, plans/namespacing.md), comes with modules
-     - `::methods` of an alias that applies only to some instantiations of a type (`::alias UnitBox: Box<()>`, `::alias Twin<A>: Pair<A, A>`) isn't supported yet, methods apply to every instantiation of a type; behaviour for some instantiations is expected from typeclass instances (9), a separate mechanism (Rust's `impl Point<f32>`, Swift's constrained extensions) would overlap with them
+     - `::methods` of an alias that applies only to some instantiations of a type (`::alias UnitBox: Box<()>`, `::alias Twin<A>: Pair<A, A>`) isn't supported yet, methods apply to every instantiation of a type; behaviour for some instantiations is expected from typeclass instances (14), a separate mechanism (Rust's `impl Point<f32>`, Swift's constrained extensions) would overlap with them
      - `::declare ::methods` of an alias isn't supported yet: fanning out in the types pass would expand aliases whose structures aren't registered yet, or alias cycles not rejected yet. Fan out in a step after the types pass and `rejectUnsupportedRecursion` (a list of pending fan-outs collected in the `Env`), so every `::declare` stays usable anywhere in its scope
    - ~~4b+. methods typed exactly, a union's type args found once, the alias transparent~~ done
    - ~~4c. tagged/boxed fallback to wrapped~~ done
-5. patterns: construct pattern (`Some a`, the `???` in `PatternAnalyzer`) + pattern validity (Check 1 in plans/enum2.md: the runtime test must tell constructors apart, a tag test like `$value.$type === 'Some'`)
-   - `Y Z` in pattern position is always a construct pattern
-   - qualified construct patterns (`Option.Some s`)
-   - a boxed recursive type can't be taken apart until construct patterns exist
-6. ::enum as sugar (start with always boxed, disjointness-based tagged later) -> userland Option fixture passes
-   - an enum stays an alias of a union; generic calls need re-sugaring of unions to aliases (plans/namespacing.md)
-7. small real programs: what an everyday program needs, each with an e2e fixture
-   - Int, Float and String operations as methods on opaque types, with operator syntax (`a + b`); fix parsing negative numbers, revisit operator precedence (+/*)
-   - array literals and a sequence type with a few methods
-   - a minimal prelude (`Boolean`, `Option`, the opaque base types), so programs stop declaring `::opaque String` themselves
-   - structural equality
-   - JS interop: calling and exposing JS functions of several parameters (Clara functions take one)
-8. modules and imports: AST support for a module, import syntax in the parser
+5. ~~patterns: construct patterns + pattern validity (Check 1)~~ done. Follow-ups:
+   - a tagged construct pattern that can't tell its type apart gets the general "needs to test the type of the value at runtime" message; it could name the alternatives it can't tell apart and say a tagged type has no tag
+   - a construct pattern of a generic type needs the type it matches (`(Some a) => a` alone is "Could not infer type")
+   - the unknown type of a type arg a construct pattern's matched type doesn't give is shown with the con's param name, so `<A>(x: A) => x @ #(Option.Some a => (a: A), _ => x)` reports "Type `A` is not assignable to type `A`"; show it distinctly (`?A`, or "the unknown type arg `A` of `Some`"); the same for any two type params of one name in a message (see the 3a follow-up on `definedAt`s)
+   - Check 1 compares what the argument pattern's runtime test accepts (`TypeInterpreterImpl.testedType`) with the other alternatives by `disjoint`, so `testedType` must never be smaller than what the test really accepts: a boxed construct pattern tests only the con, not the type args (its tested type wraps what the argument pattern tests); a tuple pattern also accepts a sequence of that length once sequences exist (11); a literal counts as its whole type, which only matters once there are literal types
+6. modules and imports (plans/module-system.md): AST support for a module, import syntax in the parser, multi-file compilation, output as ES modules (E2eSpec runs them as modules), the runtime helper module (Emitter follow-up)
    - `::new` only inside the defining module, today it's allowed wherever the type is visible
-9. typeclasses: first-order with member fan-out, then constraints (dictionary passing), static members (`Int.empty`), HKT with re-sugaring
+   - no ad-hoc extension of foreign types: the types an alias expands to are defined in its module (4b follow-up)
+7. prelude, a module imported implicitly: `Boolean`, `Option` (the desugared form until `::enum`), the opaque `Int`, `Float` and `String`, so programs stop declaring `::opaque String` themselves
+8. runtime type tests: opaque types declare their test (`typeof x === 'string'`); type patterns in cases (`n: Int` on `Int | String`) and tagged construct patterns use them when the type the earlier cases left needs it, so a tagged `String` and a tagged `Int` can be told apart (Check 1 then counts the test); only when the type is testable (not functions or type params). Until then such cases are an error (`TypeInterpreterImpl.needsTypeTest`)
+   - what can reach a case is computed by dropping the alternatives the earlier cases cover (`casesCheck.remainingTypes`), an approximation: an alternative covered only in part stays. Subtracting step by step instead (`matched -- covered1 -- covered2 ...`, a `--` difference type) gives the exact remaining type per case, reachability becomes "case overlaps the remaining type" (cheaper than checking against the growing union of earlier cases when the remaining type simplifies, unions of singletons/constructors), and what remains after the last case names the missing cases in the non-exhaustive error (e.g. `Some<Blue>`); the alternative is a union expansion whose results can be shown (`expandUnions` results must not be shown)
+9. structural equality: matching a value against another value, so equality is pattern matching; `==` can be an operator on top of it (with 10)
+   - a runtime helper compares tuples, records, tagged and boxed values (`$type` included) by structure, singletons and primitives with `===`; opaque types declare their equality like their runtime test (`===` by default)
+   - functions don't have equality: comparing them, or values containing them, is an error
+   - a named constant pattern compares by structure (today `===`, so a constant tuple or record never matches)
+10. numbers and operators: negative literals, operator syntax for methods (`a + b`, `::declare ::methods` with `binaryOperator` on the prelude's opaque types), Int, Float and String operations; negative literals and binary `-` are designed together (`a -1` vs `a - 1`)
+11. sequences: array literals and a sequence type with a few methods (`contains` uses 9) in the prelude
+   - an immutable sequence is covariant (`Seq<String>` is a `Seq<String | Int>`), opaque types need declared variance (Analyzer follow-ups on variance)
+   - tuples vs arrays: a tuple pattern means "an array of length n" (Pattern matching follow-up)
+12. ::enum as sugar (start with always boxed, tagged when the alternatives can be told apart, using 8) -> userland Option fixture passes
+   - an enum stays an alias of a union; generic calls need re-sugaring of unions to aliases (plans/namespacing.md)
+13. JS interop: calling and exposing JS functions of several parameters (Clara functions take one)
+14. typeclasses: first-order with member fan-out, then constraints (dictionary passing), static members (`Int.empty`), HKT with re-sugaring
    - question: should inference place an argument type in a union parameter type by checking which alternatives it fits (`isAssignable` with the solved type params as the error type), like TypeScript? Today `findSubstitutions` uses the alternatives that find candidates and falls back to the bare params, so `A | Int` against `Int` gives `A = Int` instead of leaving `A` free. Instance resolution will lean on inference more, decide with it
 
 # Follow-ups
@@ -71,8 +83,6 @@ Each step is a vertical slice (parser -> analyzer -> emitter) validated by an e2
 
 - record patterns: record rules in `disjoint` (exhaustive `isDisjointFromRecords`); runtime test checks own properties (`Object.hasOwn`), plus object/array/`$type` checks only when the remaining matched type needs them
 - or-patterns, guard patterns, `??` default patterns (`{foo: String ?? "x"}` accepts `{} | {foo: String}`)
-- name missing cases in non-exhaustive errors: needs a union expansion whose results can be shown (`expandUnions` results must not be shown); alternatively compute the remaining type step by step (`matched -- covered1 -- covered2 ...`, needs `--` difference types): what remains after the last case is what's missing (e.g. `Some<Blue>`), and reachability becomes "case overlaps the remaining type", cheaper than checking against the growing union of earlier cases when the remaining type simplifies (unions of singletons/constructors)
-- runtime type tests for type patterns in cases (`n: Int` on `Int | String`), only when the matched type isn't already a `T` and `T` is testable (not functions or type params); opaque types declare their test (`typeof`). Until then such cases are an error (`PatternAnalyzer.needsTypeTest`)
 - Option without boxing (JS interop): `None` as tagged host undefined/null, opaque types declare their runtime test, `A -- B` difference types for the `Some` payload
 - tuples vs arrays (with array literals): both are JS arrays, so a tuple pattern means "an array of length n" (matches `Array<T>` too) and `disjoint` mustn't separate them (`isDisjointFromTuples`); "testable at runtime" needs its own check, separate from `disjoint` (also records vs boxed); consider `(A, B) <: ReadonlyArray<A | B>`
 - duplicate literal cases (`#(1 => ..., 1 => ...)`) aren't reported as unreachable since literals cover nothing (would need literal types)
@@ -116,7 +126,7 @@ Each step is a vertical slice (parser -> analyzer -> emitter) validated by an e2
 - a block that needs an IIFE as a statement after another statement crashes at runtime (`console.log("a")` followed by `(_ = "x"; console.log("b"))` emits `console.log("a")\n(() => {...})()`, a call of the previous statement's result, as statements have no semicolons)
 - `::declare` inside a namespace keeps its `definedInNs` like any member, but the emitter then names it `Host$log`, which nothing defines (the host's name is `log`): the emitter should emit a declared value under its declared name, or an annotation overrides the emitted name (see the next item)
 - `::declare` of a reserved name (e.g. `::declare undefined: ...`) is broken: references get the `$` suffix but the JS global has none; later: an annotation declaring the JS name explicitly
-- runtime module with tree-shakeable helpers (`import * as $clara from ...`), not duplicated per module; with modules (Roadmap 8): where it lives, output as ES modules, E2eSpec needs `--input-type=module`. Until then emitted code reaches globals through `globalThis`
+- runtime module with tree-shakeable helpers (`import * as $clara from ...`), not duplicated per module; with modules (Roadmap 6): where it lives, output as ES modules, E2eSpec needs `--input-type=module`. Until then emitted code reaches globals through `globalThis`
 
 ## Other
 
@@ -124,6 +134,8 @@ Each step is a vertical slice (parser -> analyzer -> emitter) validated by an e2
 
 # Open decisions
 
+- operator precedence: none, fixed (`*` before `+`), or declared per operator (10)
+- equality typing: matching a value against one of a disjoint type is already an error ("can never match"), and so is `Some(1).contains("a")` (methods are typed exactly), but a generic `==<A>(a: A, b: A)` would infer `A = Int | String` for `1 == "a"`; `==` should keep the pattern's disjointness error (like Scala 3's multiversal equality, TypeScript's "no overlap") (9)
 - singleton `Foo.x` merges companion members, inherent methods and instance members into one tier (duplicates within `::extend Foo` are definition-time errors, others lookup-time ambiguity)
 - are instances imported only via companions or from the whole module top level
 - revisit: instance derivation for records/tuples/unions (no explicit `::impl` for structural types)

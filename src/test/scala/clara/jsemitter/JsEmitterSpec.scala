@@ -374,6 +374,26 @@ class JsEmitterSpec extends BaseSpec {
     assert(caseMatch === JsEmitter.CaseMatch(Seq(JsAst.BinaryOperation(value, "===", JsAst.StringLiteral(Seq()))), Nil))
   }
 
+  val someCon = TypeCons.WrapperTypeCon(TypeDefKind.Boxed, "Some", Nil, Seq("Option"), NoPos)
+  val idCon = TypeCons.WrapperTypeCon(TypeDefKind.Tagged, "Id", Nil, Nil, NoPos)
+
+  test("emitCaseMatch: ConstructPattern of a boxed type tests the tag and matches its argument pattern on the boxed value") {
+    val value = JsAst.Named("x")
+    val caseMatch = JsEmitter.emitCaseMatch(Terms.ConstructPattern(someCon, Terms.CapturePattern("a", dummyType), dummyType), value)
+
+    assert(caseMatch === JsEmitter.CaseMatch(
+      Seq(JsAst.BinaryOperation(JsAst.OptionalMember(value, "$type"), "===", JsAst.StringLiteral("Option.Some"))),
+      Seq("a" -> JsAst.Member(value, "$value")),
+    ))
+  }
+
+  test("emitCaseMatch: ConstructPattern of a tagged type matches its argument pattern on the value") {
+    val value = JsAst.Named("x")
+    val caseMatch = JsEmitter.emitCaseMatch(Terms.ConstructPattern(idCon, Terms.CapturePattern("a", dummyType), dummyType), value)
+
+    assert(caseMatch === JsEmitter.CaseMatch(Nil, Seq("a" -> value)))
+  }
+
   test("emitBindingPattern: WildcardPattern binds nothing") {
     assert(JsEmitter.emitBindingPattern(Terms.WildcardPattern(dummyType), Nil) === JsAst.IgnoredPattern)
   }
@@ -407,6 +427,30 @@ class JsEmitterSpec extends BaseSpec {
   test("emitBindingPattern: NamedConstantPattern binds nothing") {
     val pat = Terms.NamedConstantPattern(Terms.NamedValue("True", Nil, dummyType))
     assert(JsEmitter.emitBindingPattern(pat, Nil) === JsAst.IgnoredPattern)
+  }
+
+  test("emitBindingPattern: ConstructPattern of a boxed type destructures the boxed value") {
+    val pat = Terms.ConstructPattern(someCon, Terms.CapturePattern("a", dummyType), dummyType)
+    assert(JsEmitter.emitBindingPattern(pat, Nil) === JsAst.ObjectPattern(Seq("$value" -> JsAst.NamePattern("a"))))
+  }
+
+  test("emitBindingPattern: ConstructPattern of a tagged type emits its argument pattern") {
+    val pat = Terms.ConstructPattern(idCon, Terms.CapturePattern("a", dummyType), dummyType)
+    assert(JsEmitter.emitBindingPattern(pat, Nil) === JsAst.NamePattern("a"))
+  }
+
+  test("emitBindingPattern: ConstructPattern whose argument pattern binds nothing binds nothing") {
+    val pat = Terms.ConstructPattern(someCon, Terms.WildcardPattern(dummyType), dummyType)
+    assert(JsEmitter.emitBindingPattern(pat, Nil) === JsAst.IgnoredPattern)
+  }
+
+  test("emitModule: a parameter destructuring a boxed value is in parens") {
+    val parameter = Terms.ConstructPattern(someCon, Terms.CapturePattern("a", dummyType), dummyType)
+    val program = Terms.Block(Seq(
+      Terms.ValueDef(Terms.CapturePattern("f", dummyType), Nil, Terms.Lambda(parameter, Terms.NamedValue("a", Nil, dummyType), dummyType)),
+    ), dummyType)
+
+    assert(modulePrinted(program) === "const f = ({ $value: a }) =>\n  a")
   }
 
   test("emitBindingPattern: PatternAs emits its pattern") {

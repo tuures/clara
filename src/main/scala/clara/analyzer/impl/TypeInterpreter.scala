@@ -4,6 +4,7 @@ import clara.asg.{Namespace, Terms, TermLiteral, TypeConId, Types}
 import clara.asg.Types._
 import clara.asg.TypeCons.{TypeCon, WrapperTypeCon, OpaqueTypeCon, SingletonTypeCon, ParamCon}
 import clara.ast.{Ast, SourceMessage, Pos}
+import clara.ast.Ast.TypeDefKind
 
 import clara.util.Safe._
 import clara.asg.TypeCons
@@ -60,8 +61,10 @@ case class TypeInterpreterImpl(
   import NormalizeImpl._, ExpandUnionsImpl._, AssignableImpl._, DisjointImpl._
 
   def wrapperConstructorFunc(con: WrapperTypeCon): Func = {
-    // TODO: is it safe to re-use type con's type params as type params for the func?
-    Func(con.typeParams, typeStructures.structure(con), TypeCons.pseudoInstantiate(con))
+    val params = con.typeParams.map(param => ParamCon(param.name, param.definedAt))
+    val typeArgs = params.map(Param)
+
+    Func(params, wrappedType(TypeCons.wrapper(con, typeArgs)), TypeCons.wrapper(con, typeArgs))
   }
 
   def wrappedType(t: Wrapper): Type = t.expandedWrappedType.getOrElse(
@@ -429,9 +432,18 @@ case class TypeInterpreterImpl(
 
     val matched = matchedType.getOrElse(Types.Union(patterns.map(_.typ)))
 
-    // TODO remove when type patterns get runtime type tests (see construct patterns in TODO.md)
-    val typeTestCases = patterns.zip(piecewise.pieces).collect {
-      case (pattern, (astPattern, _)) if needsTypeTest(pattern, matched) =>
+    // TODO can this be optimized?
+    val remainingTypes = covered.indices.map { i =>
+      val coveredBefore = Types.Union(covered.take(i))
+
+      expandUnions(matched).fold(matched) { alternatives =>
+        Types.Union(alternatives.filterNot(isAssignable(_, coveredBefore)))
+      }
+    }
+
+    // TODO remove when type patterns get runtime type tests
+    val typeTestCases = patterns.zip(piecewise.pieces).zip(remainingTypes).collect {
+      case ((pattern, (astPattern, _)), remainingType) if needsTypeTest(pattern, remainingType) =>
         An.error(SourceMessage(astPattern.pos,
           safe"${PatternAnalyzer.quotedPattern(astPattern.pos)} needs to test the type of the value at runtime, which isn't supported yet"
         ))
@@ -456,6 +468,29 @@ case class TypeInterpreterImpl(
     // tuples are tested by the emitter, literals and named constants are compared by value
     case _: Terms.WildcardPattern | _: Terms.UnitPattern | _: Terms.IntegerPattern | _: Terms.FloatPattern |
       _: Terms.StringPattern | _: Terms.NamedConstantPattern | _: Terms.CapturePattern => false
+    case Terms.ConstructPattern(con, p, typ: Wrapper) => con.typeDefKind match {
+      case TypeDefKind.Tagged => !tellsApart(p, matchedType, typ) || needsTypeTest(p, wrappedType(typ))
+      case _ => needsTypeTest(p, wrappedType(typ))
+    }
+    case _: Terms.ConstructPattern => false
+  }
+
+  def tellsApart(argumentPattern: Terms.Pattern, matchedType: Type, taggedType: Type): Boolean =
+    isAssignable(matchedType, taggedType) || expandUnions(matchedType).exists(_.forall { alternative =>
+      isAssignable(alternative, taggedType) || disjoint(testedType(argumentPattern), alternative)
+    })
+
+  def testedType(pattern: Terms.Pattern): Type = pattern match {
+    case _: Terms.WildcardPattern | _: Terms.CapturePattern => Top
+    case _: Terms.UnitPattern | _: Terms.IntegerPattern | _: Terms.FloatPattern | _: Terms.StringPattern => pattern.typ
+    case Terms.TuplePattern(ps, _) => Tuple(ps.map(testedType))
+    case Terms.NamedConstantPattern(term) => term.typ
+    case Terms.PatternAs(p, _) => testedType(p)
+    case Terms.ConstructPattern(con, p, typ) => (con.typeDefKind, typ) match {
+      case (TypeDefKind.Tagged, _) => testedType(p)
+      case (_, t: Boxed) => t.copy(expandedWrappedType = Some(testedType(p)))
+      case (_, typ) => typ
+    }
   }
 }
 

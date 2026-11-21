@@ -62,6 +62,17 @@ class TypeInterpreterSpec extends BaseSpec {
   // an alias of an alias wraps the inner alias, not what the inner one wrapped
   testWrappedType(aliasOfAlias, aliasOfAliasStructure)(Alias(functionAliasCon, Seq(Uni, Uni)))
 
+  test("wrapperConstructorFunc gives the constructor's type type params of its own, not the con's") {
+    val boxCon = WrapperTypeCon(TypeDefKind.Boxed, "Box", Seq(aParamCon), Nil, NoPos)
+    val constructor = TypeInterpreterImpl(TypeStructures(Map(boxCon.tcId -> aParam))).wrapperConstructorFunc(boxCon)
+
+    inside(constructor) { case Func(Seq(param), Param(parameter), Boxed(`boxCon`, Seq(Param(result)), None)) =>
+      assert(param.name === "A")
+      assert(param.tcId !== aParamCon.tcId)
+      assert(parameter === param && result === param)
+    }
+  }
+
   val nullaryOpaqueCon = OpaqueTypeCon("Foo", Nil, Nil, NoPos)
   val nullaryOpaque = Opaque(nullaryOpaqueCon, Nil)
   testInstantiate(nullaryOpaqueCon, Nil)(Some(nullaryOpaque))

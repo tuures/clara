@@ -80,7 +80,7 @@ object Terms {
 
   case class RawConstructor(con: TypeCons.WrapperTypeCon, typ: Type) extends ValueExpr
 
-  // TODO case class ConstructPattern(con: TypeCon, args: Seq[Pattern], typ: Type) extends Pattern
+  case class ConstructPattern(con: TypeCons.WrapperTypeCon, argumentPattern: Pattern, typ: Type) extends Pattern
 
   // TODO con type could be narrowed to rule out ParamCon
   case class TypeDef(con: TypeCon) extends InBlockDecl

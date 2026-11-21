@@ -34,6 +34,7 @@ object JsPrinterImpl {
     case UnaryArrowFunc(param, body) => printArrowFunc(param, body)
     case Iife(body) => safe"(${printArrowFunc(IgnoredPattern, body)})()"
     case Member(obj, memberName) => safe"${printExpr(obj)}.$memberName"
+    case OptionalMember(obj, memberName) => safe"${printExpr(obj)}?.$memberName"
     case Index(obj, index) => safe"${printExpr(obj)}[${printExpr(index)}]"
     case UnaryCall(target, argument) => printCall(target, printExpr(argument))
     case BinaryOperation(a, operator, b) => printBinaryOperation(a, operator, b)
@@ -81,7 +82,7 @@ object JsPrinterImpl {
   def printArrowFunc(param: Pattern, body: Seq[Content]): String = {
     val paramPrinted = param match {
       case IgnoredPattern => "()"
-      case _: ArrayPattern => safe"(${printPattern(param)})"
+      case _: ArrayPattern | _: ObjectPattern => safe"(${printPattern(param)})"
       case _ => printPattern(param)
     }
 
@@ -153,6 +154,8 @@ object JsPrinterImpl {
   def printPattern(pattern: Pattern): String = pattern match {
     case IgnoredPattern => ""
     case ArrayPattern(ps) => arraySyntax(ps.map(printPattern))
+    case ObjectPattern(entries) =>
+      entries.map { case (name, p) => safe"$name: ${printPattern(p)}" }.safeString("{ ", ", ", " }")
     case NamePattern(name) => name
   }
 

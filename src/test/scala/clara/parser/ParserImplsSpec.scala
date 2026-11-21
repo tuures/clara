@@ -255,6 +255,9 @@ class ParserImplsSpec extends BaseSpec {
   parseAst(p.tupleOrParensOrBlock(_))("(//first\n\n\n();()//\n)")(
     Block(Seq(UnitLiteral(), UnitLiteral()))
   )
+  parseAst(p.tupleOrParensOrBlock(_))("(\n  f // comment\n  x\n)")(
+    Block(Seq(NamedValue("f"), NamedValue("x")))
+  )
   parseAst(p.tupleOrParensOrBlock(_))("(a; b; c = 1; c)")(
     Block(Seq(
       NamedValue("a"),
@@ -321,7 +324,7 @@ class ParserImplsSpec extends BaseSpec {
     PatternAs(UnitPattern(), UnitType())
   )
   parseAst(p.pattern(_))("(Foo bar): ()")(
-    PatternAs(ConstructPattern(NameWithPos("Foo"), CapturePattern("bar")), UnitType())
+    PatternAs(ConstructPattern(Nil, NameWithPos("Foo"), CapturePattern("bar")), UnitType())
   )
 
   parseAst(p.pattern(_))("x ? isValid")(
@@ -410,8 +413,8 @@ class ParserImplsSpec extends BaseSpec {
     Lambda(UnitPattern(), UnitLiteral())
   )
   reject(p.lambda(_))("()\n=> ()")
-  parseAst(p.pipePart(_))("(Foo a) => a")(Lambda(ConstructPattern(NameWithPos("Foo"), CapturePattern("a")), NamedValue("a")))
-  parseAst(p.pipePart(_))("(Foo (a)) => a")(Lambda(ConstructPattern(NameWithPos("Foo"), CapturePattern("a")), NamedValue("a")))
+  parseAst(p.pipePart(_))("(Foo a) => a")(Lambda(ConstructPattern(Nil, NameWithPos("Foo"), CapturePattern("a")), NamedValue("a")))
+  parseAst(p.pipePart(_))("(Foo (a)) => a")(Lambda(ConstructPattern(Nil, NameWithPos("Foo"), CapturePattern("a")), NamedValue("a")))
   reject(p.pipePart(_))("Foo(a) => a")
   parseAst(p.pipePart(_))("Foo (a)")(Call(NamedValue("Foo"), NamedValue("a")))
   parseAst(p.pipePart(_))("g (a => a)")(Call(NamedValue("g"), Lambda(CapturePattern("a"), NamedValue("a"))))
@@ -543,10 +546,16 @@ class ParserImplsSpec extends BaseSpec {
   reject(p.simple(_))("::new id.")
 
   parseAst(p.constructPattern(_))("Bar b")(
-    ConstructPattern(NameWithPos("Bar"), CapturePattern("b"))
+    ConstructPattern(Nil, NameWithPos("Bar"), CapturePattern("b"))
   )
   parseAst(p.constructPattern(_))("Bar(b)")(
-    ConstructPattern(NameWithPos("Bar"), CapturePattern("b"))
+    ConstructPattern(Nil, NameWithPos("Bar"), CapturePattern("b"))
+  )
+  parseAst(p.constructPattern(_))("Option.Some s")(
+    ConstructPattern(Seq(NameWithPos("Option")), NameWithPos("Some"), CapturePattern("s"))
+  )
+  parseAst(p.constructPattern(_))("Flag True")(
+    ConstructPattern(Nil, NameWithPos("Flag"), NamedConstantPattern("True"))
   )
 
   //////
@@ -714,7 +723,7 @@ class ParserImplsSpec extends BaseSpec {
   parseAst(p.pattern(_))("_foo")(CapturePattern("_foo"))
   parseAst(p.pattern(_))("42")(IntegerPattern(AstLiteral.IntegerDec("42")))
   parseAst(p.pattern(_))("Foo bar")(
-    ConstructPattern(NameWithPos("Foo"), CapturePattern("bar"))
+    ConstructPattern(Nil, NameWithPos("Foo"), CapturePattern("bar"))
   )
 
   //////

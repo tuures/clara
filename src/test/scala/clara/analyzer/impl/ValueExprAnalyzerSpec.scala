@@ -255,7 +255,7 @@ class ValueExprAnalyzerSpec extends BaseSpec {
     assert(result.value.left.value.map(_.message).head.startsWith("Cases of the piecewise function don't match every value"))
   }
 
-  test("type pattern cases that would need a runtime type test are rejected for now") {
+  test("type pattern cases that would need a runtime type test are rejected for now, a last case gets what the others left") {
     val intTypeExpr = Ast.NamedType(Nil, Ast.NameWithPos("Int"), Nil)
     val stringTypeExpr = Ast.NamedType(Nil, Ast.NameWithPos("String"), Nil)
     val result = matchX(envWith("x", intOrString),
@@ -264,7 +264,6 @@ class ValueExprAnalyzerSpec extends BaseSpec {
     ).run
 
     assert(result.value.left.value.map(_.message) === Seq(
-      "Pattern needs to test the type of the value at runtime, which isn't supported yet",
       "Pattern needs to test the type of the value at runtime, which isn't supported yet",
     ))
   }
