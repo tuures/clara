@@ -62,12 +62,12 @@ object BlockAnalyzerImpl {
       sortBy(_.pos)
   }
 
-  def buildTerm(state: ValuesPass.State, blockPos: Pos, isProgramBlock: Boolean): An[Terms.Block] = {
+  def buildTerm(state: ValuesPass.State, blockPos: Pos, isModuleBlock: Boolean): An[Terms.Block] = {
     val ValuesPass.State(_, contents, returnType) = state
 
     returnType match {
-      case Some(typ) if isProgramBlock && (typ !== Types.Uni) => An.valid(Terms.Block(contents, typ)).
-        tellWarning(SourceMessage(blockPos, "Non-unit value discarded in program"))
+      case Some(typ) if isModuleBlock && (typ !== Types.Uni) => An.valid(Terms.Block(contents, typ)).
+        tellWarning(SourceMessage(blockPos, "Non-unit value discarded in module"))
       case Some(typ) => An.valid(Terms.Block(contents, typ))
       case None if contents.isEmpty => An.valid(Terms.Block(contents, Types.Uni))
       case None => An.valid(Terms.Block(contents, Types.Uni)).
@@ -93,22 +93,22 @@ object BlockAnalyzerImpl {
     })
   }
 
-  def finishBlock(state: An[ValuesPass.State], blockPos: Pos, isProgramBlock: Boolean): An[Terms.Block] =
+  def finishBlock(state: An[ValuesPass.State], blockPos: Pos, isModuleBlock: Boolean): An[Terms.Block] =
     state.flatMap { state =>
       An.currentLog.flatMap(log =>
         An.valid(state).tellWarnings(unusedDefinitionWarnings(state.env, log.usageTrace))
       )
-    }.flatMap(buildTerm(_, blockPos, isProgramBlock))
+    }.flatMap(buildTerm(_, blockPos, isModuleBlock))
 
-  def blockTerm(parentEnv: Env, block: Ast.Block, isProgramBlock: Boolean): An[Terms.Block] =
-    finishBlock(walkBlockContents(parentEnv, block.bcs), block.pos, isProgramBlock)
+  def blockTerm(parentEnv: Env, block: Ast.Block, isModuleBlock: Boolean): An[Terms.Block] =
+    finishBlock(walkBlockContents(parentEnv, block.bcs), block.pos, isModuleBlock)
 
 }
 
 object BlockAnalyzer {
   def regularBlockTerm(parentEnv: Env, block: Ast.Block): An[Terms.Block] =
-    BlockAnalyzerImpl.blockTerm(parentEnv, block, isProgramBlock = false)
+    BlockAnalyzerImpl.blockTerm(parentEnv, block, isModuleBlock = false)
 
-  def programBlockTerm(parentEnv: Env, block: Ast.Block): An[Terms.Block] =
-    BlockAnalyzerImpl.blockTerm(parentEnv, block, isProgramBlock = true)
+  def moduleBlockTerm(parentEnv: Env, block: Ast.Block): An[Terms.Block] =
+    BlockAnalyzerImpl.blockTerm(parentEnv, block, isModuleBlock = true)
 }

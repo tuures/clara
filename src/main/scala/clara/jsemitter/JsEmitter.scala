@@ -253,15 +253,7 @@ object JsEmitterImpl {
 }
 
 object JsEmitter {
-  def emitModule(program: Terms.Block): JsAst.Module = {
-    val body = JsEmitterImpl(Map.empty).emitBlockContents(program.bcs)
-
-    val moduleIntro = Seq(
-      // JsAst.Const("$claraType", JsAst.UnaryCall(JsAst.Named("Symbol"), JsAst.StringLiteral("$claraType")))
-    )
-
-    JsAst.Module(moduleIntro ++ body)
-  }
+  def emitModule(module: Terms.Block): JsAst.Module = JsAst.Module(JsEmitterImpl(Map.empty).emitBlockContents(module.bcs))
 }
 
 object NameMangler {

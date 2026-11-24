@@ -1,6 +1,7 @@
 # Done
 
 - emitter: a method of a nested block no longer shadows a method of the same name in a block around it, it gets a numbered name (`P$$methods$name$2`)
+- cleanup for modules: the AST dump (`-p`) and the `-` input path are gone; "program" is "module" where it means one file (`AnalyzedModule`, `moduleBlockTerm`, the parser's `moduleBlock`)
 - construct patterns (`Some a`, `Option.Some s`) on boxed types (a tag test, `$value?.$type === 'Option.Some'`) and tagged types (no tag: in a case the argument pattern's runtime test has to tell the type apart from what the earlier cases left, Check 1 of plans/enum2.md); in parameters and value defs they unwrap (`(Name n) => ...`); the userland Option fixture (`option-desugared`) passes
 - a case is checked for runtime type tests against what the earlier cases left, not the whole matched type
 - a type arg a construct pattern's matched type doesn't give is an unknown type (a fresh type param), not `!`; a constructor's type has type params of its own, not its con's
@@ -58,9 +59,28 @@ Each step is a vertical slice (parser -> analyzer -> emitter) validated by an e2
    - a construct pattern of a generic type needs the type it matches (`(Some a) => a` alone is "Could not infer type")
    - the unknown type of a type arg a construct pattern's matched type doesn't give is shown with the con's param name, so `<A>(x: A) => x @ #(Option.Some a => (a: A), _ => x)` reports "Type `A` is not assignable to type `A`"; show it distinctly (`?A`, or "the unknown type arg `A` of `Some`"); the same for any two type params of one name in a message (see the 3a follow-up on `definedAt`s)
    - Check 1 compares what the argument pattern's runtime test accepts (`TypeInterpreterImpl.testedType`) with the other alternatives by `disjoint`, so `testedType` must never be smaller than what the test really accepts: a boxed construct pattern tests only the con, not the type args (its tested type wraps what the argument pattern tests); a tuple pattern also accepts a sequence of that length once sequences exist (11); a literal counts as its whole type, which only matters once there are literal types
-6. modules and imports (plans/module-system.md): AST support for a module, import syntax in the parser, multi-file compilation, output as ES modules (E2eSpec runs them as modules), the runtime helper module (Emitter follow-up)
-   - `::new` only inside the defining module, today it's allowed wherever the type is visible
-   - no ad-hoc extension of foreign types: the types an alias expands to are defined in its module (4b follow-up)
+6. modules and imports (plans/module-system.md), as vertical slices:
+   - ~~6a. cleanup: the AST dump, the `-` input path, "program" to "module", method names that a nested block shadows~~ done
+   - 6b. `Compiler.compileProgram`, still one module per program:
+     - output as ES modules, one `.mjs` per module; `-o` is an optional output directory with the subdirectories of the sources (relative to the source root, the entry file's directory), without it each `.mjs` goes next to its source; the CLI no longer prints the JS
+     - `CompiledProgram(modules, messages)`, the messages are warnings and errors in source order like `AnalyzedProgram.messages`
+     - message levels, error and warning, so a failed compile no longer prints its warnings as errors
+     - E2eSpec writes the modules to a temp dir and runs the entry `.mjs` with node
+   - 6c. `::import ./math`:
+     - the whole module as a namespace named like the file, or only its top-level definition named like the file if it has one (`::import ./Option` imports the type `Option`)
+     - loading: a path is relative to the importing file; a path leaving the source root isn't supported yet; a module name that isn't a Clara name is an error; an import cycle is an error naming the modules in it
+     - script modules: a module with a top-level expression is a script module (an entry point), importing one is an error; the top-level definitions of other modules are exported, so they aren't reported unused; an unused import is
+     - analysis in parallel along the imports: a module starts once all its imports are analyzed; a module whose import has errors isn't analyzed (no follow-up errors)
+     - a module's interface (`ModuleInterface`): its top-level scope, namespaces, methods and its own type structures; an importer seeds its log with the type structures of its transitive imports, each module once
+     - terms say which module what they refer to is defined in; the emitter imports the members of an imported module that the module uses, named like namespace members (`math.add` is `import { add as math$add } from "./math.mjs"`), so a nested Clara scope shadows them the same way as a `::namespace`; it also imports the methods of types from modules the Clara code doesn't import (a transitive import), named like the methods of the module itself (`JsEmitterImpl.methodNames`)
+     - e2e fixtures: the modules of `name.clara` are in the directory `name/`
+   - later slices:
+     - selections and renames (`{sin, cos}`, `{sin = s}`, `= M`, `*`)
+     - `::new` only inside the defining module, today it's allowed wherever the type is visible
+     - no ad-hoc extension of foreign types: the types an alias expands to are defined in its module (4b follow-up)
+     - the runtime helper module (Emitter follow-up)
+     - unused exports: a top-level definition that no module of the program imports isn't reported; decide how (from the usage traces of all modules?)
+     - several entry points (script modules) in one program, compiled together
 7. prelude, a module imported implicitly: `Boolean`, `Option` (the desugared form until `::enum`), the opaque `Int`, `Float` and `String`, so programs stop declaring `::opaque String` themselves
 8. runtime type tests: opaque types declare their test (`typeof x === 'string'`); type patterns in cases (`n: Int` on `Int | String`) and tagged construct patterns use them when the type the earlier cases left needs it, so a tagged `String` and a tagged `Int` can be told apart (Check 1 then counts the test); only when the type is testable (not functions or type params). Until then such cases are an error (`TypeInterpreterImpl.needsTypeTest`)
    - what can reach a case is computed by dropping the alternatives the earlier cases cover (`casesCheck.remainingTypes`), an approximation: an alternative covered only in part stays. Subtracting step by step instead (`matched -- covered1 -- covered2 ...`, a `--` difference type) gives the exact remaining type per case, reachability becomes "case overlaps the remaining type" (cheaper than checking against the growing union of earlier cases when the remaining type simplifies, unions of singletons/constructors), and what remains after the last case names the missing cases in the non-exhaustive error (e.g. `Some<Blue>`); the alternative is a union expansion whose results can be shown (`expandUnions` results must not be shown)
@@ -127,11 +147,11 @@ Each step is a vertical slice (parser -> analyzer -> emitter) validated by an e2
 - a block that needs an IIFE as a statement after another statement crashes at runtime (`console.log("a")` followed by `(_ = "x"; console.log("b"))` emits `console.log("a")\n(() => {...})()`, a call of the previous statement's result, as statements have no semicolons)
 - `::declare` inside a namespace keeps its `definedInNs` like any member, but the emitter then names it `Host$log`, which nothing defines (the host's name is `log`): the emitter should emit a declared value under its declared name, or an annotation overrides the emitted name (see the next item)
 - `::declare` of a reserved name (e.g. `::declare undefined: ...`) is broken: references get the `$` suffix but the JS global has none; later: an annotation declaring the JS name explicitly
-- runtime module with tree-shakeable helpers (`import * as $clara from ...`), not duplicated per module; with modules (Roadmap 6): where it lives, output as ES modules, E2eSpec needs `--input-type=module`. Until then emitted code reaches globals through `globalThis`
+- runtime module with tree-shakeable helpers (`import * as $clara from ...`), not duplicated per module; with modules (Roadmap 6): where it lives. Until then emitted code reaches globals through `globalThis`
 
 ## Other
 
-- message levels (`Message` has a TODO for it): when a compile fails, the CLI prints its warnings as `ERROR:` too
+- `smoketest.clara` predates the unit and e2e tests: split it into e2e fixtures, unit tests, TODO items and IDEAS.md, then remove it
 
 # Open decisions
 

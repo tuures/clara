@@ -9,7 +9,7 @@ object Parser {
   def parseString(sourceName: String, input: String): Either[Seq[SourceMessage], Ast.Block] = {
     val sourceInfo = SourceInfo.fromString(sourceName, input)
 
-    parse(input, ParserImpls(Some(sourceInfo)).programBlock(_)) match {
+    parse(input, ParserImpls(Some(sourceInfo)).moduleBlock(_)) match {
       case Parsed.Success(block, index) => {
         assert(index === sourceInfo.length, "Parser did not fully consume the input")
 

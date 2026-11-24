@@ -14,7 +14,7 @@ class JsEmitterSpec extends BaseSpec {
 
   val emitter = JsEmitterImpl(Map.empty)
 
-  def modulePrinted(program: Terms.Block): String = JsPrinter.printModule(JsEmitter.emitModule(program))
+  def modulePrinted(module: Terms.Block): String = JsPrinter.printModule(JsEmitter.emitModule(module))
 
   def emitExpr(expr: Terms.ValueExpr): JsAst.Expr = emitter.emitValueExpr(expr)
 
@@ -288,26 +288,26 @@ class JsEmitterSpec extends BaseSpec {
   // emitModule / emitBlockContent
 
   test("emitModule: empty block") {
-    val program = Terms.Block(Seq.empty, dummyType)
-    val module = JsEmitter.emitModule(program)
+    val block = Terms.Block(Seq.empty, dummyType)
+    val module = JsEmitter.emitModule(block)
     assert(module === JsAst.Module(Seq.empty))
   }
 
   test("emitModule: value def") {
-    val program = Terms.Block(Seq(
+    val block = Terms.Block(Seq(
       Terms.ValueDef(
         Terms.CapturePattern("x", dummyType), Nil,
         Terms.IntegerLiteral(TermLiteral.IntegerDec("42"), dummyType)
       )
     ), dummyType)
-    val module = JsEmitter.emitModule(program)
+    val module = JsEmitter.emitModule(block)
     assert(module === JsAst.Module(Seq(
       JsAst.Const(JsAst.NamePattern("x"), JsAst.NumberLiteral("42"))
     )))
   }
 
   test("emitModule: value def with tuple pattern") {
-    val program = Terms.Block(Seq(
+    val block = Terms.Block(Seq(
       Terms.ValueDef(
         Terms.TuplePattern(Seq(
           Terms.CapturePattern("a", dummyType),
@@ -321,7 +321,7 @@ class JsEmitterSpec extends BaseSpec {
         ), dummyType)
       )
     ), dummyType)
-    val module = JsEmitter.emitModule(program)
+    val module = JsEmitter.emitModule(block)
     assert(module === JsAst.Module(Seq(
       JsAst.Const(JsAst.ArrayPattern(Seq(JsAst.NamePattern("a"), JsAst.NamePattern("b"), JsAst.IgnoredPattern)), JsAst.ArrayLiteral(Seq(JsAst.NumberLiteral("1"), JsAst.NumberLiteral("2"), JsAst.Undefined)))
     )))
@@ -329,46 +329,46 @@ class JsEmitterSpec extends BaseSpec {
 
   test("emitModule: singleton type def") {
     val con = TypeCons.SingletonTypeCon("True", Nil, NoPos)
-    val program = Terms.Block(Seq(Terms.TypeDef(con)), dummyType)
-    val module = JsEmitter.emitModule(program)
+    val block = Terms.Block(Seq(Terms.TypeDef(con)), dummyType)
+    val module = JsEmitter.emitModule(block)
     assert(module === JsAst.Module(Seq(
       JsAst.Const(JsAst.NamePattern("True"), JsAst.ObjectLiteral(Seq("$type" -> JsAst.StringLiteral("True"))))
     )))
   }
 
   test("emitModule: tagged and boxed type defs emit their raw constructors") {
-    val program = Terms.Block(Seq(
+    val block = Terms.Block(Seq(
       Terms.TypeDef(TypeCons.WrapperTypeCon(TypeDefKind.Tagged, "Id", Nil, Nil, NoPos)),
       Terms.TypeDef(TypeCons.WrapperTypeCon(TypeDefKind.Boxed, "Some", Nil, Seq("Option"), NoPos)),
       Terms.TypeDef(TypeCons.WrapperTypeCon(TypeDefKind.Alias, "Unit", Nil, Nil, NoPos)),
     ), dummyType)
-    assert(modulePrinted(program) ===
+    assert(modulePrinted(block) ===
       "const Id$$new = $value =>\n  $value\n\nconst Option$Some$$new = $value =>\n  ({\n    $type: 'Option.Some',\n    $value: $value\n  })")
   }
 
   test("emitModule: namespace members are top-level consts qualified with their namespaces") {
     // type defs know their namespace from their con, value defs from definedInNs
-    val program = Terms.Block(Seq(
+    val block = Terms.Block(Seq(
       Terms.TypeDef(TypeCons.SingletonTypeCon("Red", Seq("Color"), NoPos)),
       Terms.ValueDef(Terms.CapturePattern("dark", dummyType), Seq("Color", "Shades"), Terms.NamedValue("Red", Seq("Color"), dummyType)),
     ), dummyType)
-    assert(modulePrinted(program) === "const Color$Red = {\n  $type: 'Color.Red'\n}\n\nconst Color$Shades$dark = Color$Red")
+    assert(modulePrinted(block) === "const Color$Red = {\n  $type: 'Color.Red'\n}\n\nconst Color$Shades$dark = Color$Red")
   }
 
   test("emitModule: value decl produces nothing") {
-    val program = Terms.Block(Seq(Terms.ValueDecl("x")), dummyType)
-    val module = JsEmitter.emitModule(program)
+    val block = Terms.Block(Seq(Terms.ValueDecl("x")), dummyType)
+    val module = JsEmitter.emitModule(block)
     assert(module === JsAst.Module(Seq.empty))
   }
 
   test("emitModule: a method def section emits each method as a function of the receiver") {
-    val program = Terms.Block(Seq(
+    val block = Terms.Block(Seq(
       Terms.MethodDefSection(Seq("Foo"), Terms.CapturePattern("self", dummyType), Namespace(
         "bar" -> Terms.MethodDef(DefId(), Attributes.MethodAttributes(), Terms.NamedValue("self", Nil, dummyType)),
         "baz" -> Terms.MethodDef(DefId(), Attributes.MethodAttributes(), Terms.UnitLiteral()),
       )),
     ), dummyType)
-    assert(modulePrinted(program) === "const Foo$$methods$bar = self =>\n  self\n\nconst Foo$$methods$baz = self =>\n  undefined")
+    assert(modulePrinted(block) === "const Foo$$methods$bar = self =>\n  self\n\nconst Foo$$methods$baz = self =>\n  undefined")
   }
 
   test("emitModule: a method of a nested block doesn't shadow a method of the same name in a block around it") {
@@ -470,11 +470,11 @@ class JsEmitterSpec extends BaseSpec {
 
   test("emitModule: a parameter destructuring a boxed value is in parens") {
     val parameter = Terms.ConstructPattern(someCon, Terms.CapturePattern("a", dummyType), dummyType)
-    val program = Terms.Block(Seq(
+    val block = Terms.Block(Seq(
       Terms.ValueDef(Terms.CapturePattern("f", dummyType), Nil, Terms.Lambda(parameter, Terms.NamedValue("a", Nil, dummyType), dummyType)),
     ), dummyType)
 
-    assert(modulePrinted(program) === "const f = ({ $value: a }) =>\n  a")
+    assert(modulePrinted(block) === "const f = ({ $value: a }) =>\n  a")
   }
 
   test("emitBindingPattern: PatternAs emits its pattern") {
@@ -497,7 +497,7 @@ class JsEmitterSpec extends BaseSpec {
   // Cross-cutting: emitter + printer
 
   test("Emitter: lambda with block body unwraps iife") {
-    val program = Terms.Block(Seq(Terms.Lambda(
+    val block = Terms.Block(Seq(Terms.Lambda(
       Terms.CapturePattern("x", dummyType),
       Terms.Block(Seq(
         Terms.ValueDef(Terms.CapturePattern("y", dummyType), Nil, Terms.NamedValue("x", Nil, dummyType)),
@@ -505,35 +505,35 @@ class JsEmitterSpec extends BaseSpec {
       ), dummyType),
       dummyType
     )), dummyType)
-    assert(modulePrinted(program) === "x => {\n  const y = x\n  return y\n}")
+    assert(modulePrinted(block) === "x => {\n  const y = x\n  return y\n}")
   }
 
-  test("Emitter: program with def and expression") {
-    val program = Terms.Block(Seq(
+  test("Emitter: module with def and expression") {
+    val block = Terms.Block(Seq(
       Terms.ValueDef(Terms.CapturePattern("x", dummyType), Nil, Terms.IntegerLiteral(TermLiteral.IntegerDec("1"), dummyType)),
       Terms.NamedValue("x", Nil, dummyType),
     ), dummyType)
-    assert(modulePrinted(program) === "const x = 1\n\nx")
+    assert(modulePrinted(block) === "const x = 1\n\nx")
   }
 
   test("Emitter: wildcards bind nothing, so several of them don't collide") {
     val pair = Terms.NamedValue("pair", Nil, dummyType)
-    val program = Terms.Block(Seq(
+    val block = Terms.Block(Seq(
       Terms.ValueDef(Terms.TuplePattern(Seq(Terms.WildcardPattern(dummyType), Terms.WildcardPattern(dummyType)), dummyType), Nil, pair),
       Terms.ValueDef(Terms.WildcardPattern(dummyType), Nil, pair),
       Terms.ValueDef(Terms.WildcardPattern(dummyType), Nil, pair),
       Terms.Lambda(Terms.WildcardPattern(dummyType), pair, dummyType),
     ), dummyType)
-    assert(modulePrinted(program) === "const [, ] = pair\n\npair\n\npair\n\n() =>\n  pair")
+    assert(modulePrinted(block) === "const [, ] = pair\n\npair\n\npair\n\n() =>\n  pair")
   }
 
   test("Emitter: Clara names colliding with JS reserved names are suffixed where defined, captured and used") {
-    val program = Terms.Block(Seq(
+    val block = Terms.Block(Seq(
       Terms.ValueDef(Terms.CapturePattern("delete", dummyType), Nil, Terms.IntegerLiteral(TermLiteral.IntegerDec("1"), dummyType)),
       Terms.Piecewise(Seq(
         (Terms.CapturePattern("eval", dummyType), Terms.NamedValue("delete", Nil, dummyType)),
       ), dummyType),
     ), dummyType)
-    assert(modulePrinted(program) === "const delete$ = 1\n\n$value => {\n  const eval$ = $value\n  return delete$\n}")
+    assert(modulePrinted(block) === "const delete$ = 1\n\n$value => {\n  const eval$ = $value\n  return delete$\n}")
   }
 }

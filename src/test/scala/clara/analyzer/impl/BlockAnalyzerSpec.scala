@@ -13,7 +13,7 @@ class BlockAnalyzerSpec extends BaseSpec {
     // the errors are in the log of the run, the result is only what's kept in spite of them
     NamesPass.walk(Env.empty, block).flatMap { case (namedEnv, _) => TypesPass.walk(namedEnv, block) }.runFrom(AnLog())._1.get
 
-  test("empty Block (program block) should produce unit type with no warning about missing expression") {
+  test("empty Block (module block) should produce unit type with no warning about missing expression") {
     val block = Block(Seq.empty)
 
     val blockTermAn = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
@@ -30,7 +30,7 @@ class BlockAnalyzerSpec extends BaseSpec {
     val block = Block(Seq(typeDef))
 
     val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).flatMap { endState =>
-      BlockAnalyzerImpl.finishBlock(An.valid(endState), block.pos, isProgramBlock = false).map(term => (endState, term))
+      BlockAnalyzerImpl.finishBlock(An.valid(endState), block.pos, isModuleBlock = false).map(term => (endState, term))
     }.run
     val (endState, blockTerm) = result.value.value
 
@@ -73,7 +73,7 @@ class BlockAnalyzerSpec extends BaseSpec {
     ))
 
     val result = BlockAnalyzerImpl.walkBlockContents(Env.empty, block.bcs).flatMap { endState =>
-      BlockAnalyzerImpl.finishBlock(An.valid(endState), block.pos, isProgramBlock = false).map(term => (endState, term))
+      BlockAnalyzerImpl.finishBlock(An.valid(endState), block.pos, isModuleBlock = false).map(term => (endState, term))
     }.run
     val (endState, blockTerm) = result.value.value
 
@@ -2280,18 +2280,18 @@ class BlockAnalyzerSpec extends BaseSpec {
     assert(result.log.warnings.isEmpty)
   }
 
-  test("program block: Non-unit last expression should warn about discarded value") {
+  test("module block: Non-unit last expression should warn about discarded value") {
     def lambdaAst = Lambda(Nil, UnitPattern(), UnitLiteral())
     def lambdaTerm = Terms.Lambda(Terms.UnitPattern(), Terms.UnitLiteral(), Types.Func(Nil, Types.Uni, Types.Uni))
 
     val block = Block(Seq(lambdaAst, lambdaAst))
 
-    val blockTermAn = BlockAnalyzer.programBlockTerm(Env.empty, block).run
+    val blockTermAn = BlockAnalyzer.moduleBlockTerm(Env.empty, block).run
 
     val expectedTerm = Terms.Block(Seq(lambdaTerm, lambdaTerm), Types.Func(Nil, Types.Uni, Types.Uni))
     assert(blockTermAn.value.value === expectedTerm)
 
-    val expectedErrors = Seq("Non-unit value discarded in block", "Non-unit value discarded in program")
+    val expectedErrors = Seq("Non-unit value discarded in block", "Non-unit value discarded in module")
     assert(blockTermAn.log.warnings.map(_.message) === expectedErrors)
   }
 

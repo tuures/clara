@@ -29,7 +29,7 @@ sealed trait Pos extends Ordered[Pos] {
 }
 
 case class SourcePos(sourceInfo: SourceInfo, fromIndex: Int, untilIndex: Option[Int]) extends Pos {
-  // Note: empty program block (evaluates to unit type) requires both
+  // Note: empty module block (evaluates to unit type) requires both
   // fromIndex and untilIndex to be 0 while sourceInfo.length is also 0
   // otherwise fromIndex should be less than sourceInfo.length
   require(fromIndex >= 0 && fromIndex <= sourceInfo.length, s"fromIndex ${fromIndex} out of range")
@@ -37,7 +37,7 @@ case class SourcePos(sourceInfo: SourceInfo, fromIndex: Int, untilIndex: Option[
     require(i >= fromIndex && i <= sourceInfo.length, s"untilIndex ${i} out of range")
   }
 
-  // TODO don't crash if all three are 0 (empty program block) but still produce a reasonable human format
+  // TODO don't crash if all three are 0 (empty module block) but still produce a reasonable human format
   def humanFormat = {
     val startLineCol = sourceInfo.lineCol(fromIndex)
     val start = startLineCol.humanFormat

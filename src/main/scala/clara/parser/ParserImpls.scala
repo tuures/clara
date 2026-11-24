@@ -560,5 +560,5 @@ case class ParserImpls(sourceInfo: Option[SourceInfo]) {
   //////
   // Start here
 
-  def programBlock[X: P]: P[Block] = P(pp(Start ~ blockItemSep.rep ~ blockItems(0) ~ End)(Block.apply _))
+  def moduleBlock[X: P]: P[Block] = P(pp(Start ~ blockItemSep.rep ~ blockItems(0) ~ End)(Block.apply _))
 }

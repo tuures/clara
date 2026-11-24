@@ -686,16 +686,16 @@ class ParserImplsSpec extends BaseSpec {
   //////
   // Top-level
 
-  parseAst(p.programBlock(_))("(foo/*comment\n /*  \n // line2*/)")(
+  parseAst(p.moduleBlock(_))("(foo/*comment\n /*  \n // line2*/)")(
     Block(Seq(NamedValue("foo")))
   )
-  parseAst(p.programBlock(_))("foo//\n")(
+  parseAst(p.moduleBlock(_))("foo//\n")(
     Block(Seq(NamedValue("foo")))
   )
-  parseAst(p.programBlock(_))("foo//")(
+  parseAst(p.moduleBlock(_))("foo//")(
     Block(Seq(NamedValue("foo")))
   )
-  parseAst(p.programBlock(_))("//first\n\n()")(
+  parseAst(p.moduleBlock(_))("//first\n\n()")(
     Block(Seq(UnitLiteral()))
   )
 
@@ -738,10 +738,10 @@ class ParserImplsSpec extends BaseSpec {
     )
 
     parseAst(p.valueExpr(_))(nestedCalls(depth))(nestedCallsAst(depth))
-    parseAst(p.programBlock(_))(nestedCalls(depth))(Block(Seq(nestedCallsAst(depth))))
+    parseAst(p.moduleBlock(_))(nestedCalls(depth))(Block(Seq(nestedCallsAst(depth))))
     parseAst(p.valueExpr(_))("(" * depth + "a" + ")" * depth)(NamedValue("a"))
     parseAst(p.pattern(_))("(" * depth + "a" + ")" * depth)(CapturePattern("a"))
     parseAst(p.typeExpr(_))("(" * depth + "A" + ")" * depth)(NamedType("A"))
-    reject(p.programBlock(_))("(" * depth + "a")
+    reject(p.moduleBlock(_))("(" * depth + "a")
   }
 }
