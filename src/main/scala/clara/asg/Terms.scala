@@ -86,7 +86,7 @@ object Terms {
   case class TypeDef(con: TypeCon) extends InBlockDecl
 
   case class MethodDefSection(definedInNs: Seq[String], receiver: Pattern, methodDefs: Namespace[MethodDef]) extends InBlockDecl
-  case class MethodDef(attributes: MethodAttributes, body: ValueExpr) extends Member
+  case class MethodDef(defId: DefId, attributes: MethodAttributes, body: ValueExpr) extends Member
 
   case class ValueDecl(name: String) extends InBlockDecl
   // definedInNs: the namespaces the bound values are members of, a namespace's values are defined at its position

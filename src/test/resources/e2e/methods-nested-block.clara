@@ -1,0 +1,24 @@
+::opaque String
+::declare console: { log: String => () }
+
+::tagged P: String
+::extend P {
+  ::methods p {
+    name = "outer"
+  }
+}
+
+p = P("x")
+
+r = (
+  ::tagged P: String
+  ::extend P {
+    ::methods q {
+      name = "inner"
+    }
+  }
+  console.log(P("y").name)
+  p.name
+)
+
+console.log(r)

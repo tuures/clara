@@ -12,9 +12,11 @@ class JsEmitterSpec extends BaseSpec {
   // if not perhaps add explicit dummy type to Terms, bit like NoPos for positions in Ast?
   val dummyType = Types.Uni
 
+  val emitter = JsEmitterImpl(Map.empty)
+
   def modulePrinted(program: Terms.Block): String = JsPrinter.printModule(JsEmitter.emitModule(program))
 
-  def emitExpr(expr: Terms.ValueExpr): JsAst.Expr = JsEmitter.emitValueExpr(expr)
+  def emitExpr(expr: Terms.ValueExpr): JsAst.Expr = emitter.emitValueExpr(expr)
 
   // emitValueExpr — order follows the match in JsEmitter.emitValueExpr
 
@@ -79,7 +81,7 @@ class JsEmitterSpec extends BaseSpec {
     val block = Terms.Block(Seq(
       Terms.NamedValue("a", Nil, dummyType),
     ), dummyType)
-    val result = JsEmitter.emitValueExpr(block)
+    val result = emitter.emitValueExpr(block)
     assert(result === JsAst.Named("a"))
   }
 
@@ -88,7 +90,7 @@ class JsEmitterSpec extends BaseSpec {
       Terms.NamedValue("a", Nil, dummyType),
       Terms.NamedValue("b", Nil, dummyType),
     ), dummyType)
-    val result = JsEmitter.emitValueExpr(block)
+    val result = emitter.emitValueExpr(block)
     assert(result === JsAst.Iife(Seq(
       JsAst.Named("a"),
       JsAst.Return(JsAst.Named("b")),
@@ -100,7 +102,7 @@ class JsEmitterSpec extends BaseSpec {
       Terms.ValueDef(Terms.CapturePattern("x", dummyType), Nil, Terms.IntegerLiteral(TermLiteral.IntegerDec("1"), dummyType)),
       Terms.NamedValue("x", Nil, dummyType),
     ), dummyType)
-    val result = JsEmitter.emitValueExpr(block)
+    val result = emitter.emitValueExpr(block)
     assert(result === JsAst.Iife(Seq(
       JsAst.Const(JsAst.NamePattern("x"), JsAst.NumberLiteral("1")),
       JsAst.Return(JsAst.Named("x")),
@@ -242,15 +244,18 @@ class JsEmitterSpec extends BaseSpec {
   }
 
   test("emitValueExpr: MemberSelection on method with no emitKind calls the method's const with the object") {
+    val method = DefId()
     val attrs = Attributes.MethodAttributes()
     val expr = Terms.MemberSelection(
       Terms.NamedValue("obj", Nil, dummyType),
       0,
       "bar",
-      Terms.SelectedMethod(DefId(), Seq("Outer", "Foo"), attrs),
+      Terms.SelectedMethod(method, Seq("Outer", "Foo"), attrs),
       dummyType
     )
-    assert(emitExpr(expr) === JsAst.UnaryCall(JsAst.Named("Outer$Foo$$methods$bar"), JsAst.Named("obj")))
+    val inMethodBlock = JsEmitterImpl(Map(method -> "Outer$Foo$$methods$bar"))
+
+    assert(inMethodBlock.emitValueExpr(expr) === JsAst.UnaryCall(JsAst.Named("Outer$Foo$$methods$bar"), JsAst.Named("obj")))
   }
 
   test("emitValueExpr: Call") {
@@ -359,19 +364,38 @@ class JsEmitterSpec extends BaseSpec {
   test("emitModule: a method def section emits each method as a function of the receiver") {
     val program = Terms.Block(Seq(
       Terms.MethodDefSection(Seq("Foo"), Terms.CapturePattern("self", dummyType), Namespace(
-        "bar" -> Terms.MethodDef(Attributes.MethodAttributes(), Terms.NamedValue("self", Nil, dummyType)),
-        "baz" -> Terms.MethodDef(Attributes.MethodAttributes(), Terms.UnitLiteral()),
+        "bar" -> Terms.MethodDef(DefId(), Attributes.MethodAttributes(), Terms.NamedValue("self", Nil, dummyType)),
+        "baz" -> Terms.MethodDef(DefId(), Attributes.MethodAttributes(), Terms.UnitLiteral()),
       )),
     ), dummyType)
     assert(modulePrinted(program) === "const Foo$$methods$bar = self =>\n  self\n\nconst Foo$$methods$baz = self =>\n  undefined")
+  }
+
+  test("emitModule: a method of a nested block doesn't shadow a method of the same name in a block around it") {
+    val outerMethod = DefId()
+    val innerMethod = DefId()
+    def section(defId: DefId) = Terms.MethodDefSection(Seq("P"), Terms.CapturePattern("p", dummyType), Namespace(
+      "name" -> Terms.MethodDef(defId, Attributes.MethodAttributes(), Terms.UnitLiteral()),
+    ))
+    def selection(defId: DefId) = Terms.MemberSelection(
+      Terms.NamedValue("p", Nil, dummyType), 0, "name", Terms.SelectedMethod(defId, Seq("P"), Attributes.MethodAttributes()), dummyType,
+    )
+    val block = Terms.Block(Seq(
+      section(outerMethod),
+      Terms.Block(Seq(section(innerMethod), selection(innerMethod), selection(outerMethod)), dummyType),
+    ), dummyType)
+    assert(modulePrinted(block) ===
+      "const P$$methods$name = p =>\n  undefined\n\n" +
+      "(() => {\n  const P$$methods$name$2 = p =>\n    undefined\n  P$$methods$name$2(p)\n  return P$$methods$name(p)\n})()"
+    )
   }
 
   // emitBindingPattern
 
   test("emitCaseMatch: StringPattern without parts compares to the empty string") {
     val value = JsAst.Named("x")
-    val caseMatch = JsEmitter.emitCaseMatch(Terms.StringPattern(Seq(), dummyType), value)
-    assert(caseMatch === JsEmitter.CaseMatch(Seq(JsAst.BinaryOperation(value, "===", JsAst.StringLiteral(Seq()))), Nil))
+    val caseMatch = emitter.emitCaseMatch(Terms.StringPattern(Seq(), dummyType), value)
+    assert(caseMatch === JsEmitterImpl.CaseMatch(Seq(JsAst.BinaryOperation(value, "===", JsAst.StringLiteral(Seq()))), Nil))
   }
 
   val someCon = TypeCons.WrapperTypeCon(TypeDefKind.Boxed, "Some", Nil, Seq("Option"), NoPos)
@@ -379,9 +403,9 @@ class JsEmitterSpec extends BaseSpec {
 
   test("emitCaseMatch: ConstructPattern of a boxed type tests the tag and matches its argument pattern on the boxed value") {
     val value = JsAst.Named("x")
-    val caseMatch = JsEmitter.emitCaseMatch(Terms.ConstructPattern(someCon, Terms.CapturePattern("a", dummyType), dummyType), value)
+    val caseMatch = emitter.emitCaseMatch(Terms.ConstructPattern(someCon, Terms.CapturePattern("a", dummyType), dummyType), value)
 
-    assert(caseMatch === JsEmitter.CaseMatch(
+    assert(caseMatch === JsEmitterImpl.CaseMatch(
       Seq(JsAst.BinaryOperation(JsAst.OptionalMember(value, "$type"), "===", JsAst.StringLiteral("Option.Some"))),
       Seq("a" -> JsAst.Member(value, "$value")),
     ))
@@ -389,22 +413,22 @@ class JsEmitterSpec extends BaseSpec {
 
   test("emitCaseMatch: ConstructPattern of a tagged type matches its argument pattern on the value") {
     val value = JsAst.Named("x")
-    val caseMatch = JsEmitter.emitCaseMatch(Terms.ConstructPattern(idCon, Terms.CapturePattern("a", dummyType), dummyType), value)
+    val caseMatch = emitter.emitCaseMatch(Terms.ConstructPattern(idCon, Terms.CapturePattern("a", dummyType), dummyType), value)
 
-    assert(caseMatch === JsEmitter.CaseMatch(Nil, Seq("a" -> value)))
+    assert(caseMatch === JsEmitterImpl.CaseMatch(Nil, Seq("a" -> value)))
   }
 
   test("emitBindingPattern: WildcardPattern binds nothing") {
-    assert(JsEmitter.emitBindingPattern(Terms.WildcardPattern(dummyType), Nil) === JsAst.IgnoredPattern)
+    assert(emitter.emitBindingPattern(Terms.WildcardPattern(dummyType), Nil) === JsAst.IgnoredPattern)
   }
 
   test("emitBindingPattern: UnitPattern") {
-    assert(JsEmitter.emitBindingPattern(Terms.UnitPattern(), Nil) === JsAst.IgnoredPattern)
+    assert(emitter.emitBindingPattern(Terms.UnitPattern(), Nil) === JsAst.IgnoredPattern)
   }
 
   test("emitBindingPattern: StringPattern with a single capture binds the string") {
     val pat = Terms.StringPattern(Seq(TermLiteral.StringCapturePart(Terms.CapturePattern("s", dummyType))), dummyType)
-    assert(JsEmitter.emitBindingPattern(pat, Nil) === JsAst.NamePattern("s"))
+    assert(emitter.emitBindingPattern(pat, Nil) === JsAst.NamePattern("s"))
   }
 
   test("emitBindingPattern: TuplePattern") {
@@ -413,7 +437,7 @@ class JsEmitterSpec extends BaseSpec {
       Terms.WildcardPattern(dummyType),
       Terms.CapturePattern("b", dummyType),
     ), dummyType)
-    assert(JsEmitter.emitBindingPattern(pat, Nil) === JsAst.ArrayPattern(Seq(
+    assert(emitter.emitBindingPattern(pat, Nil) === JsAst.ArrayPattern(Seq(
       JsAst.NamePattern("a"),
       JsAst.IgnoredPattern,
       JsAst.NamePattern("b"),
@@ -421,27 +445,27 @@ class JsEmitterSpec extends BaseSpec {
   }
 
   test("emitBindingPattern: CapturePattern") {
-    assert(JsEmitter.emitBindingPattern(Terms.CapturePattern("x", dummyType), Nil) === JsAst.NamePattern("x"))
+    assert(emitter.emitBindingPattern(Terms.CapturePattern("x", dummyType), Nil) === JsAst.NamePattern("x"))
   }
 
   test("emitBindingPattern: NamedConstantPattern binds nothing") {
     val pat = Terms.NamedConstantPattern(Terms.NamedValue("True", Nil, dummyType))
-    assert(JsEmitter.emitBindingPattern(pat, Nil) === JsAst.IgnoredPattern)
+    assert(emitter.emitBindingPattern(pat, Nil) === JsAst.IgnoredPattern)
   }
 
   test("emitBindingPattern: ConstructPattern of a boxed type destructures the boxed value") {
     val pat = Terms.ConstructPattern(someCon, Terms.CapturePattern("a", dummyType), dummyType)
-    assert(JsEmitter.emitBindingPattern(pat, Nil) === JsAst.ObjectPattern(Seq("$value" -> JsAst.NamePattern("a"))))
+    assert(emitter.emitBindingPattern(pat, Nil) === JsAst.ObjectPattern(Seq("$value" -> JsAst.NamePattern("a"))))
   }
 
   test("emitBindingPattern: ConstructPattern of a tagged type emits its argument pattern") {
     val pat = Terms.ConstructPattern(idCon, Terms.CapturePattern("a", dummyType), dummyType)
-    assert(JsEmitter.emitBindingPattern(pat, Nil) === JsAst.NamePattern("a"))
+    assert(emitter.emitBindingPattern(pat, Nil) === JsAst.NamePattern("a"))
   }
 
   test("emitBindingPattern: ConstructPattern whose argument pattern binds nothing binds nothing") {
     val pat = Terms.ConstructPattern(someCon, Terms.WildcardPattern(dummyType), dummyType)
-    assert(JsEmitter.emitBindingPattern(pat, Nil) === JsAst.IgnoredPattern)
+    assert(emitter.emitBindingPattern(pat, Nil) === JsAst.IgnoredPattern)
   }
 
   test("emitModule: a parameter destructuring a boxed value is in parens") {
@@ -455,7 +479,7 @@ class JsEmitterSpec extends BaseSpec {
 
   test("emitBindingPattern: PatternAs emits its pattern") {
     val pat = Terms.PatternAs(Terms.CapturePattern("x", dummyType), dummyType)
-    assert(JsEmitter.emitBindingPattern(pat, Nil) === JsAst.NamePattern("x"))
+    assert(emitter.emitBindingPattern(pat, Nil) === JsAst.NamePattern("x"))
   }
 
   // NameMangler

@@ -2,7 +2,7 @@ package clara.jsemitter
 
 // Asg => JsAst
 
-import clara.asg.{Attributes, TermLiteral, Terms, TypeCons, Namespace}
+import clara.asg.{Attributes, DefId, TermLiteral, Terms, TypeCons, Namespace}
 import clara.ast.Ast.TypeDefKind
 
 import impl._
@@ -10,16 +10,8 @@ import impl._
 import clara.util.Safe._
 
 
-object JsEmitter {
-  def emitModule(program: Terms.Block): JsAst.Module = {
-    val body = program.bcs.flatMap(emitBlockContent)
-
-    val moduleIntro = Seq(
-      // JsAst.Const("$claraType", JsAst.UnaryCall(JsAst.Named("Symbol"), JsAst.StringLiteral("$claraType")))
-    )
-
-    JsAst.Module(moduleIntro ++ body)
-  }
+case class JsEmitterImpl(methodNames: Map[DefId, String]) {
+  import JsEmitterImpl.CaseMatch
 
   private def illegal(term: Product): Nothing = throw new java.lang.AssertionError(safe"unexpected term: ${term.productPrefix}")
 
@@ -65,8 +57,24 @@ object JsEmitter {
     case TermLiteral.StringValueExprPart(e) => JsAst.StringExpressionPart(emitValueExpr(e))
   })
 
+  def emitBlockContents(bcs: Seq[Terms.BlockContent]): Seq[JsAst.Content] = {
+    val blockEmitter = withMethodNamesOf(bcs)
+
+    bcs.flatMap(blockEmitter.emitBlockContent)
+  }
+
+  def withMethodNamesOf(bcs: Seq[Terms.BlockContent]): JsEmitterImpl = {
+    val methodDefs = bcs.collect { case Terms.MethodDefSection(definedInNs, _, methodDefs) =>
+      methodDefs.entries.map { case (name, methodDef) => methodDef.defId -> NameMangler.methodName(name, definedInNs) }
+    }.flatten
+
+    copy(methodNames = methodDefs.foldLeft(methodNames) { case (names, (defId, name)) =>
+      names + (defId -> NameMangler.unusedName(name, names.values.toSet))
+    })
+  }
+
   def emitBlock(bcs: Seq[Terms.BlockContent]): JsAst.Expr = {
-    val emitted = bcs.flatMap(emitBlockContent)
+    val emitted = emitBlockContents(bcs)
     emitted match {
       // Single expression: no need for IIFE wrapper
       case Seq(e: JsAst.Expr) => e
@@ -100,8 +108,6 @@ object JsEmitter {
 
     JsAst.UnaryArrowFunc(JsAst.NamePattern(WrapperParamName), funcBody)
   }
-
-  case class CaseMatch(conditions: Seq[JsAst.Expr], bindings: Seq[(String, JsAst.Expr)])
 
   def emitCaseMatch(pattern: Terms.Pattern, value: JsAst.Expr): CaseMatch = {
     def equals(expected: JsAst.Expr) = CaseMatch(Seq(JsAst.BinaryOperation(value, "===", expected)), Nil)
@@ -166,7 +172,7 @@ object JsEmitter {
         )))))
       case _ => Nil
     }
-    case Terms.MethodDefSection(definedInNs, receiver, methodDefs) => emitMethodDefSection(definedInNs, receiver, methodDefs)
+    case Terms.MethodDefSection(_, receiver, methodDefs) => emitMethodDefSection(receiver, methodDefs)
   }
 
   def typeTag(name: String, definedInNs: Seq[String]): JsAst.Expr = JsAst.StringLiteral((definedInNs :+ name).safeString("."))
@@ -176,10 +182,10 @@ object JsEmitter {
     JsAst.UnaryArrowFunc(JsAst.NamePattern(ParamName), Seq(JsAst.Return(construct(JsAst.Named(ParamName)))))
   }
 
-  def emitMethodDefSection(definedInNs: Seq[String], receiver: Terms.Pattern, methodDefs: Namespace[Terms.MethodDef]) =
-    methodDefs.entries.map { case (name, Terms.MethodDef(_, body)) =>
+  def emitMethodDefSection(receiver: Terms.Pattern, methodDefs: Namespace[Terms.MethodDef]) =
+    methodDefs.entries.map { case (_, Terms.MethodDef(defId, _, body)) =>
       JsAst.Const(
-        JsAst.NamePattern(NameMangler.methodName(name, definedInNs)),
+        JsAst.NamePattern(methodNames(defId)),
         JsAst.UnaryArrowFunc(emitBindingPattern(receiver, Nil), Seq(JsAst.Return(emitValueExpr(body)))),
       )
     }
@@ -202,11 +208,13 @@ object JsEmitter {
     def selectInstanceProperty = JsAst.Member(obj, name)
 
     selectedMember match {
-      case Terms.SelectedMethod(_, definedInNs, attributes) => attributes.emitKind match {
+      case Terms.SelectedMethod(defId, _, attributes) => attributes.emitKind match {
         case Some(Attributes.InstanceProperty) => selectInstanceProperty
         case Some(Attributes.BinaryOperator) =>
           JsAst.UnaryArrowFunc(JsAst.NamePattern("_"), Seq(JsAst.Return(JsAst.BinaryOperation(obj, name, JsAst.Named("_")))))
-        case None => JsAst.UnaryCall(JsAst.Named(NameMangler.methodName(name, definedInNs)), obj)
+        case None => JsAst.UnaryCall(JsAst.Named(methodNames.getOrElse(defId,
+          throw new java.lang.AssertionError(safe"method `$name` is called outside the blocks of its definition")
+        )), obj)
       }
       case Terms.SelectedField => selectInstanceProperty
     }
@@ -240,6 +248,22 @@ object JsEmitter {
 
 }
 
+object JsEmitterImpl {
+  case class CaseMatch(conditions: Seq[JsAst.Expr], bindings: Seq[(String, JsAst.Expr)])
+}
+
+object JsEmitter {
+  def emitModule(program: Terms.Block): JsAst.Module = {
+    val body = JsEmitterImpl(Map.empty).emitBlockContents(program.bcs)
+
+    val moduleIntro = Seq(
+      // JsAst.Const("$claraType", JsAst.UnaryCall(JsAst.Named("Symbol"), JsAst.StringLiteral("$claraType")))
+    )
+
+    JsAst.Module(moduleIntro ++ body)
+  }
+}
+
 object NameMangler {
   private val JsKeywords = Set(
     "await", "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete", "do", "else",
@@ -263,4 +287,7 @@ object NameMangler {
   def rawConstructorName(name: String, definedInNs: Seq[String]) = safe"${(definedInNs :+ name).safeString("$")}$$$$new"
 
   def methodName(name: String, definedInNs: Seq[String]) = safe"${definedInNs.safeString("$")}$$$$methods$$$name"
+
+  def unusedName(name: String, used: Set[String]): String =
+    (Iterator.single(name) ++ Iterator.from(2).map(n => safe"$name$$${n.toString}")).filterNot(used).next()
 }

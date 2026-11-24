@@ -1588,13 +1588,30 @@ class BlockAnalyzerSpec extends BaseSpec {
       TypeDef(TypeDefKind.Opaque, "Token"),
       ValueDecl("token", NamedType("Token")),
       ValueDef(CapturePattern("raw"), MemberSelection(NamedValue("token"), NamedValue("raw"))),
-      extend("Token", MethodDeclSection(Nil, Seq(Ast.MethodDecl(Nil, NameWithPos("raw"), UnitType())))),
+      extend("Token", MethodDeclSection(Nil, Seq(Ast.MethodDecl(instanceProperty, NameWithPos("raw"), UnitType())))),
       NamedValue("raw"),
     ))
 
     val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
 
     assert(result.value.value.typ === Types.Uni)
+  }
+
+  private def instanceProperty = Seq(Ast.Attribute("emitKind", Some("instanceProperty")))
+
+  test("a `::declare`d method without `emitKind` isn't supported yet, it's still a method") {
+    val block = Block(Seq(
+      TypeDef(TypeDefKind.Opaque, "Token"),
+      ValueDecl("token", NamedType("Token")),
+      extend("Token", MethodDeclSection(Nil, Seq(Ast.MethodDecl(Nil, NameWithPos("raw"), UnitType())))),
+      MemberSelection(NamedValue("token"), NamedValue("raw")),
+    ))
+
+    val result = BlockAnalyzer.regularBlockTerm(Env.empty, block).run
+
+    assert(result.value.left.value.map(_.message) === Seq(
+      "Method `raw` is declared without `@[emitKind ...]`, which isn't supported yet"
+    ))
   }
 
   test("selecting a method uses it") {

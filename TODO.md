@@ -1,5 +1,6 @@
 # Done
 
+- emitter: a method of a nested block no longer shadows a method of the same name in a block around it, it gets a numbered name (`P$$methods$name$2`)
 - construct patterns (`Some a`, `Option.Some s`) on boxed types (a tag test, `$value?.$type === 'Option.Some'`) and tagged types (no tag: in a case the argument pattern's runtime test has to tell the type apart from what the earlier cases left, Check 1 of plans/enum2.md); in parameters and value defs they unwrap (`(Name n) => ...`); the userland Option fixture (`option-desugared`) passes
 - a case is checked for runtime type tests against what the earlier cases left, not the whole matched type
 - a type arg a construct pattern's matched type doesn't give is an unknown type (a fresh type param), not `!`; a constructor's type has type params of its own, not its con's

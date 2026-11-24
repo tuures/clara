@@ -98,9 +98,14 @@ case class MethodSectionAnalyzerImpl(env: Env, targetCon: TypeCons.TypeCon) {
           walkMethodDeclAttributes(attributes).zip(TypeExprAnalyzer.typeExprType(typeParamsEnv, typeExpr)).flatMap {
             case (methodAttributes, typ) =>
               val defId = DefId()
+              val requireEmitKind = An.errorIf(methodAttributes.emitKind.isEmpty)(SourceMessage(namePos,
+                safe"Method `$name` is declared without `@[emitKind ...]`, which isn't supported yet"
+              ))
 
-              addMethod(sectionEnv, Seq((targetCon, targetType)), name, namePos) {
-                EnvMethod(methodAttributes, paramCons, _, typ, defId, env.nsPath)
+              An.deferErrors(requireEmitKind)(()).flatMap { _ =>
+                addMethod(sectionEnv, Seq((targetCon, targetType)), name, namePos) {
+                  EnvMethod(methodAttributes, paramCons, _, typ, defId, env.nsPath)
+                }
               }
           }
       }
@@ -120,7 +125,7 @@ case class MethodSectionAnalyzerImpl(env: Env, targetCon: TypeCons.TypeCon) {
             case (methodAttributes, typ, bodyTerm) =>
               val Ast.NameWithPos(name, namePos) = methodDef.name
               val defId = DefId()
-              val term = bodyTerm.map(Terms.MethodDef(methodAttributes, _))
+              val term = bodyTerm.map(Terms.MethodDef(defId, methodAttributes, _))
 
               addMethod(sectionEnv, targets, name, namePos) {
                 EnvMethod(methodAttributes, paramCons, _, typ, defId, env.nsPath)
